@@ -1,0 +1,488 @@
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - ======================================================================
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Exp name: B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - ======================================================================
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [experiment] exp_name = B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [experiment] exp_type = B1
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [experiment] random_seed = 42
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [dataset] dataset = current_velocity_H
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [dataset] missing_rate = 0.2
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [dataset] artificial_missing_rate = 0.2
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [dataset] lookback_len = 512
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [imputator] model_type = BRITS
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [predictor] model_type = Sundial
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [training] tip_k = 20
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [training] tip_epsilon = 1e-4
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Loading template config for BRITS from configs/template/imputator/BRITS.ini
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Loading template config for Sundial from configs/template/predictor/Sundial.ini
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Loading template config for dataset 'current_velocity_H' from configs/template/dataset/current_velocity_H.ini
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - ============================== System Info ==============================
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Python version: 3.10.20
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - PyTorch version: 2.12.0+cu130
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - CUDA available: True
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - CUDA device: NVIDIA GeForce RTX 3070 Laptop GPU
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - ===========================================================================
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - ============================== Configuration ==============================
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - [experiment]
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   exp_name = B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   exp_type = B1
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   random_seed = 42
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - [paths]
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   preprocessed_data_dir = ./cache/preprocessed_datasets
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   ckpt_save_dir = ./cache/checkpoints
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   log_save_dir = ./logs
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - [dataset]
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   dataset = current_velocity_H
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   missing_rate = 0.2
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   artificial_missing_rate = 0.2
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   block_size = 20
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   lookback_len = 512
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   val_ratio = 0.1
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   test_ratio = 0.2
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   source = huggingface
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   repo_name = Real-TSF/TIME
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   dataset_name = current_velocity
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   frequency = H
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   item_id = NRS_NRSDAR_Sentinel-or-Monitor-Workhorse-ADCP-17.5_221106To230525
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   column_index = 0
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   pred_len = 24
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - [training]
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   max_epoch = 10000
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   warmup_epoch = 3
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   patience = 5
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   device = cuda
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   batch_size = 128
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   auto_batch_size = true
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   micro_batch_size = 0
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   optimizer = AdamW
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   lr = 1e-4
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   tip_k = 20
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   tip_epsilon = 1e-4
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   tip_pretrain_epochs = 2
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - [imputator]
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   model_type = BRITS
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   d_model = 256
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - [predictor]
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   model_type = Sundial
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   num_samples = 100
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   sample_aggregation = mean
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   train_method = forward
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - ===========================================================================
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Random seed set to 42
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Generated preprocess UID: 5f0ca80d9d36e1a8
+2026-06-19 21:39:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Data already preprocessed. Loading from cache/preprocessed_datasets/5f0ca80d9d36e1a8
+2026-06-19 21:39:45 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   batch_size=  1 → 11.54s  (0.09 samples/s)
+2026-06-19 21:39:45 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Ternary search over 2^[1, 7] = [2, 128]
+2026-06-19 21:39:59 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   batch_size=  8 → 11.69s  (0.68 samples/s)
+2026-06-19 21:40:16 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   batch_size= 32 → 13.67s  (2.34 samples/s)
+2026-06-19 21:40:23 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   batch_size= 16 → killed (>6.8s, best_tp=2.34)
+2026-06-19 21:40:40 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   batch_size= 64 → 14.52s  (4.41 samples/s)
+2026-06-19 21:41:01 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   batch_size=128 → 18.47s  (6.93 samples/s)
+2026-06-19 21:41:01 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Auto batch size: 128 (throughput: 6.93 samples/s, target was 128)
+2026-06-19 21:41:01 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Effective batch_size: 128 | Micro batch_size: 128 | Gradient accumulation steps: 1
+2026-06-19 21:41:01 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - 
+2026-06-19 21:41:01 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - ============================================================
+2026-06-19 21:41:01 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -   Phase: B1 — Standard Imputer Training (10000 max epochs)
+2026-06-19 21:41:01 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - ============================================================
+2026-06-19 21:42:47 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 001/10000 | train loss: 6.289531 | val loss: 6.548110 | *Best Model Saved*
+2026-06-19 21:44:34 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 002/10000 | train loss: 6.243452 | val loss: 6.493758 | *Best Model Saved*
+2026-06-19 21:46:20 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 003/10000 | train loss: 6.176619 | val loss: 6.403251 | *Best Model Saved*
+2026-06-19 21:48:08 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 004/10000 | train loss: 6.033000 | val loss: 6.179109 | *Best Model Saved*
+2026-06-19 21:49:56 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 005/10000 | train loss: 5.544305 | val loss: 5.095978 | *Best Model Saved*
+2026-06-19 21:51:44 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 006/10000 | train loss: 4.558667 | val loss: 4.720064 | *Best Model Saved*
+2026-06-19 21:53:32 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 007/10000 | train loss: 4.395851 | val loss: 4.584673 | *Best Model Saved*
+2026-06-19 21:55:20 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 008/10000 | train loss: 4.316082 | val loss: 4.518152 | *Best Model Saved*
+2026-06-19 21:57:07 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 009/10000 | train loss: 4.252494 | val loss: 4.442318 | *Best Model Saved*
+2026-06-19 21:58:53 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 010/10000 | train loss: 4.200161 | val loss: 4.364721 | *Best Model Saved*
+2026-06-19 22:00:40 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 011/10000 | train loss: 4.150759 | val loss: 4.292551 | *Best Model Saved*
+2026-06-19 22:02:28 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 012/10000 | train loss: 4.105681 | val loss: 4.222388 | *Best Model Saved*
+2026-06-19 22:04:17 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 013/10000 | train loss: 4.055662 | val loss: 4.152435 | *Best Model Saved*
+2026-06-19 22:06:04 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 014/10000 | train loss: 4.007021 | val loss: 4.087668 | *Best Model Saved*
+2026-06-19 22:07:52 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 015/10000 | train loss: 3.954196 | val loss: 4.034747 | *Best Model Saved*
+2026-06-19 22:09:39 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 016/10000 | train loss: 3.905534 | val loss: 3.998491 | *Best Model Saved*
+2026-06-19 22:11:26 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 017/10000 | train loss: 3.859836 | val loss: 3.978300 | *Best Model Saved*
+2026-06-19 22:13:13 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 018/10000 | train loss: 3.812758 | val loss: 3.961809 | *Best Model Saved*
+2026-06-19 22:15:01 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 019/10000 | train loss: 3.766882 | val loss: 3.957503 | *Best Model Saved*
+2026-06-19 22:16:50 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 020/10000 | train loss: 3.739572 | val loss: 3.947724 | *Best Model Saved*
+2026-06-19 22:18:37 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 021/10000 | train loss: 3.716700 | val loss: 3.939185 | *Best Model Saved*
+2026-06-19 22:20:23 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 022/10000 | train loss: 3.693571 | val loss: 3.898014 | *Best Model Saved*
+2026-06-19 22:22:09 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 023/10000 | train loss: 3.668879 | val loss: 3.886149 | *Best Model Saved*
+2026-06-19 22:23:55 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 024/10000 | train loss: 3.644763 | val loss: 3.858878 | *Best Model Saved*
+2026-06-19 22:25:41 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 025/10000 | train loss: 3.623079 | val loss: 3.835372 | *Best Model Saved*
+2026-06-19 22:27:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 026/10000 | train loss: 3.604408 | val loss: 3.819658 | *Best Model Saved*
+2026-06-19 22:29:13 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 027/10000 | train loss: 3.588552 | val loss: 3.810168 | *Best Model Saved*
+2026-06-19 22:30:59 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 028/10000 | train loss: 3.571176 | val loss: 3.786679 | *Best Model Saved*
+2026-06-19 22:32:46 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 029/10000 | train loss: 3.555146 | val loss: 3.774716 | *Best Model Saved*
+2026-06-19 22:34:32 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 030/10000 | train loss: 3.535272 | val loss: 3.749951 | *Best Model Saved*
+2026-06-19 22:36:18 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 031/10000 | train loss: 3.515884 | val loss: 3.736645 | *Best Model Saved*
+2026-06-19 22:38:04 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 032/10000 | train loss: 3.496555 | val loss: 3.724448 | *Best Model Saved*
+2026-06-19 22:39:49 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 033/10000 | train loss: 3.481017 | val loss: 3.715868 | *Best Model Saved*
+2026-06-19 22:41:35 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 034/10000 | train loss: 3.465891 | val loss: 3.707127 | *Best Model Saved*
+2026-06-19 22:43:22 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 035/10000 | train loss: 3.451161 | val loss: 3.693080 | *Best Model Saved*
+2026-06-19 22:45:07 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 036/10000 | train loss: 3.436659 | val loss: 3.680725 | *Best Model Saved*
+2026-06-19 22:46:53 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 037/10000 | train loss: 3.423320 | val loss: 3.668285 | *Best Model Saved*
+2026-06-19 22:48:38 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 038/10000 | train loss: 3.411600 | val loss: 3.664913 | *Best Model Saved*
+2026-06-19 22:50:25 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 039/10000 | train loss: 3.400417 | val loss: 3.658633 | *Best Model Saved*
+2026-06-19 22:52:12 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 040/10000 | train loss: 3.391245 | val loss: 3.645323 | *Best Model Saved*
+2026-06-19 22:53:59 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 041/10000 | train loss: 3.381713 | val loss: 3.643345 | *Best Model Saved*
+2026-06-19 22:55:47 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 042/10000 | train loss: 3.373027 | val loss: 3.628817 | *Best Model Saved*
+2026-06-19 22:57:34 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 043/10000 | train loss: 3.366238 | val loss: 3.622027 | *Best Model Saved*
+2026-06-19 22:59:22 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 044/10000 | train loss: 3.356756 | val loss: 3.610005 | *Best Model Saved*
+2026-06-19 23:01:10 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 045/10000 | train loss: 3.348230 | val loss: 3.604335 | *Best Model Saved*
+2026-06-19 23:02:58 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 046/10000 | train loss: 3.340090 | val loss: 3.598283 | *Best Model Saved*
+2026-06-19 23:04:46 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 047/10000 | train loss: 3.332643 | val loss: 3.593250 | *Best Model Saved*
+2026-06-19 23:06:33 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 048/10000 | train loss: 3.325575 | val loss: 3.584893 | *Best Model Saved*
+2026-06-19 23:08:21 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 049/10000 | train loss: 3.317413 | val loss: 3.581285 | *Best Model Saved*
+2026-06-19 23:10:08 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 050/10000 | train loss: 3.311029 | val loss: 3.575195 | *Best Model Saved*
+2026-06-19 23:11:54 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 051/10000 | train loss: 3.304257 | val loss: 3.561816 | *Best Model Saved*
+2026-06-19 23:13:40 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 052/10000 | train loss: 3.296243 | val loss: 3.554368 | *Best Model Saved*
+2026-06-19 23:15:26 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 053/10000 | train loss: 3.290402 | val loss: 3.554662
+2026-06-19 23:17:12 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 054/10000 | train loss: 3.282983 | val loss: 3.543023 | *Best Model Saved*
+2026-06-19 23:18:59 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 055/10000 | train loss: 3.276905 | val loss: 3.540233 | *Best Model Saved*
+2026-06-19 23:20:45 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 056/10000 | train loss: 3.271701 | val loss: 3.533838 | *Best Model Saved*
+2026-06-19 23:22:30 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 057/10000 | train loss: 3.265114 | val loss: 3.531676 | *Best Model Saved*
+2026-06-19 23:24:17 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 058/10000 | train loss: 3.258395 | val loss: 3.531341 | *Best Model Saved*
+2026-06-19 23:26:02 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 059/10000 | train loss: 3.252621 | val loss: 3.522117 | *Best Model Saved*
+2026-06-19 23:27:48 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 060/10000 | train loss: 3.243927 | val loss: 3.510335 | *Best Model Saved*
+2026-06-19 23:29:34 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 061/10000 | train loss: 3.238120 | val loss: 3.506334 | *Best Model Saved*
+2026-06-19 23:31:20 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 062/10000 | train loss: 3.231429 | val loss: 3.502215 | *Best Model Saved*
+2026-06-19 23:33:07 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 063/10000 | train loss: 3.224672 | val loss: 3.499031 | *Best Model Saved*
+2026-06-19 23:34:52 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 064/10000 | train loss: 3.218286 | val loss: 3.488184 | *Best Model Saved*
+2026-06-19 23:36:37 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 065/10000 | train loss: 3.212388 | val loss: 3.486764 | *Best Model Saved*
+2026-06-19 23:38:24 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 066/10000 | train loss: 3.205552 | val loss: 3.483298 | *Best Model Saved*
+2026-06-19 23:40:10 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 067/10000 | train loss: 3.200835 | val loss: 3.476431 | *Best Model Saved*
+2026-06-19 23:41:55 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 068/10000 | train loss: 3.195920 | val loss: 3.472547 | *Best Model Saved*
+2026-06-19 23:43:41 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 069/10000 | train loss: 3.191198 | val loss: 3.463129 | *Best Model Saved*
+2026-06-19 23:45:28 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 070/10000 | train loss: 3.183458 | val loss: 3.454037 | *Best Model Saved*
+2026-06-19 23:47:13 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 071/10000 | train loss: 3.178922 | val loss: 3.453047 | *Best Model Saved*
+2026-06-19 23:49:00 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 072/10000 | train loss: 3.171426 | val loss: 3.444738 | *Best Model Saved*
+2026-06-19 23:50:45 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 073/10000 | train loss: 3.166298 | val loss: 3.439320 | *Best Model Saved*
+2026-06-19 23:52:32 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 074/10000 | train loss: 3.160603 | val loss: 3.432714 | *Best Model Saved*
+2026-06-19 23:54:20 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 075/10000 | train loss: 3.154683 | val loss: 3.428996 | *Best Model Saved*
+2026-06-19 23:56:07 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 076/10000 | train loss: 3.151046 | val loss: 3.427074 | *Best Model Saved*
+2026-06-19 23:57:53 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 077/10000 | train loss: 3.144227 | val loss: 3.424751 | *Best Model Saved*
+2026-06-19 23:59:39 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 078/10000 | train loss: 3.141874 | val loss: 3.410581 | *Best Model Saved*
+2026-06-20 00:01:25 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 079/10000 | train loss: 3.132945 | val loss: 3.410157 | *Best Model Saved*
+2026-06-20 00:03:11 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 080/10000 | train loss: 3.127220 | val loss: 3.404095 | *Best Model Saved*
+2026-06-20 00:04:58 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 081/10000 | train loss: 3.121688 | val loss: 3.391858 | *Best Model Saved*
+2026-06-20 00:06:45 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 082/10000 | train loss: 3.117639 | val loss: 3.389104 | *Best Model Saved*
+2026-06-20 00:08:31 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 083/10000 | train loss: 3.113172 | val loss: 3.384267 | *Best Model Saved*
+2026-06-20 00:10:18 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 084/10000 | train loss: 3.105047 | val loss: 3.384089 | *Best Model Saved*
+2026-06-20 00:12:05 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 085/10000 | train loss: 3.098076 | val loss: 3.377278 | *Best Model Saved*
+2026-06-20 00:13:52 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 086/10000 | train loss: 3.094378 | val loss: 3.371153 | *Best Model Saved*
+2026-06-20 00:15:39 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 087/10000 | train loss: 3.090536 | val loss: 3.366958 | *Best Model Saved*
+2026-06-20 00:17:25 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 088/10000 | train loss: 3.085119 | val loss: 3.362331 | *Best Model Saved*
+2026-06-20 00:19:12 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 089/10000 | train loss: 3.081067 | val loss: 3.355181 | *Best Model Saved*
+2026-06-20 00:20:58 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 090/10000 | train loss: 3.076848 | val loss: 3.352299 | *Best Model Saved*
+2026-06-20 00:22:45 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 091/10000 | train loss: 3.068130 | val loss: 3.343321 | *Best Model Saved*
+2026-06-20 00:24:31 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 092/10000 | train loss: 3.063429 | val loss: 3.346965
+2026-06-20 00:26:18 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 093/10000 | train loss: 3.059328 | val loss: 3.340929 | *Best Model Saved*
+2026-06-20 00:28:04 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 094/10000 | train loss: 3.051920 | val loss: 3.331381 | *Best Model Saved*
+2026-06-20 00:29:51 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 095/10000 | train loss: 3.051703 | val loss: 3.320769 | *Best Model Saved*
+2026-06-20 00:31:37 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 096/10000 | train loss: 3.044908 | val loss: 3.319802 | *Best Model Saved*
+2026-06-20 00:33:23 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 097/10000 | train loss: 3.038208 | val loss: 3.312359 | *Best Model Saved*
+2026-06-20 00:35:10 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 098/10000 | train loss: 3.030609 | val loss: 3.307207 | *Best Model Saved*
+2026-06-20 00:36:57 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 099/10000 | train loss: 3.025603 | val loss: 3.304349 | *Best Model Saved*
+2026-06-20 00:38:43 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 100/10000 | train loss: 3.019864 | val loss: 3.295167 | *Best Model Saved*
+2026-06-20 00:40:29 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 101/10000 | train loss: 3.013864 | val loss: 3.291219 | *Best Model Saved*
+2026-06-20 00:42:16 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 102/10000 | train loss: 3.008971 | val loss: 3.286961 | *Best Model Saved*
+2026-06-20 00:44:01 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 103/10000 | train loss: 3.004968 | val loss: 3.277037 | *Best Model Saved*
+2026-06-20 00:45:46 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 104/10000 | train loss: 3.001785 | val loss: 3.282192
+2026-06-20 00:47:32 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 105/10000 | train loss: 2.996617 | val loss: 3.268054 | *Best Model Saved*
+2026-06-20 00:49:18 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 106/10000 | train loss: 2.994429 | val loss: 3.264947 | *Best Model Saved*
+2026-06-20 00:51:04 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 107/10000 | train loss: 2.986374 | val loss: 3.260283 | *Best Model Saved*
+2026-06-20 00:52:50 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 108/10000 | train loss: 2.982187 | val loss: 3.251065 | *Best Model Saved*
+2026-06-20 00:54:35 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 109/10000 | train loss: 2.977127 | val loss: 3.253271
+2026-06-20 00:56:21 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 110/10000 | train loss: 2.971718 | val loss: 3.248328 | *Best Model Saved*
+2026-06-20 00:58:07 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 111/10000 | train loss: 2.967377 | val loss: 3.243083 | *Best Model Saved*
+2026-06-20 00:59:54 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 112/10000 | train loss: 2.962378 | val loss: 3.241199 | *Best Model Saved*
+2026-06-20 01:01:40 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 113/10000 | train loss: 2.957389 | val loss: 3.237066 | *Best Model Saved*
+2026-06-20 01:03:26 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 114/10000 | train loss: 2.953398 | val loss: 3.231162 | *Best Model Saved*
+2026-06-20 01:05:13 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 115/10000 | train loss: 2.951277 | val loss: 3.225759 | *Best Model Saved*
+2026-06-20 01:07:00 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 116/10000 | train loss: 2.943878 | val loss: 3.224079 | *Best Model Saved*
+2026-06-20 01:08:48 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 117/10000 | train loss: 2.937657 | val loss: 3.217034 | *Best Model Saved*
+2026-06-20 01:10:34 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 118/10000 | train loss: 2.934264 | val loss: 3.212696 | *Best Model Saved*
+2026-06-20 01:12:19 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 119/10000 | train loss: 2.931919 | val loss: 3.214551
+2026-06-20 01:14:06 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 120/10000 | train loss: 2.926726 | val loss: 3.203197 | *Best Model Saved*
+2026-06-20 01:15:53 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 121/10000 | train loss: 2.921752 | val loss: 3.200817 | *Best Model Saved*
+2026-06-20 01:17:40 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 122/10000 | train loss: 2.916276 | val loss: 3.199950 | *Best Model Saved*
+2026-06-20 01:19:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 123/10000 | train loss: 2.914728 | val loss: 3.189114 | *Best Model Saved*
+2026-06-20 01:21:14 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 124/10000 | train loss: 2.910015 | val loss: 3.187164 | *Best Model Saved*
+2026-06-20 01:22:59 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 125/10000 | train loss: 2.905268 | val loss: 3.181515 | *Best Model Saved*
+2026-06-20 01:24:44 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 126/10000 | train loss: 2.900825 | val loss: 3.178695 | *Best Model Saved*
+2026-06-20 01:26:30 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 127/10000 | train loss: 2.897897 | val loss: 3.179128
+2026-06-20 01:28:15 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 128/10000 | train loss: 2.892529 | val loss: 3.167845 | *Best Model Saved*
+2026-06-20 01:30:01 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 129/10000 | train loss: 2.887463 | val loss: 3.167312 | *Best Model Saved*
+2026-06-20 01:31:47 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 130/10000 | train loss: 2.883655 | val loss: 3.164749 | *Best Model Saved*
+2026-06-20 01:33:33 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 131/10000 | train loss: 2.880259 | val loss: 3.159322 | *Best Model Saved*
+2026-06-20 01:35:18 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 132/10000 | train loss: 2.875377 | val loss: 3.155219 | *Best Model Saved*
+2026-06-20 01:37:04 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 133/10000 | train loss: 2.872968 | val loss: 3.150086 | *Best Model Saved*
+2026-06-20 01:38:51 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 134/10000 | train loss: 2.868071 | val loss: 3.144170 | *Best Model Saved*
+2026-06-20 01:40:36 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 135/10000 | train loss: 2.864703 | val loss: 3.144075 | *Best Model Saved*
+2026-06-20 01:42:22 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 136/10000 | train loss: 2.863962 | val loss: 3.138091 | *Best Model Saved*
+2026-06-20 01:44:08 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 137/10000 | train loss: 2.856642 | val loss: 3.134683 | *Best Model Saved*
+2026-06-20 01:45:53 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 138/10000 | train loss: 2.855050 | val loss: 3.130221 | *Best Model Saved*
+2026-06-20 01:47:39 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 139/10000 | train loss: 2.849917 | val loss: 3.124452 | *Best Model Saved*
+2026-06-20 01:49:26 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 140/10000 | train loss: 2.845520 | val loss: 3.122166 | *Best Model Saved*
+2026-06-20 01:51:13 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 141/10000 | train loss: 2.841741 | val loss: 3.119683 | *Best Model Saved*
+2026-06-20 01:52:59 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 142/10000 | train loss: 2.841042 | val loss: 3.113897 | *Best Model Saved*
+2026-06-20 01:54:45 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 143/10000 | train loss: 2.834569 | val loss: 3.110873 | *Best Model Saved*
+2026-06-20 01:56:32 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 144/10000 | train loss: 2.829187 | val loss: 3.111185
+2026-06-20 01:58:18 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 145/10000 | train loss: 2.826249 | val loss: 3.108299 | *Best Model Saved*
+2026-06-20 02:00:04 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 146/10000 | train loss: 2.822944 | val loss: 3.105089 | *Best Model Saved*
+2026-06-20 02:01:50 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 147/10000 | train loss: 2.820971 | val loss: 3.105185
+2026-06-20 02:03:36 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 148/10000 | train loss: 2.820829 | val loss: 3.106261
+2026-06-20 02:05:22 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 149/10000 | train loss: 2.816431 | val loss: 3.098960 | *Best Model Saved*
+2026-06-20 02:07:09 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 150/10000 | train loss: 2.810190 | val loss: 3.095425 | *Best Model Saved*
+2026-06-20 02:08:54 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 151/10000 | train loss: 2.805830 | val loss: 3.095861
+2026-06-20 02:10:41 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 152/10000 | train loss: 2.800846 | val loss: 3.092079 | *Best Model Saved*
+2026-06-20 02:12:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 153/10000 | train loss: 2.798409 | val loss: 3.092002 | *Best Model Saved*
+2026-06-20 02:14:14 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 154/10000 | train loss: 2.792743 | val loss: 3.084146 | *Best Model Saved*
+2026-06-20 02:16:00 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 155/10000 | train loss: 2.788867 | val loss: 3.078238 | *Best Model Saved*
+2026-06-20 02:17:48 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 156/10000 | train loss: 2.785482 | val loss: 3.077270 | *Best Model Saved*
+2026-06-20 02:19:35 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 157/10000 | train loss: 2.781941 | val loss: 3.075003 | *Best Model Saved*
+2026-06-20 02:21:22 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 158/10000 | train loss: 2.778810 | val loss: 3.067399 | *Best Model Saved*
+2026-06-20 02:23:08 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 159/10000 | train loss: 2.777526 | val loss: 3.069604
+2026-06-20 02:24:54 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 160/10000 | train loss: 2.773729 | val loss: 3.064811 | *Best Model Saved*
+2026-06-20 02:26:41 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 161/10000 | train loss: 2.767885 | val loss: 3.064142 | *Best Model Saved*
+2026-06-20 02:28:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 162/10000 | train loss: 2.764352 | val loss: 3.063235 | *Best Model Saved*
+2026-06-20 02:30:12 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 163/10000 | train loss: 2.762489 | val loss: 3.063270
+2026-06-20 02:31:59 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 164/10000 | train loss: 2.759203 | val loss: 3.061386 | *Best Model Saved*
+2026-06-20 02:33:46 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 165/10000 | train loss: 2.755393 | val loss: 3.054269 | *Best Model Saved*
+2026-06-20 02:35:31 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 166/10000 | train loss: 2.749948 | val loss: 3.056268
+2026-06-20 02:37:17 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 167/10000 | train loss: 2.748907 | val loss: 3.047848 | *Best Model Saved*
+2026-06-20 02:39:03 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 168/10000 | train loss: 2.744629 | val loss: 3.044089 | *Best Model Saved*
+2026-06-20 02:40:50 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 169/10000 | train loss: 2.739221 | val loss: 3.041533 | *Best Model Saved*
+2026-06-20 02:42:36 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 170/10000 | train loss: 2.739786 | val loss: 3.036105 | *Best Model Saved*
+2026-06-20 02:44:22 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 171/10000 | train loss: 2.734005 | val loss: 3.038046
+2026-06-20 02:46:08 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 172/10000 | train loss: 2.734289 | val loss: 3.035965 | *Best Model Saved*
+2026-06-20 02:47:54 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 173/10000 | train loss: 2.728234 | val loss: 3.033321 | *Best Model Saved*
+2026-06-20 02:49:40 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 174/10000 | train loss: 2.725048 | val loss: 3.027086 | *Best Model Saved*
+2026-06-20 02:51:26 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 175/10000 | train loss: 2.720891 | val loss: 3.029639
+2026-06-20 02:53:12 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 176/10000 | train loss: 2.718746 | val loss: 3.024195 | *Best Model Saved*
+2026-06-20 02:54:57 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 177/10000 | train loss: 2.716314 | val loss: 3.025332
+2026-06-20 02:56:43 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 178/10000 | train loss: 2.713559 | val loss: 3.018311 | *Best Model Saved*
+2026-06-20 02:58:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 179/10000 | train loss: 2.709870 | val loss: 3.019104
+2026-06-20 03:00:13 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 180/10000 | train loss: 2.704711 | val loss: 3.010867 | *Best Model Saved*
+2026-06-20 03:01:58 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 181/10000 | train loss: 2.703275 | val loss: 3.012031
+2026-06-20 03:03:44 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 182/10000 | train loss: 2.700098 | val loss: 3.012034
+2026-06-20 03:05:31 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 183/10000 | train loss: 2.698176 | val loss: 3.011441
+2026-06-20 03:07:17 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 184/10000 | train loss: 2.694758 | val loss: 3.000094 | *Best Model Saved*
+2026-06-20 03:09:03 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 185/10000 | train loss: 2.693465 | val loss: 2.998115 | *Best Model Saved*
+2026-06-20 03:10:49 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 186/10000 | train loss: 2.689081 | val loss: 3.003686
+2026-06-20 03:12:35 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 187/10000 | train loss: 2.685461 | val loss: 2.995566 | *Best Model Saved*
+2026-06-20 03:14:21 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 188/10000 | train loss: 2.681252 | val loss: 2.994529 | *Best Model Saved*
+2026-06-20 03:16:07 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 189/10000 | train loss: 2.678553 | val loss: 2.992530 | *Best Model Saved*
+2026-06-20 03:17:52 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 190/10000 | train loss: 2.674259 | val loss: 2.986769 | *Best Model Saved*
+2026-06-20 03:19:37 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 191/10000 | train loss: 2.672904 | val loss: 2.987117
+2026-06-20 03:21:24 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 192/10000 | train loss: 2.668307 | val loss: 2.989776
+2026-06-20 03:23:08 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 193/10000 | train loss: 2.664209 | val loss: 2.984119 | *Best Model Saved*
+2026-06-20 03:24:53 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 194/10000 | train loss: 2.662146 | val loss: 2.978017 | *Best Model Saved*
+2026-06-20 03:26:38 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 195/10000 | train loss: 2.662321 | val loss: 2.973730 | *Best Model Saved*
+2026-06-20 03:28:24 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 196/10000 | train loss: 2.657781 | val loss: 2.974277
+2026-06-20 03:30:08 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 197/10000 | train loss: 2.654418 | val loss: 2.976113
+2026-06-20 03:31:53 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 198/10000 | train loss: 2.651618 | val loss: 2.975921
+2026-06-20 03:33:39 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 199/10000 | train loss: 2.649023 | val loss: 2.967290 | *Best Model Saved*
+2026-06-20 03:35:26 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 200/10000 | train loss: 2.645980 | val loss: 2.967407
+2026-06-20 03:37:12 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 201/10000 | train loss: 2.644586 | val loss: 2.968696
+2026-06-20 03:38:58 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 202/10000 | train loss: 2.643497 | val loss: 2.958299 | *Best Model Saved*
+2026-06-20 03:40:44 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 203/10000 | train loss: 2.636577 | val loss: 2.958536
+2026-06-20 03:42:29 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 204/10000 | train loss: 2.632863 | val loss: 2.958668
+2026-06-20 03:44:15 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 205/10000 | train loss: 2.630125 | val loss: 2.960037
+2026-06-20 03:46:01 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 206/10000 | train loss: 2.628062 | val loss: 2.954557 | *Best Model Saved*
+2026-06-20 03:47:47 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 207/10000 | train loss: 2.625656 | val loss: 2.946385 | *Best Model Saved*
+2026-06-20 03:49:33 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 208/10000 | train loss: 2.623920 | val loss: 2.951910
+2026-06-20 03:51:19 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 209/10000 | train loss: 2.618632 | val loss: 2.948074
+2026-06-20 03:53:06 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 210/10000 | train loss: 2.617175 | val loss: 2.941139 | *Best Model Saved*
+2026-06-20 03:54:51 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 211/10000 | train loss: 2.613401 | val loss: 2.943872
+2026-06-20 03:56:37 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 212/10000 | train loss: 2.610041 | val loss: 2.942524
+2026-06-20 03:58:24 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 213/10000 | train loss: 2.608714 | val loss: 2.939593 | *Best Model Saved*
+2026-06-20 04:00:10 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 214/10000 | train loss: 2.605963 | val loss: 2.934353 | *Best Model Saved*
+2026-06-20 04:01:56 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 215/10000 | train loss: 2.603350 | val loss: 2.936064
+2026-06-20 04:03:42 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 216/10000 | train loss: 2.601180 | val loss: 2.934960
+2026-06-20 04:05:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 217/10000 | train loss: 2.597308 | val loss: 2.930756 | *Best Model Saved*
+2026-06-20 04:07:13 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 218/10000 | train loss: 2.597359 | val loss: 2.928079 | *Best Model Saved*
+2026-06-20 04:08:59 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 219/10000 | train loss: 2.592495 | val loss: 2.926342 | *Best Model Saved*
+2026-06-20 04:10:45 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 220/10000 | train loss: 2.589312 | val loss: 2.925204 | *Best Model Saved*
+2026-06-20 04:12:31 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 221/10000 | train loss: 2.587380 | val loss: 2.928230
+2026-06-20 04:14:17 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 222/10000 | train loss: 2.584697 | val loss: 2.922662 | *Best Model Saved*
+2026-06-20 04:16:03 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 223/10000 | train loss: 2.583206 | val loss: 2.922673
+2026-06-20 04:17:48 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 224/10000 | train loss: 2.583707 | val loss: 2.924993
+2026-06-20 04:19:36 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 225/10000 | train loss: 2.576396 | val loss: 2.918130 | *Best Model Saved*
+2026-06-20 04:21:22 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 226/10000 | train loss: 2.574045 | val loss: 2.915613 | *Best Model Saved*
+2026-06-20 04:23:08 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 227/10000 | train loss: 2.571288 | val loss: 2.913062 | *Best Model Saved*
+2026-06-20 04:24:53 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 228/10000 | train loss: 2.569708 | val loss: 2.914395
+2026-06-20 04:26:38 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 229/10000 | train loss: 2.567616 | val loss: 2.915488
+2026-06-20 04:28:24 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 230/10000 | train loss: 2.565585 | val loss: 2.907376 | *Best Model Saved*
+2026-06-20 04:30:10 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 231/10000 | train loss: 2.563000 | val loss: 2.909772
+2026-06-20 04:31:55 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 232/10000 | train loss: 2.560200 | val loss: 2.903269 | *Best Model Saved*
+2026-06-20 04:33:41 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 233/10000 | train loss: 2.556620 | val loss: 2.904328
+2026-06-20 04:35:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 234/10000 | train loss: 2.554226 | val loss: 2.902978 | *Best Model Saved*
+2026-06-20 04:37:14 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 235/10000 | train loss: 2.549897 | val loss: 2.900314 | *Best Model Saved*
+2026-06-20 04:38:59 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 236/10000 | train loss: 2.549058 | val loss: 2.901303
+2026-06-20 04:40:45 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 237/10000 | train loss: 2.547763 | val loss: 2.898536 | *Best Model Saved*
+2026-06-20 04:42:31 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 238/10000 | train loss: 2.544542 | val loss: 2.893134 | *Best Model Saved*
+2026-06-20 04:44:16 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 239/10000 | train loss: 2.541770 | val loss: 2.893441
+2026-06-20 04:46:02 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 240/10000 | train loss: 2.539409 | val loss: 2.892268 | *Best Model Saved*
+2026-06-20 04:47:48 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 241/10000 | train loss: 2.538359 | val loss: 2.887423 | *Best Model Saved*
+2026-06-20 04:49:34 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 242/10000 | train loss: 2.537062 | val loss: 2.890453
+2026-06-20 04:51:18 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 243/10000 | train loss: 2.532283 | val loss: 2.887699
+2026-06-20 04:53:04 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 244/10000 | train loss: 2.530519 | val loss: 2.884797 | *Best Model Saved*
+2026-06-20 04:54:49 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 245/10000 | train loss: 2.527506 | val loss: 2.882042 | *Best Model Saved*
+2026-06-20 04:56:36 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 246/10000 | train loss: 2.525419 | val loss: 2.881032 | *Best Model Saved*
+2026-06-20 04:58:22 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 247/10000 | train loss: 2.522805 | val loss: 2.879342 | *Best Model Saved*
+2026-06-20 05:00:08 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 248/10000 | train loss: 2.521199 | val loss: 2.879153 | *Best Model Saved*
+2026-06-20 05:01:54 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 249/10000 | train loss: 2.518058 | val loss: 2.877325 | *Best Model Saved*
+2026-06-20 05:03:40 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 250/10000 | train loss: 2.516047 | val loss: 2.873400 | *Best Model Saved*
+2026-06-20 05:05:25 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 251/10000 | train loss: 2.514223 | val loss: 2.873623
+2026-06-20 05:07:12 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 252/10000 | train loss: 2.510234 | val loss: 2.873004 | *Best Model Saved*
+2026-06-20 05:08:59 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 253/10000 | train loss: 2.507425 | val loss: 2.870704 | *Best Model Saved*
+2026-06-20 05:10:44 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 254/10000 | train loss: 2.505178 | val loss: 2.868797 | *Best Model Saved*
+2026-06-20 05:12:29 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 255/10000 | train loss: 2.504779 | val loss: 2.870555
+2026-06-20 05:14:15 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 256/10000 | train loss: 2.501350 | val loss: 2.866597 | *Best Model Saved*
+2026-06-20 05:16:01 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 257/10000 | train loss: 2.500940 | val loss: 2.862519 | *Best Model Saved*
+2026-06-20 05:17:47 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 258/10000 | train loss: 2.497217 | val loss: 2.862365 | *Best Model Saved*
+2026-06-20 05:19:33 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 259/10000 | train loss: 2.497387 | val loss: 2.862218 | *Best Model Saved*
+2026-06-20 05:21:20 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 260/10000 | train loss: 2.493854 | val loss: 2.863506
+2026-06-20 05:23:05 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 261/10000 | train loss: 2.491740 | val loss: 2.856710 | *Best Model Saved*
+2026-06-20 05:24:50 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 262/10000 | train loss: 2.489041 | val loss: 2.858913
+2026-06-20 05:26:36 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 263/10000 | train loss: 2.486168 | val loss: 2.854347 | *Best Model Saved*
+2026-06-20 05:28:22 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 264/10000 | train loss: 2.483623 | val loss: 2.854498
+2026-06-20 05:30:08 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 265/10000 | train loss: 2.481121 | val loss: 2.850424 | *Best Model Saved*
+2026-06-20 05:31:53 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 266/10000 | train loss: 2.478854 | val loss: 2.854141
+2026-06-20 05:33:38 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 267/10000 | train loss: 2.478342 | val loss: 2.850174 | *Best Model Saved*
+2026-06-20 05:35:23 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 268/10000 | train loss: 2.474917 | val loss: 2.848145 | *Best Model Saved*
+2026-06-20 05:37:08 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 269/10000 | train loss: 2.473369 | val loss: 2.844502 | *Best Model Saved*
+2026-06-20 05:38:54 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 270/10000 | train loss: 2.472473 | val loss: 2.844650
+2026-06-20 05:40:39 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 271/10000 | train loss: 2.468467 | val loss: 2.845205
+2026-06-20 05:42:24 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 272/10000 | train loss: 2.465729 | val loss: 2.842332 | *Best Model Saved*
+2026-06-20 05:44:11 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 273/10000 | train loss: 2.464962 | val loss: 2.841507 | *Best Model Saved*
+2026-06-20 05:45:56 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 274/10000 | train loss: 2.462885 | val loss: 2.835200 | *Best Model Saved*
+2026-06-20 05:47:42 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 275/10000 | train loss: 2.460743 | val loss: 2.838759
+2026-06-20 05:49:28 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 276/10000 | train loss: 2.456553 | val loss: 2.834030 | *Best Model Saved*
+2026-06-20 05:51:13 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 277/10000 | train loss: 2.454759 | val loss: 2.833826 | *Best Model Saved*
+2026-06-20 05:52:58 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 278/10000 | train loss: 2.452168 | val loss: 2.834923
+2026-06-20 05:54:45 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 279/10000 | train loss: 2.449364 | val loss: 2.828608 | *Best Model Saved*
+2026-06-20 05:56:31 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 280/10000 | train loss: 2.448693 | val loss: 2.831869
+2026-06-20 05:58:16 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 281/10000 | train loss: 2.446906 | val loss: 2.831490
+2026-06-20 06:00:02 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 282/10000 | train loss: 2.444174 | val loss: 2.826761 | *Best Model Saved*
+2026-06-20 06:01:48 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 283/10000 | train loss: 2.442577 | val loss: 2.827381
+2026-06-20 06:03:35 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 284/10000 | train loss: 2.439519 | val loss: 2.824061 | *Best Model Saved*
+2026-06-20 06:05:21 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 285/10000 | train loss: 2.437322 | val loss: 2.821778 | *Best Model Saved*
+2026-06-20 06:07:08 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 286/10000 | train loss: 2.434878 | val loss: 2.822399
+2026-06-20 06:08:53 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 287/10000 | train loss: 2.434438 | val loss: 2.825226
+2026-06-20 06:10:39 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 288/10000 | train loss: 2.432240 | val loss: 2.818918 | *Best Model Saved*
+2026-06-20 06:12:25 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 289/10000 | train loss: 2.429276 | val loss: 2.818757 | *Best Model Saved*
+2026-06-20 06:14:12 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 290/10000 | train loss: 2.427797 | val loss: 2.814977 | *Best Model Saved*
+2026-06-20 06:15:58 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 291/10000 | train loss: 2.423525 | val loss: 2.814120 | *Best Model Saved*
+2026-06-20 06:17:44 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 292/10000 | train loss: 2.422970 | val loss: 2.812728 | *Best Model Saved*
+2026-06-20 06:19:30 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 293/10000 | train loss: 2.421978 | val loss: 2.810738 | *Best Model Saved*
+2026-06-20 06:21:15 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 294/10000 | train loss: 2.419507 | val loss: 2.811027
+2026-06-20 06:23:00 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 295/10000 | train loss: 2.416274 | val loss: 2.815275
+2026-06-20 06:24:45 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 296/10000 | train loss: 2.414580 | val loss: 2.812411
+2026-06-20 06:26:32 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 297/10000 | train loss: 2.413362 | val loss: 2.808805 | *Best Model Saved*
+2026-06-20 06:28:18 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 298/10000 | train loss: 2.412581 | val loss: 2.802807 | *Best Model Saved*
+2026-06-20 06:30:02 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 299/10000 | train loss: 2.408978 | val loss: 2.804480
+2026-06-20 06:31:48 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 300/10000 | train loss: 2.406618 | val loss: 2.801275 | *Best Model Saved*
+2026-06-20 06:33:34 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 301/10000 | train loss: 2.406140 | val loss: 2.807123
+2026-06-20 06:35:21 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 302/10000 | train loss: 2.407883 | val loss: 2.801187 | *Best Model Saved*
+2026-06-20 06:37:06 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 303/10000 | train loss: 2.412208 | val loss: 2.802076
+2026-06-20 06:38:52 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 304/10000 | train loss: 2.408082 | val loss: 2.798561 | *Best Model Saved*
+2026-06-20 06:40:38 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 305/10000 | train loss: 2.398768 | val loss: 2.797000 | *Best Model Saved*
+2026-06-20 06:42:24 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 306/10000 | train loss: 2.394616 | val loss: 2.795716 | *Best Model Saved*
+2026-06-20 06:44:11 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 307/10000 | train loss: 2.393761 | val loss: 2.795160 | *Best Model Saved*
+2026-06-20 06:45:56 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 308/10000 | train loss: 2.391017 | val loss: 2.797452
+2026-06-20 06:47:40 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 309/10000 | train loss: 2.388841 | val loss: 2.795339
+2026-06-20 06:49:26 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 310/10000 | train loss: 2.387542 | val loss: 2.793447 | *Best Model Saved*
+2026-06-20 06:51:12 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 311/10000 | train loss: 2.384597 | val loss: 2.788481 | *Best Model Saved*
+2026-06-20 06:52:57 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 312/10000 | train loss: 2.385973 | val loss: 2.788652
+2026-06-20 06:54:43 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 313/10000 | train loss: 2.383456 | val loss: 2.789827
+2026-06-20 06:56:29 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 314/10000 | train loss: 2.381702 | val loss: 2.793414
+2026-06-20 06:58:15 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 315/10000 | train loss: 2.378539 | val loss: 2.787116 | *Best Model Saved*
+2026-06-20 07:00:02 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 316/10000 | train loss: 2.375724 | val loss: 2.784857 | *Best Model Saved*
+2026-06-20 07:01:49 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 317/10000 | train loss: 2.373449 | val loss: 2.783269 | *Best Model Saved*
+2026-06-20 07:03:35 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 318/10000 | train loss: 2.372984 | val loss: 2.784145
+2026-06-20 07:05:22 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 319/10000 | train loss: 2.369903 | val loss: 2.780507 | *Best Model Saved*
+2026-06-20 07:07:08 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 320/10000 | train loss: 2.368176 | val loss: 2.783780
+2026-06-20 07:08:54 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 321/10000 | train loss: 2.368327 | val loss: 2.781874
+2026-06-20 07:10:40 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 322/10000 | train loss: 2.364765 | val loss: 2.781714
+2026-06-20 07:12:27 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 323/10000 | train loss: 2.363688 | val loss: 2.779948 | *Best Model Saved*
+2026-06-20 07:14:13 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 324/10000 | train loss: 2.361449 | val loss: 2.778429 | *Best Model Saved*
+2026-06-20 07:15:59 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 325/10000 | train loss: 2.359068 | val loss: 2.776864 | *Best Model Saved*
+2026-06-20 07:17:45 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 326/10000 | train loss: 2.358710 | val loss: 2.775330 | *Best Model Saved*
+2026-06-20 07:19:32 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 327/10000 | train loss: 2.357584 | val loss: 2.773518 | *Best Model Saved*
+2026-06-20 07:21:18 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 328/10000 | train loss: 2.353342 | val loss: 2.772621 | *Best Model Saved*
+2026-06-20 07:23:05 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 329/10000 | train loss: 2.352094 | val loss: 2.773664
+2026-06-20 07:24:51 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 330/10000 | train loss: 2.350019 | val loss: 2.770545 | *Best Model Saved*
+2026-06-20 07:26:38 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 331/10000 | train loss: 2.348212 | val loss: 2.769926 | *Best Model Saved*
+2026-06-20 07:28:25 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 332/10000 | train loss: 2.348460 | val loss: 2.766614 | *Best Model Saved*
+2026-06-20 07:30:11 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 333/10000 | train loss: 2.347651 | val loss: 2.769156
+2026-06-20 07:31:59 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 334/10000 | train loss: 2.343021 | val loss: 2.765822 | *Best Model Saved*
+2026-06-20 07:33:44 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 335/10000 | train loss: 2.340386 | val loss: 2.763649 | *Best Model Saved*
+2026-06-20 07:35:30 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 336/10000 | train loss: 2.340048 | val loss: 2.764290
+2026-06-20 07:37:16 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 337/10000 | train loss: 2.337700 | val loss: 2.768758
+2026-06-20 07:39:03 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 338/10000 | train loss: 2.342550 | val loss: 2.765041
+2026-06-20 07:40:49 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 339/10000 | train loss: 2.337230 | val loss: 2.766117
+2026-06-20 07:42:35 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 340/10000 | train loss: 2.333702 | val loss: 2.761146 | *Best Model Saved*
+2026-06-20 07:44:22 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 341/10000 | train loss: 2.332645 | val loss: 2.764482
+2026-06-20 07:46:08 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 342/10000 | train loss: 2.330112 | val loss: 2.756121 | *Best Model Saved*
+2026-06-20 07:47:54 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 343/10000 | train loss: 2.328184 | val loss: 2.752881 | *Best Model Saved*
+2026-06-20 07:49:40 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 344/10000 | train loss: 2.329249 | val loss: 2.762632
+2026-06-20 07:51:26 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 345/10000 | train loss: 2.325143 | val loss: 2.754895
+2026-06-20 07:53:13 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 346/10000 | train loss: 2.322026 | val loss: 2.752510 | *Best Model Saved*
+2026-06-20 07:55:01 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 347/10000 | train loss: 2.320619 | val loss: 2.752312 | *Best Model Saved*
+2026-06-20 07:56:47 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 348/10000 | train loss: 2.318141 | val loss: 2.753480
+2026-06-20 07:58:32 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 349/10000 | train loss: 2.317255 | val loss: 2.753924
+2026-06-20 08:00:18 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 350/10000 | train loss: 2.315834 | val loss: 2.748414 | *Best Model Saved*
+2026-06-20 08:02:05 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 351/10000 | train loss: 2.313694 | val loss: 2.749478
+2026-06-20 08:03:52 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 352/10000 | train loss: 2.312684 | val loss: 2.751488
+2026-06-20 08:05:38 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 353/10000 | train loss: 2.310759 | val loss: 2.748002 | *Best Model Saved*
+2026-06-20 08:07:25 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 354/10000 | train loss: 2.309031 | val loss: 2.745907 | *Best Model Saved*
+2026-06-20 08:09:11 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 355/10000 | train loss: 2.306868 | val loss: 2.748607
+2026-06-20 08:10:57 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 356/10000 | train loss: 2.304281 | val loss: 2.746031
+2026-06-20 08:12:42 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 357/10000 | train loss: 2.304724 | val loss: 2.744731 | *Best Model Saved*
+2026-06-20 08:14:28 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 358/10000 | train loss: 2.303226 | val loss: 2.745969
+2026-06-20 08:16:14 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 359/10000 | train loss: 2.301826 | val loss: 2.742492 | *Best Model Saved*
+2026-06-20 08:18:00 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 360/10000 | train loss: 2.301832 | val loss: 2.741498 | *Best Model Saved*
+2026-06-20 08:19:46 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 361/10000 | train loss: 2.299240 | val loss: 2.741624
+2026-06-20 08:21:32 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 362/10000 | train loss: 2.298726 | val loss: 2.739373 | *Best Model Saved*
+2026-06-20 08:23:17 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 363/10000 | train loss: 2.295393 | val loss: 2.740544
+2026-06-20 08:25:04 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 364/10000 | train loss: 2.293903 | val loss: 2.742981
+2026-06-20 08:26:55 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 365/10000 | train loss: 2.290476 | val loss: 2.736682 | *Best Model Saved*
+2026-06-20 08:28:52 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 366/10000 | train loss: 2.288450 | val loss: 2.740617
+2026-06-20 08:30:42 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 367/10000 | train loss: 2.288859 | val loss: 2.735571 | *Best Model Saved*
+2026-06-20 08:32:29 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 368/10000 | train loss: 2.287115 | val loss: 2.740690
+2026-06-20 08:34:15 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 369/10000 | train loss: 2.284369 | val loss: 2.741762
+2026-06-20 08:36:01 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 370/10000 | train loss: 2.284397 | val loss: 2.735179 | *Best Model Saved*
+2026-06-20 08:37:47 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 371/10000 | train loss: 2.282960 | val loss: 2.738084
+2026-06-20 08:39:33 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 372/10000 | train loss: 2.279762 | val loss: 2.738533
+2026-06-20 08:41:18 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 373/10000 | train loss: 2.278740 | val loss: 2.735353
+2026-06-20 08:43:04 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 374/10000 | train loss: 2.284864 | val loss: 2.733301 | *Best Model Saved*
+2026-06-20 08:44:51 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 375/10000 | train loss: 2.286609 | val loss: 2.730445 | *Best Model Saved*
+2026-06-20 08:46:38 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 376/10000 | train loss: 2.277425 | val loss: 2.728125 | *Best Model Saved*
+2026-06-20 08:48:25 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 377/10000 | train loss: 2.274844 | val loss: 2.726409 | *Best Model Saved*
+2026-06-20 08:50:11 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 378/10000 | train loss: 2.273894 | val loss: 2.727657
+2026-06-20 08:51:56 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 379/10000 | train loss: 2.270280 | val loss: 2.731752
+2026-06-20 08:53:43 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 380/10000 | train loss: 2.268916 | val loss: 2.727472
+2026-06-20 08:55:29 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 381/10000 | train loss: 2.268034 | val loss: 2.731290
+2026-06-20 08:57:16 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 382/10000 | train loss: 2.266287 | val loss: 2.725284 | *Best Model Saved*
+2026-06-20 08:59:02 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 383/10000 | train loss: 2.266306 | val loss: 2.730264
+2026-06-20 09:00:47 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 384/10000 | train loss: 2.273414 | val loss: 2.725378
+2026-06-20 09:02:34 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 385/10000 | train loss: 2.270307 | val loss: 2.737003
+2026-06-20 09:04:20 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 386/10000 | train loss: 2.268275 | val loss: 2.726327
+2026-06-20 09:06:06 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 387/10000 | train loss: 2.263963 | val loss: 2.728130
+2026-06-20 09:06:06 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - No improvement for 5 epochs. Early stopping at epoch 387 in phase 'b1'.
+2026-06-20 09:06:06 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Finished Phase: b1. Best Val Loss: 2.725284
+2026-06-20 09:06:06 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Training completed.
+2026-06-20 09:06:06 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Starting evaluation...
+2026-06-20 09:06:24 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - --------------------------------------------------
+2026-06-20 09:06:24 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Evaluation Results Summary:
+2026-06-20 09:06:24 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO -            Imputation           Prediction          
+2026-06-20 09:06:24 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - --------------------------------------------------
+2026-06-20 09:06:24 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - MAE        0.311625             0.262610            
+2026-06-20 09:06:24 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - MSE        0.153118             0.128626            
+2026-06-20 09:06:24 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - MRE        0.358691             0.322461            
+2026-06-20 09:06:24 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - RMSE       0.389568             0.332726            
+2026-06-20 09:06:24 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - --------------------------------------------------
+2026-06-20 09:06:24 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Evaluation completed.
+2026-06-20 09:06:25 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Deleted checkpoint: cache/checkpoints/B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42/best_model.pt
+2026-06-20 09:06:25 - B1_current_velocity_H_BRITS_Sundial_mr0.2_L512_s42 - INFO - Experiment completed successfully!

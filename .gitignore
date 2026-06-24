@@ -1,0 +1,21 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+.reasonix/
+.ruff_cache/
+
+# Runtime data & checkpoints (large / regeneratable)
+cache/
+*.sqlite
+
+# TensorBoard event dirs — keep text logs for progress tracking
+logs/*
+!logs/*.log

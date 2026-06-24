@@ -1,0 +1,122 @@
+2026-06-16 20:08:51 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - ======================================================================
+2026-06-16 20:08:51 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Exp name: B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42
+2026-06-16 20:08:51 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - ======================================================================
+2026-06-16 20:08:51 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Overriding config: [experiment] exp_name = B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42
+2026-06-16 20:08:51 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Overriding config: [experiment] exp_type = B1
+2026-06-16 20:08:51 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Overriding config: [experiment] random_seed = 42
+2026-06-16 20:08:51 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Overriding config: [dataset] dataset = azure2019_U_5T_0_0
+2026-06-16 20:08:51 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Overriding config: [dataset] missing_rate = 0.3
+2026-06-16 20:08:51 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Overriding config: [dataset] artificial_missing_rate = 0.3
+2026-06-16 20:08:51 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Overriding config: [imputator] model_type = SAITS
+2026-06-16 20:08:51 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Overriding config: [predictor] model_type = Sundial
+2026-06-16 20:08:51 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Loading template config for SAITS from configs/template/imputator/SAITS.ini
+2026-06-16 20:08:51 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Loading template config for Sundial from configs/template/predictor/Sundial.ini
+2026-06-16 20:08:51 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Loading template config for dataset 'azure2019_U_5T_0_0' from configs/template/dataset/azure2019_U_5T.ini
+2026-06-16 20:08:51 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - ============================== System Info ==============================
+2026-06-16 20:08:51 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Python version: 3.10.20
+2026-06-16 20:08:51 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - PyTorch version: 2.12.0+cu130
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - CUDA available: True
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - CUDA device: NVIDIA GeForce RTX 3070 Laptop GPU
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - ===========================================================================
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - ============================== Configuration ==============================
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - [experiment]
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   exp_name = B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   exp_type = B1
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   random_seed = 42
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - [paths]
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   preprocessed_data_dir = ./cache/preprocessed_datasets
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   ckpt_save_dir = ./cache/checkpoints
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   log_save_dir = ./logs
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - [dataset]
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   dataset = azure2019_U_5T_0_0
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   missing_rate = 0.3
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   artificial_missing_rate = 0.3
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   block_size = 20
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   lookback_len = 128
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   val_ratio = 0.1
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   test_ratio = 0.2
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   column_index = 0
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   item_id = 0
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   source = huggingface
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   repo_name = Real-TSF/TIME
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   dataset_name = azure2019_U
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   frequency = 5T
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   pred_len = 48
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - [training]
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   max_epoch = 10000
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   warmup_epoch = 3
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   patience = 5
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   device = cuda
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   batch_size = 32
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   auto_batch_size = true
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   micro_batch_size = 0
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   use_amp = false
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   optimizer = AdamW
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   lr = 1e-4
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   tip_k = 20
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   tip_epsilon = 1e-4
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   tip_pretrain_epochs = 2
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - [imputator]
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   model_type = SAITS
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   n_groups = 2
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   n_group_inner_layers = 1
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   d_model = 256
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   d_inner = 128
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   n_head = 4
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   d_k = 64
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   d_v = 64
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   dropout = 0.1
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   param_sharing_strategy = inner_group
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   diagonal_attention_mask = True
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - [predictor]
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   model_type = Sundial
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   num_samples = 100
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   sample_aggregation = mean
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   train_method = forward
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - ===========================================================================
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Random seed set to 42
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Generated preprocess UID: f8bd810fdd685b09
+2026-06-16 20:08:52 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Preprocessed data saved to cache/preprocessed_datasets/f8bd810fdd685b09
+2026-06-16 20:08:55 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - AMP disabled.
+2026-06-16 20:09:07 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - batch_size= 32 → 0.68s/step  (found working size)
+2026-06-16 20:09:07 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Auto batch size: 32 (target was 32)
+2026-06-16 20:09:07 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Effective batch_size: 32 | Micro batch_size: 32 | Gradient accumulation steps: 1
+2026-06-16 20:09:07 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - 
+2026-06-16 20:09:07 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - ============================================================
+2026-06-16 20:09:07 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -   Phase: B1 — Standard Imputer Training (10000 max epochs)
+2026-06-16 20:09:07 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - ============================================================
+2026-06-16 20:09:38 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Epoch 001/10000 | train loss: 1.266858 | val loss: 0.994155 | *Best Model Saved*
+2026-06-16 20:10:07 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Epoch 002/10000 | train loss: 0.985909 | val loss: 0.894152 | *Best Model Saved*
+2026-06-16 20:10:38 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Epoch 003/10000 | train loss: 0.938031 | val loss: 0.883294 | *Best Model Saved*
+2026-06-16 20:11:09 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Epoch 004/10000 | train loss: 0.907454 | val loss: 0.896871
+2026-06-16 20:11:36 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Epoch 005/10000 | train loss: 0.876584 | val loss: 0.912521
+2026-06-16 20:12:08 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Epoch 006/10000 | train loss: 0.853457 | val loss: 0.900415
+2026-06-16 20:12:38 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Epoch 007/10000 | train loss: 0.834477 | val loss: 0.892445
+2026-06-16 20:13:09 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Epoch 008/10000 | train loss: 0.820016 | val loss: 0.866756 | *Best Model Saved*
+2026-06-16 20:13:39 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Epoch 009/10000 | train loss: 0.809098 | val loss: 0.864474 | *Best Model Saved*
+2026-06-16 20:14:10 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Epoch 010/10000 | train loss: 0.792039 | val loss: 0.847084 | *Best Model Saved*
+2026-06-16 20:14:36 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Epoch 011/10000 | train loss: 0.786787 | val loss: 0.864815
+2026-06-16 20:15:08 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Epoch 012/10000 | train loss: 0.782196 | val loss: 0.844127 | *Best Model Saved*
+2026-06-16 20:15:39 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Epoch 013/10000 | train loss: 0.772047 | val loss: 0.841243 | *Best Model Saved*
+2026-06-16 20:16:10 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Epoch 014/10000 | train loss: 0.764525 | val loss: 0.835179 | *Best Model Saved*
+2026-06-16 20:16:41 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Epoch 015/10000 | train loss: 0.757098 | val loss: 0.850699
+2026-06-16 20:17:13 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Epoch 016/10000 | train loss: 0.753651 | val loss: 0.845666
+2026-06-16 20:17:43 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Epoch 017/10000 | train loss: 0.749070 | val loss: 0.843875
+2026-06-16 20:18:10 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Epoch 018/10000 | train loss: 0.745207 | val loss: 0.839407
+2026-06-16 20:18:40 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Epoch 019/10000 | train loss: 0.738407 | val loss: 0.846577
+2026-06-16 20:18:40 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - No improvement for 5 epochs. Early stopping at epoch 19 in phase 'b1'.
+2026-06-16 20:18:40 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Finished Phase: b1. Best Val Loss: 0.835179
+2026-06-16 20:18:41 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Training completed.
+2026-06-16 20:18:41 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Starting evaluation...
+2026-06-16 20:18:47 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - --------------------------------------------------
+2026-06-16 20:18:47 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Evaluation Results Summary:
+2026-06-16 20:18:47 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO -            Imputation           Prediction          
+2026-06-16 20:18:47 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - --------------------------------------------------
+2026-06-16 20:18:47 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - MAE        0.793373             0.726679            
+2026-06-16 20:18:47 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - MSE        1.249924             0.943563            
+2026-06-16 20:18:47 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - MRE        0.971709             0.998086            
+2026-06-16 20:18:47 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - RMSE       1.094709             0.954908            
+2026-06-16 20:18:47 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - --------------------------------------------------
+2026-06-16 20:18:47 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Evaluation completed.
+2026-06-16 20:18:47 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Deleted checkpoint: cache/checkpoints/B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42/best_model.pt
+2026-06-16 20:18:47 - B1_azure2019_U_5T_0_0_SAITS_Sundial_mr0.3_s42 - INFO - Experiment completed successfully!

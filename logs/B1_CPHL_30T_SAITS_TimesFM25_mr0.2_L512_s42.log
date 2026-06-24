@@ -1,0 +1,158 @@
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - ======================================================================
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Exp name: B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - ======================================================================
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Overriding config: [experiment] exp_name = B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Overriding config: [experiment] exp_type = B1
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Overriding config: [experiment] random_seed = 42
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Overriding config: [dataset] dataset = CPHL_30T
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Overriding config: [dataset] missing_rate = 0.2
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Overriding config: [dataset] artificial_missing_rate = 0.2
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Overriding config: [dataset] lookback_len = 512
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Overriding config: [imputator] model_type = SAITS
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Overriding config: [predictor] model_type = TimesFM25
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Overriding config: [training] tip_k = 20
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Overriding config: [training] tip_epsilon = 1e-4
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Loading template config for SAITS from configs/template/imputator/SAITS.ini
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Loading template config for TimesFM25 from configs/template/predictor/TimesFM25.ini
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Loading template config for dataset 'CPHL_30T' from configs/template/dataset/CPHL_30T.ini
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - ============================== System Info ==============================
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Python version: 3.12.0
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - PyTorch version: 2.12.0+cu130
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - CUDA available: True
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - CUDA device: NVIDIA GeForce RTX 3070 Laptop GPU
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - ===========================================================================
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - ============================== Configuration ==============================
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - [experiment]
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   exp_name = B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   exp_type = B1
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   random_seed = 42
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - [paths]
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   preprocessed_data_dir = ./cache/preprocessed_datasets
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   ckpt_save_dir = ./cache/checkpoints
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   log_save_dir = ./logs
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - [dataset]
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   dataset = CPHL_30T
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   missing_rate = 0.2
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   artificial_missing_rate = 0.2
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   block_size = 20
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   lookback_len = 512
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   val_ratio = 0.1
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   test_ratio = 0.2
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   source = huggingface
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   repo_name = Real-TSF/TIME
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   dataset_name = CPHL
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   frequency = 30T
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   item_id = TAN100
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   column_index = 0
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   pred_len = 12
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - [training]
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   max_epoch = 10000
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   warmup_epoch = 3
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   patience = 5
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   device = cuda
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   batch_size = 128
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   auto_batch_size = true
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   micro_batch_size = 0
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   optimizer = AdamW
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   lr = 1e-4
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   tip_k = 20
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   tip_epsilon = 1e-4
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   tip_pretrain_epochs = 2
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - [imputator]
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   model_type = SAITS
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   n_groups = 2
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   n_group_inner_layers = 1
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   d_model = 256
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   d_inner = 128
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   n_head = 4
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   d_k = 64
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   d_v = 64
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   dropout = 0.1
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   param_sharing_strategy = inner_group
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   diagonal_attention_mask = True
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - [predictor]
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   model_type = TimesFM25
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   model_name = google/timesfm-2.5-200m-pytorch
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   max_context = 1024
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   normalize_inputs = true
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   use_continuous_quantile_head = true
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   force_flip_invariance = true
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   infer_is_positive = true
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   fix_quantile_crossing = true
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - ===========================================================================
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Random seed set to 42
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Generated preprocess UID: 187ac729df0e1a51
+2026-06-23 07:08:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Data already preprocessed. Loading from cache/preprocessed_datasets/187ac729df0e1a51
+2026-06-23 07:09:08 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   batch_size=  1 → 6.85s  (0.15 samples/s)
+2026-06-23 07:09:08 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Ternary search over 2^[1, 7] = [2, 128]
+2026-06-23 07:09:21 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   batch_size=  8 → 7.06s  (1.13 samples/s)
+2026-06-23 07:09:31 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   batch_size= 32 → 6.94s  (4.61 samples/s)
+2026-06-23 07:09:35 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   batch_size= 16 → killed (>3.5s, best_tp=4.61)
+2026-06-23 07:09:45 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   batch_size= 64 → 7.18s  (8.91 samples/s)
+2026-06-23 07:10:02 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   batch_size=128 → killed (>14.4s, best_tp=8.91)
+2026-06-23 07:10:02 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Auto batch size: 64 (throughput: 8.91 samples/s, target was 128)
+2026-06-23 07:10:02 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Effective batch_size: 128 | Micro batch_size: 64 | Gradient accumulation steps: 2
+2026-06-23 07:10:02 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - 
+2026-06-23 07:10:02 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - ============================================================
+2026-06-23 07:10:02 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   Phase: B1 — Standard Imputer Training (10000 max epochs)
+2026-06-23 07:10:02 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - ============================================================
+2026-06-23 07:12:55 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 001/10000 | train loss: 0.900291 | val loss: 0.287909 | *Best Model Saved*
+2026-06-23 07:15:48 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 002/10000 | train loss: 0.644702 | val loss: 0.214892 | *Best Model Saved*
+2026-06-23 07:18:43 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 003/10000 | train loss: 0.576967 | val loss: 0.187423 | *Best Model Saved*
+2026-06-23 07:21:36 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 004/10000 | train loss: 0.544165 | val loss: 0.164271 | *Best Model Saved*
+2026-06-23 07:24:33 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 005/10000 | train loss: 0.521714 | val loss: 0.157421 | *Best Model Saved*
+2026-06-23 07:27:32 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 006/10000 | train loss: 0.503845 | val loss: 0.138902 | *Best Model Saved*
+2026-06-23 07:30:25 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 007/10000 | train loss: 0.489558 | val loss: 0.133713 | *Best Model Saved*
+2026-06-23 07:33:19 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 008/10000 | train loss: 0.478648 | val loss: 0.124972 | *Best Model Saved*
+2026-06-23 07:36:14 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 009/10000 | train loss: 0.469879 | val loss: 0.119318 | *Best Model Saved*
+2026-06-23 07:39:06 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 010/10000 | train loss: 0.464023 | val loss: 0.124810
+2026-06-23 07:41:59 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 011/10000 | train loss: 0.459994 | val loss: 0.112602 | *Best Model Saved*
+2026-06-23 07:44:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 012/10000 | train loss: 0.453637 | val loss: 0.111093 | *Best Model Saved*
+2026-06-23 07:47:48 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 013/10000 | train loss: 0.449922 | val loss: 0.110308 | *Best Model Saved*
+2026-06-23 07:50:42 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 014/10000 | train loss: 0.447050 | val loss: 0.109815 | *Best Model Saved*
+2026-06-23 07:53:35 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 015/10000 | train loss: 0.442913 | val loss: 0.107611 | *Best Model Saved*
+2026-06-23 07:56:29 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 016/10000 | train loss: 0.440026 | val loss: 0.107666
+2026-06-23 07:59:23 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 017/10000 | train loss: 0.437819 | val loss: 0.105545 | *Best Model Saved*
+2026-06-23 08:02:18 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 018/10000 | train loss: 0.434461 | val loss: 0.110283
+2026-06-23 08:05:12 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 019/10000 | train loss: 0.432863 | val loss: 0.105002 | *Best Model Saved*
+2026-06-23 08:08:05 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 020/10000 | train loss: 0.429281 | val loss: 0.104309 | *Best Model Saved*
+2026-06-23 08:10:58 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 021/10000 | train loss: 0.428447 | val loss: 0.108445
+2026-06-23 08:13:51 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 022/10000 | train loss: 0.425905 | val loss: 0.104037 | *Best Model Saved*
+2026-06-23 08:16:45 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 023/10000 | train loss: 0.423673 | val loss: 0.102894 | *Best Model Saved*
+2026-06-23 08:19:38 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 024/10000 | train loss: 0.420697 | val loss: 0.100808 | *Best Model Saved*
+2026-06-23 08:22:31 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 025/10000 | train loss: 0.420110 | val loss: 0.106748
+2026-06-23 08:25:24 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 026/10000 | train loss: 0.417907 | val loss: 0.100185 | *Best Model Saved*
+2026-06-23 08:28:19 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 027/10000 | train loss: 0.416623 | val loss: 0.099553 | *Best Model Saved*
+2026-06-23 08:31:12 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 028/10000 | train loss: 0.414697 | val loss: 0.103293
+2026-06-23 08:34:05 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 029/10000 | train loss: 0.413305 | val loss: 0.098916 | *Best Model Saved*
+2026-06-23 08:36:59 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 030/10000 | train loss: 0.410947 | val loss: 0.100879
+2026-06-23 08:39:53 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 031/10000 | train loss: 0.410235 | val loss: 0.098927
+2026-06-23 08:42:46 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 032/10000 | train loss: 0.409080 | val loss: 0.098533 | *Best Model Saved*
+2026-06-23 08:45:40 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 033/10000 | train loss: 0.407248 | val loss: 0.099041
+2026-06-23 08:48:33 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 034/10000 | train loss: 0.406329 | val loss: 0.098861
+2026-06-23 08:51:26 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 035/10000 | train loss: 0.404012 | val loss: 0.104273
+2026-06-23 08:54:20 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 036/10000 | train loss: 0.403315 | val loss: 0.099881
+2026-06-23 08:57:15 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 037/10000 | train loss: 0.401799 | val loss: 0.097077 | *Best Model Saved*
+2026-06-23 09:00:08 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 038/10000 | train loss: 0.400671 | val loss: 0.096988 | *Best Model Saved*
+2026-06-23 09:03:01 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 039/10000 | train loss: 0.398277 | val loss: 0.097160
+2026-06-23 09:05:54 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 040/10000 | train loss: 0.397150 | val loss: 0.097878
+2026-06-23 09:08:48 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 041/10000 | train loss: 0.396808 | val loss: 0.102461
+2026-06-23 09:11:41 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 042/10000 | train loss: 0.394781 | val loss: 0.098197
+2026-06-23 09:14:34 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 043/10000 | train loss: 0.394195 | val loss: 0.097823
+2026-06-23 09:14:34 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - No improvement for 5 epochs. Early stopping at epoch 43 in phase 'b1'.
+2026-06-23 09:14:34 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Finished Phase: b1. Best Val Loss: 0.096988
+2026-06-23 09:14:34 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Training completed.
+2026-06-23 09:14:34 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Starting evaluation...
+2026-06-23 09:14:34 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - No ground truth for natural missing positions. Skipping imputation evaluation.
+2026-06-23 09:15:13 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - --------------------------------------------------
+2026-06-23 09:15:13 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Evaluation Results Summary:
+2026-06-23 09:15:13 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -            Prediction          
+2026-06-23 09:15:13 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - --------------------------------------------------
+2026-06-23 09:15:13 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - MAE        N/A                  0.775822            
+2026-06-23 09:15:13 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - MSE        N/A                  1.264434            
+2026-06-23 09:15:13 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - MRE        N/A                  0.712004            
+2026-06-23 09:15:13 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - RMSE       N/A                  1.030314            
+2026-06-23 09:15:13 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - --------------------------------------------------
+2026-06-23 09:15:13 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Evaluation completed.
+2026-06-23 09:15:13 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Deleted checkpoint: cache/checkpoints/B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42/best_model.pt
+2026-06-23 09:15:13 - B1_CPHL_30T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Experiment completed successfully!

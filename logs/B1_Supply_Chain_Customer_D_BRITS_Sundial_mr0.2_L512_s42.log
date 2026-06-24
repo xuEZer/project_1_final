@@ -1,0 +1,142 @@
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - ======================================================================
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Exp name: B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - ======================================================================
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [experiment] exp_name = B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [experiment] exp_type = B1
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [experiment] random_seed = 42
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [dataset] dataset = Supply_Chain_Customer_D
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [dataset] missing_rate = 0.2
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [dataset] artificial_missing_rate = 0.2
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [dataset] lookback_len = 512
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [imputator] model_type = BRITS
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [predictor] model_type = Sundial
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [training] tip_k = 20
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [training] tip_epsilon = 1e-4
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Loading template config for BRITS from configs/template/imputator/BRITS.ini
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Loading template config for Sundial from configs/template/predictor/Sundial.ini
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Loading template config for dataset 'Supply_Chain_Customer_D' from configs/template/dataset/Supply_Chain_Customer_D.ini
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - ============================== System Info ==============================
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Python version: 3.10.20
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - PyTorch version: 2.12.0+cu130
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - CUDA available: True
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - CUDA device: NVIDIA GeForce RTX 3070 Laptop GPU
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - ===========================================================================
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - ============================== Configuration ==============================
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - [experiment]
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   exp_name = B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   exp_type = B1
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   random_seed = 42
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - [paths]
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   preprocessed_data_dir = ./cache/preprocessed_datasets
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   ckpt_save_dir = ./cache/checkpoints
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   log_save_dir = ./logs
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - [dataset]
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   dataset = Supply_Chain_Customer_D
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   missing_rate = 0.2
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   artificial_missing_rate = 0.2
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   block_size = 20
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   lookback_len = 512
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   val_ratio = 0.1
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   test_ratio = 0.2
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   source = huggingface
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   repo_name = Real-TSF/TIME
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   dataset_name = Supply_Chain_Customer
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   frequency = D
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   item_id = item0
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   column_index = 0
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   pred_len = 30
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - [training]
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   max_epoch = 10000
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   warmup_epoch = 3
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   patience = 5
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   device = cuda
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   batch_size = 128
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   auto_batch_size = true
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   micro_batch_size = 0
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   optimizer = AdamW
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   lr = 1e-4
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   tip_k = 20
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   tip_epsilon = 1e-4
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   tip_pretrain_epochs = 2
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - [imputator]
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   model_type = BRITS
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   d_model = 256
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - [predictor]
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   model_type = Sundial
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   num_samples = 100
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   sample_aggregation = mean
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   train_method = forward
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - ===========================================================================
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Random seed set to 42
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Generated preprocess UID: 8ff6a1642c3e0a1e
+2026-06-19 19:38:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Data already preprocessed. Loading from cache/preprocessed_datasets/8ff6a1642c3e0a1e
+2026-06-19 19:38:52 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   batch_size=  1 → 11.89s  (0.08 samples/s)
+2026-06-19 19:38:52 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Ternary search over 2^[1, 7] = [2, 128]
+2026-06-19 19:39:09 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   batch_size=  8 → 13.70s  (0.58 samples/s)
+2026-06-19 19:39:27 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   batch_size= 32 → 15.04s  (2.13 samples/s)
+2026-06-19 19:39:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   batch_size= 16 → killed (>7.5s, best_tp=2.13)
+2026-06-19 19:39:52 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   batch_size= 64 → 15.07s  (4.25 samples/s)
+2026-06-19 19:40:15 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   batch_size=128 → 20.00s  (6.40 samples/s)
+2026-06-19 19:40:15 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Auto batch size: 128 (throughput: 6.40 samples/s, target was 128)
+2026-06-19 19:40:15 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Effective batch_size: 128 | Micro batch_size: 128 | Gradient accumulation steps: 1
+2026-06-19 19:40:15 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - 
+2026-06-19 19:40:15 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - ============================================================
+2026-06-19 19:40:15 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -   Phase: B1 — Standard Imputer Training (10000 max epochs)
+2026-06-19 19:40:15 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - ============================================================
+2026-06-19 19:40:32 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 001/10000 | train loss: 5.929276 | val loss: 6.200531 | *Best Model Saved*
+2026-06-19 19:40:48 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 002/10000 | train loss: 5.930935 | val loss: 6.192812 | *Best Model Saved*
+2026-06-19 19:41:05 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 003/10000 | train loss: 5.908753 | val loss: 6.185056 | *Best Model Saved*
+2026-06-19 19:41:21 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 004/10000 | train loss: 5.922060 | val loss: 6.177312 | *Best Model Saved*
+2026-06-19 19:41:37 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 005/10000 | train loss: 5.887938 | val loss: 6.169535 | *Best Model Saved*
+2026-06-19 19:41:54 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 006/10000 | train loss: 5.882648 | val loss: 6.162000 | *Best Model Saved*
+2026-06-19 19:42:10 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 007/10000 | train loss: 5.902236 | val loss: 6.154470 | *Best Model Saved*
+2026-06-19 19:42:26 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 008/10000 | train loss: 5.831302 | val loss: 6.146602 | *Best Model Saved*
+2026-06-19 19:42:43 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 009/10000 | train loss: 5.843581 | val loss: 6.138321 | *Best Model Saved*
+2026-06-19 19:42:59 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 010/10000 | train loss: 5.811394 | val loss: 6.129675 | *Best Model Saved*
+2026-06-19 19:43:15 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 011/10000 | train loss: 5.839674 | val loss: 6.120520 | *Best Model Saved*
+2026-06-19 19:43:31 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 012/10000 | train loss: 5.808307 | val loss: 6.110907 | *Best Model Saved*
+2026-06-19 19:43:47 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 013/10000 | train loss: 5.789884 | val loss: 6.100432 | *Best Model Saved*
+2026-06-19 19:44:04 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 014/10000 | train loss: 5.764992 | val loss: 6.089224 | *Best Model Saved*
+2026-06-19 19:44:20 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 015/10000 | train loss: 5.714917 | val loss: 6.077373 | *Best Model Saved*
+2026-06-19 19:44:36 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 016/10000 | train loss: 5.756392 | val loss: 6.063829 | *Best Model Saved*
+2026-06-19 19:44:52 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 017/10000 | train loss: 5.775135 | val loss: 6.047987 | *Best Model Saved*
+2026-06-19 19:45:08 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 018/10000 | train loss: 5.732077 | val loss: 6.033998 | *Best Model Saved*
+2026-06-19 19:45:24 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 019/10000 | train loss: 5.791680 | val loss: 6.027064 | *Best Model Saved*
+2026-06-19 19:45:40 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 020/10000 | train loss: 5.724726 | val loss: 6.023069 | *Best Model Saved*
+2026-06-19 19:45:56 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 021/10000 | train loss: 5.695711 | val loss: 6.017066 | *Best Model Saved*
+2026-06-19 19:46:12 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 022/10000 | train loss: 5.690540 | val loss: 6.011822 | *Best Model Saved*
+2026-06-19 19:46:28 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 023/10000 | train loss: 5.686572 | val loss: 6.006394 | *Best Model Saved*
+2026-06-19 19:46:45 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 024/10000 | train loss: 5.702934 | val loss: 5.998877 | *Best Model Saved*
+2026-06-19 19:47:01 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 025/10000 | train loss: 5.697733 | val loss: 5.988756 | *Best Model Saved*
+2026-06-19 19:47:17 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 026/10000 | train loss: 5.683875 | val loss: 5.975934 | *Best Model Saved*
+2026-06-19 19:47:34 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 027/10000 | train loss: 5.706250 | val loss: 5.961944 | *Best Model Saved*
+2026-06-19 19:47:50 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 028/10000 | train loss: 5.670032 | val loss: 5.949944 | *Best Model Saved*
+2026-06-19 19:48:06 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 029/10000 | train loss: 5.673135 | val loss: 5.934727 | *Best Model Saved*
+2026-06-19 19:48:23 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 030/10000 | train loss: 5.657852 | val loss: 5.918561 | *Best Model Saved*
+2026-06-19 19:48:39 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 031/10000 | train loss: 5.653152 | val loss: 5.910495 | *Best Model Saved*
+2026-06-19 19:48:55 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 032/10000 | train loss: 5.663309 | val loss: 5.905357 | *Best Model Saved*
+2026-06-19 19:49:11 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 033/10000 | train loss: 5.628997 | val loss: 5.897806 | *Best Model Saved*
+2026-06-19 19:49:27 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 034/10000 | train loss: 5.603611 | val loss: 5.889329 | *Best Model Saved*
+2026-06-19 19:49:43 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 035/10000 | train loss: 5.562322 | val loss: 6.233992
+2026-06-19 19:49:59 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 036/10000 | train loss: 5.568361 | val loss: 5.877669 | *Best Model Saved*
+2026-06-19 19:50:15 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 037/10000 | train loss: 5.575164 | val loss: 5.887419
+2026-06-19 19:50:32 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 038/10000 | train loss: 5.591681 | val loss: 5.896839
+2026-06-19 19:50:48 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 039/10000 | train loss: 5.585216 | val loss: 5.894735
+2026-06-19 19:51:04 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 040/10000 | train loss: 5.561644 | val loss: 5.891174
+2026-06-19 19:51:20 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 041/10000 | train loss: 5.640865 | val loss: 5.884061
+2026-06-19 19:51:20 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - No improvement for 5 epochs. Early stopping at epoch 41 in phase 'b1'.
+2026-06-19 19:51:20 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Finished Phase: b1. Best Val Loss: 5.877669
+2026-06-19 19:51:20 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Training completed.
+2026-06-19 19:51:20 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Starting evaluation...
+2026-06-19 19:51:23 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - --------------------------------------------------
+2026-06-19 19:51:23 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Evaluation Results Summary:
+2026-06-19 19:51:23 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO -            Imputation           Prediction          
+2026-06-19 19:51:23 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - --------------------------------------------------
+2026-06-19 19:51:23 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - MAE        1.077104             0.400371            
+2026-06-19 19:51:23 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - MSE        2.053412             0.244156            
+2026-06-19 19:51:23 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - MRE        1.004411             0.523188            
+2026-06-19 19:51:23 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - RMSE       1.432973             0.494121            
+2026-06-19 19:51:23 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - --------------------------------------------------
+2026-06-19 19:51:23 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Evaluation completed.
+2026-06-19 19:51:23 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Deleted checkpoint: cache/checkpoints/B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42/best_model.pt
+2026-06-19 19:51:23 - B1_Supply_Chain_Customer_D_BRITS_Sundial_mr0.2_L512_s42 - INFO - Experiment completed successfully!

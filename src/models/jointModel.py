@@ -1,0 +1,564 @@
+"""Joint training wrapper for imputation and prediction models.
+
+The imputer is trained via its reconstruction / imputation loss.  The
+predictor is **inference-only** — it runs inside ``torch.no_grad()``,
+does not produce a loss, and never participates in backpropagation.
+"""
+
+from __future__ import annotations
+
+import collections.abc
+import logging
+from pathlib import Path
+
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
+
+optimizer_dict = {"Adam": torch.optim.Adam, "AdamW": torch.optim.AdamW}
+
+
+class JointModel(nn.Module):
+    """Wrap an imputer (trainable) and predictor (inference-only)."""
+
+    def __init__(
+        self,
+        imputer: nn.Module,
+        predictor: nn.Module,
+        model_save_dir: Path,
+        optimizer_name: str,
+        lr: float,
+        device: str,
+        tb_summary_writer: SummaryWriter,
+        logger: logging.Logger,
+    ) -> None:
+        """Initialize the joint model and optimizer state.
+
+        Args:
+            imputer: Imputation module (trainable).
+            predictor: Prediction module (inference-only, frozen).
+            model_save_dir: Directory to save best-model checkpoints.
+            optimizer_name: Optimizer name (must be a key in
+                ``optimizer_dict``).
+            lr: Learning rate.
+            device: Torch device string.
+            tb_summary_writer: TensorBoard writer.
+            logger: Logger instance.
+        """
+        super().__init__()
+        self.imputer = imputer
+        self.predictor = predictor
+        self.tb_summary_writer = tb_summary_writer
+        self.logger = logger
+        self.device = device
+
+        model_save_dir.mkdir(parents=True, exist_ok=True)
+        self.checkpoint_path = model_save_dir / "best_model.pt"
+
+        self.global_epoch = 0
+        self.global_optim_step = 0
+        self.accum_steps = 1
+        self.micro_batch_size = 1
+
+        # Only the imputer is trained — predictor is frozen
+        self.optimizer = optimizer_dict[optimizer_name](
+            self.imputer.parameters(), lr=lr
+        )
+
+        for p in self.imputer.parameters():
+            p.requires_grad = True
+        self.imputer.train()
+
+        for p in self.predictor.parameters():
+            p.requires_grad = False
+        self.predictor.eval()
+
+    def forward(
+        self,
+        X_NA: torch.Tensor,
+        X_NA_mask: torch.Tensor,
+        X_N: torch.Tensor | None = None,
+        X_A_mask: torch.Tensor | None = None,
+        Y_N: torch.Tensor | None = None,
+        Y_N_mask: torch.Tensor | None = None,
+    ) -> dict[str, torch.Tensor | None]:
+        """Run imputation and prediction forward passes.
+
+        The predictor is called inside ``torch.no_grad()`` — no gradient
+        graph is built through it.
+
+        Args:
+            X_NA: Input with natural + artificial missing values
+                ``(B, T, D)``.
+            X_NA_mask: Binary mask (1 = missing) ``(B, T, D)``.
+            X_N: Ground-truth complete data ``(B, T, D)`` (optional —
+                needed for artificial-missing loss during training).
+            X_A_mask: Binary artificial-missing mask ``(B, T, D)``
+                (optional).
+            Y_N: Ground-truth future values ``(B, P, D)`` (optional).
+            Y_N_mask: Binary mask for future values ``(B, P, D)``
+                (optional, 1 = missing).
+
+        Returns:
+            Dictionary with keys:
+            - ``imp_data``: Imputed time series ``(B, T, D)``.
+            - ``imp_loss``: Imputation loss scalar (or ``None``).
+            - ``pred_data``: Forecast from the imputed data
+              ``(B, P, D)`` (or ``None`` if predictor returns it).
+            - ``pred_loss``: Masked MSE prediction loss (or ``None``).
+            - ``loss``: Total loss for backpropagation (same as
+              ``imp_loss``).
+        """
+        imputer_output = self.imputer(X_NA, X_NA_mask, X_N, X_A_mask)
+        imputed_X = imputer_output["imp_data"]
+        imp_loss = imputer_output["imp_loss"]
+
+        # Predictor runs in inference mode — no gradient graph built
+        with torch.no_grad():
+            predictor_output = self.predictor(imputed_X)
+            pred_data = predictor_output.get("pred_data", None)
+
+        pred_loss_val = None
+        if pred_data is not None and Y_N is not None:
+            diff = (pred_data - Y_N) ** 2
+            mask = 1.0 - Y_N_mask if Y_N_mask is not None else torch.ones_like(Y_N)
+            pred_loss_val = (diff * mask).sum() / (mask.sum() + 1e-8)
+
+        return {
+            "imp_data": imputed_X,
+            "imp_loss": imp_loss,
+            "pred_data": pred_data,
+            "pred_loss": pred_loss_val,
+            "loss": imp_loss,
+        }
+
+    # ------------------------------------------------------------------
+    # TIP helper methods
+    # ------------------------------------------------------------------
+
+    def _get_flattened_grad(self) -> torch.Tensor:
+        """Flatten all imputer .grad tensors into a single 1-D vector."""
+        grads: list[torch.Tensor] = []
+        for p in self.imputer.parameters():
+            if p.grad is not None:
+                grads.append(p.grad.detach().flatten())
+            else:
+                grads.append(torch.zeros_like(p).flatten())
+        return torch.cat(grads)
+
+    def _set_flattened_grad(self, flat_grad: torch.Tensor) -> None:
+        """Write a flat gradient vector back to imputer .grad attributes."""
+        offset = 0
+        for p in self.imputer.parameters():
+            numel = p.numel()
+            p.grad = flat_grad[offset : offset + numel].view_as(p).clone()
+            offset += numel
+
+    @torch.no_grad()
+    def _compute_Q(
+        self,
+        X_NA: torch.Tensor,
+        X_NA_mask: torch.Tensor,
+        X_N: torch.Tensor | None,
+        X_A_mask: torch.Tensor | None,
+        Y_N: torch.Tensor,
+        Y_N_mask: torch.Tensor,
+    ) -> torch.Tensor:
+        """Compute Q(θ) = prediction loss for the current imputer parameters.
+
+        Runs under ``torch.no_grad()`` — no computational graph is built.
+        Used by the zero-order estimator which temporarily perturbs
+        parameters.
+        """
+        imputer_output = self.imputer(X_NA, X_NA_mask, X_N, X_A_mask)
+        imputed_X = imputer_output["imp_data"]
+        predictor_output = self.predictor(imputed_X)
+        pred_data = predictor_output.get("pred_data", None)
+
+        if pred_data is None:
+            return torch.tensor(0.0, device=self.device)
+
+        diff = (pred_data - Y_N) ** 2
+        mask = 1.0 - Y_N_mask
+        denom = mask.sum() + 1e-8
+        return (diff * mask).sum() / denom
+
+    @torch.no_grad()
+    def _compute_gp_hat(
+        self,
+        X_NA: torch.Tensor,
+        X_NA_mask: torch.Tensor,
+        X_N: torch.Tensor | None,
+        X_A_mask: torch.Tensor | None,
+        Y_N: torch.Tensor,
+        Y_N_mask: torch.Tensor,
+        k: int,
+        epsilon: float,
+    ) -> torch.Tensor:
+        """Zero-order gradient estimation via symmetric differences.
+
+        Computes::
+
+            ĝ_P = (1/k) Σᵢ [Q(θ+ε·uᵢ) − Q(θ−ε·uᵢ)] / (2ε) · uᵢ
+            where uᵢ ~ N(0, I).
+
+        Returns ĝ_P as a flat 1-D tensor.  Always restores the original
+        imputer parameters before returning.
+        """
+        params = list(self.imputer.parameters())
+        theta_flat = torch.nn.utils.parameters_to_vector(params)
+        d = theta_flat.numel()
+        device = theta_flat.device
+        dtype = theta_flat.dtype
+
+        gp_hat = torch.zeros(d, device=device, dtype=dtype)
+
+        for _ in range(k):
+            u = torch.randn(d, device=device, dtype=dtype)
+
+            # Q(θ + ε·u)
+            torch.nn.utils.vector_to_parameters(theta_flat + epsilon * u, params)
+            Q_plus = self._compute_Q(X_NA, X_NA_mask, X_N, X_A_mask, Y_N, Y_N_mask)
+
+            # Q(θ − ε·u)
+            torch.nn.utils.vector_to_parameters(theta_flat - epsilon * u, params)
+            Q_minus = self._compute_Q(X_NA, X_NA_mask, X_N, X_A_mask, Y_N, Y_N_mask)
+
+            gp_hat += (Q_plus - Q_minus) / (2.0 * epsilon) * u
+
+        # Restore original parameters
+        torch.nn.utils.vector_to_parameters(theta_flat, params)
+
+        return gp_hat / k
+
+    @staticmethod
+    def _apply_projection(
+        g_I: torch.Tensor,
+        gp_hat: torch.Tensor,
+        conditional: bool,
+    ) -> torch.Tensor:
+        """Orthogonal projection: remove the component of *g_I* parallel to
+        *gp_hat*.
+
+        Args:
+            g_I: Imputation gradient (flat 1-D).
+            gp_hat: Zero-order prediction gradient estimate (flat 1-D).
+            conditional: If ``True``, only project when
+                ``g_Iᵀ·gp_hat < 0`` (conflict detected).  If ``False``,
+                always project.
+
+        Returns:
+            (Potentially modified) gradient vector.
+        """
+        dot = torch.dot(g_I, gp_hat)
+
+        should_project = (not conditional) or (dot < 0)
+
+        if should_project:
+            gp_norm_sq = torch.dot(gp_hat, gp_hat)
+            if gp_norm_sq > 1e-12:
+                return g_I - (dot / gp_norm_sq) * gp_hat
+
+        return g_I
+
+    # ------------------------------------------------------------------
+    # Training loop
+    # ------------------------------------------------------------------
+
+    def fit(
+        self,
+        data_loader: dict[str, DataLoader],
+        phase_name: str,
+        max_epoch: int,
+        patience: int,
+        accum_steps: int | None = None,
+        on_epoch_end: collections.abc.Callable[
+            [int, float, float, "JointModel"], None
+        ]
+        | None = None,
+        grad_modifier: collections.abc.Callable[
+            ["JointModel", dict[str, torch.Tensor]], None
+        ]
+        | None = None,
+    ) -> float:
+        """Train the imputer with gradient accumulation and early stopping.
+
+        The predictor is never trained — it runs in ``eval()`` /
+        ``no_grad()`` throughout.
+
+        Args:
+            data_loader: Dictionary with ``"train"`` and ``"val"``
+                DataLoaders.
+            phase_name: Human-readable phase name (for logging).
+            max_epoch: Maximum epochs for this phase.
+            patience: Early-stopping patience (epochs without
+                improvement).
+            accum_steps: Micro-batches to accumulate before one
+                optimizer step.  Falls back to ``self.accum_steps``,
+                then 1 (no accumulation).
+            on_epoch_end: Optional callback ``(epoch, train_loss,
+                val_loss, model)`` invoked after each validation epoch.
+            grad_modifier: Optional callback ``(model, batch_dict)``
+                invoked after gradient accumulation and before gradient
+                clipping and optimizer step.  Used by TIP to read /
+                modify imputer gradients.
+
+        Returns:
+            Best validation loss achieved in this phase.
+        """
+        if accum_steps is None:
+            accum_steps = getattr(self, "accum_steps", 1)
+
+        train_loader = data_loader["train"]
+        val_loader = data_loader["val"]
+
+        best_val_loss = float("inf")
+        self.phase_epoch = 0
+        patience_counter = 0
+
+        while self.phase_epoch < max_epoch:
+            total_loss = 0.0
+            num_batches = len(train_loader)
+            num_optim_steps = 0
+
+            self.imputer.train()
+
+            accum_loss = 0.0
+            accum_count = 0
+
+            for batch_idx, batch in enumerate(train_loader):
+                X_N, X_NA, X_NA_mask, X_A_mask, Y_N, Y_N_mask = (
+                    t.to(self.device) for t in batch
+                )
+
+                output = self.forward(
+                    X_NA,
+                    X_NA_mask,
+                    X_N,
+                    X_A_mask,
+                    Y_N,
+                    Y_N_mask,
+                )
+
+                loss = output["loss"]  # imp_loss only
+                # Normalise by accumulation steps so that the effective
+                # gradient corresponds to the full target batch size.
+                scaled_loss = loss / accum_steps
+                scaled_loss.backward()
+
+                accum_loss += loss.item()
+                accum_count += 1
+
+                is_last_batch = (batch_idx + 1) == num_batches
+                if accum_count >= accum_steps or is_last_batch:
+                    # TIP grad_modifier hook — read / modify gradients
+                    # after gradient accumulation and before clip + step.
+                    if grad_modifier is not None:
+                        grad_modifier(
+                            self,
+                            {
+                                "X_N": X_N,
+                                "X_NA": X_NA,
+                                "X_NA_mask": X_NA_mask,
+                                "X_A_mask": X_A_mask,
+                                "Y_N": Y_N,
+                                "Y_N_mask": Y_N_mask,
+                            },
+                        )
+
+                    torch.nn.utils.clip_grad_norm_(
+                        self.imputer.parameters(),
+                        max_norm=10.0,
+                    )
+
+                    self.optimizer.step()
+                    self.optimizer.zero_grad()
+
+                    self.global_optim_step += 1
+                    total_loss += accum_loss / accum_count
+                    num_optim_steps += 1
+
+                    accum_loss = 0.0
+                    accum_count = 0
+
+            avg_train_loss = total_loss / max(1, num_optim_steps)
+            self.tb_summary_writer.add_scalar(
+                "loss/train",
+                avg_train_loss,
+                self.global_epoch + 1,
+            )
+
+            val_loss = self._validate_epoch(val_loader)
+            self.tb_summary_writer.add_scalar(
+                "loss/val",
+                val_loss,
+                self.global_epoch + 1,
+            )
+
+            log_msg = (
+                f"Epoch {self.phase_epoch + 1:03d}/{max_epoch} | "
+                f"train loss: {avg_train_loss:.6f} | val loss: {val_loss:.6f}"
+            )
+
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                self._save_checkpoint()
+                patience_counter = 0
+                log_msg += " | *Best Model Saved*"
+            else:
+                patience_counter += 1
+
+            self.logger.info(log_msg)
+
+            if on_epoch_end is not None:
+                on_epoch_end(
+                    self.global_epoch + 1,
+                    avg_train_loss,
+                    val_loss,
+                    self,
+                )
+
+            if patience_counter >= patience:
+                self.logger.info(
+                    f"No improvement for {patience} epochs. "
+                    f"Early stopping at epoch {self.phase_epoch + 1} "
+                    f"in phase '{phase_name}'."
+                )
+                break
+
+            self.phase_epoch += 1
+            self.global_epoch += 1
+
+        self.logger.info(
+            f"Finished Phase: {phase_name}. Best Val Loss: {best_val_loss:.6f}"
+        )
+
+        self.load_state_dict(
+            torch.load(
+                self.checkpoint_path,
+                map_location=self.device,
+            )
+        )
+
+        return best_val_loss
+
+    def _validate_epoch(self, val_loader: DataLoader) -> float:
+        """Evaluate one validation epoch and return averaged imputation loss.
+
+        Args:
+            val_loader: Validation DataLoader.
+
+        Returns:
+            Mean validation loss.
+        """
+        self.imputer.eval()
+        total_loss = 0.0
+        num_batches = len(val_loader)
+
+        with torch.no_grad():
+            for batch in val_loader:
+                X_N, X_NA, X_NA_mask, X_A_mask, _Y_N, _Y_N_mask = (
+                    t.to(self.device) for t in batch
+                )
+                output = self.forward(
+                    X_NA,
+                    X_NA_mask,
+                    X_N,
+                    X_A_mask,
+                )
+
+                total_loss += output["loss"].item()
+
+        return total_loss / max(1, num_batches)
+
+    def fit_tip(
+        self,
+        data_loader: dict[str, DataLoader],
+        phase_name: str,
+        max_epoch: int,
+        patience: int,
+        variant: str = "B2",
+        k: int = 20,
+        epsilon: float = 1e-4,
+        accum_steps: int | None = None,
+        on_epoch_end: collections.abc.Callable[
+            [int, float, float, "JointModel"], None
+        ]
+        | None = None,
+    ) -> float:
+        """TIP training via a gradient-modifier callback.
+
+        Delegates to :meth:`fit` with a closure that implements:
+        - ``"B2"``: zero-order ĝ_P estimation + conditional projection.
+        - ``"B4"``: random direction replaces ĝ_P + conditional projection.
+        - ``"B5"``: zero-order ĝ_P estimation + unconditional (always)
+          projection.
+
+        Args:
+            data_loader: Dictionary with ``"train"`` and ``"val"``
+                DataLoaders.
+            phase_name: Human-readable phase name (for logging).
+            max_epoch: Maximum epochs for this phase.
+            patience: Early-stopping patience.
+            variant: One of ``"B2"``, ``"B4"``, ``"B5"``.
+            k: Number of random samples for zero-order estimation
+                (ignored by B4).
+            epsilon: Perturbation step size (ignored by B4).
+            accum_steps: Micro-batches per optimizer step.
+            on_epoch_end: Optional per-epoch callback.
+
+        Returns:
+            Best validation loss achieved.
+        """
+
+        def _tip_modifier(
+            model: "JointModel", batch_data: dict[str, torch.Tensor]
+        ) -> None:
+            g_I = model._get_flattened_grad()
+
+            if variant == "B4":
+                # Random direction — replaces gp_hat entirely
+                gp_hat = torch.randn_like(g_I)
+            else:
+                # B2 / B5: zero-order gradient estimation
+                gp_hat = model._compute_gp_hat(
+                    batch_data["X_NA"],
+                    batch_data["X_NA_mask"],
+                    batch_data["X_N"],
+                    batch_data["X_A_mask"],
+                    batch_data["Y_N"],
+                    batch_data["Y_N_mask"],
+                    k=k,
+                    epsilon=epsilon,
+                )
+
+            conditional = variant != "B5"
+            g_I = model._apply_projection(g_I, gp_hat, conditional=conditional)
+            model._set_flattened_grad(g_I)
+
+        return self.fit(
+            data_loader,
+            phase_name,
+            max_epoch,
+            patience,
+            accum_steps=accum_steps,
+            on_epoch_end=on_epoch_end,
+            grad_modifier=_tip_modifier,
+        )
+
+    def _save_checkpoint(self) -> None:
+        """Save the current joint model state to disk.
+
+        Only imputer parameters are saved (predictor is frozen and loaded
+        separately).
+        """
+        torch.save(self.state_dict(), self.checkpoint_path)
+
+    def delete_checkpoint(self) -> None:
+        """Delete the saved checkpoint if it exists."""
+        try:
+            self.checkpoint_path.unlink()
+            self.logger.info(f"Deleted checkpoint: {self.checkpoint_path}")
+        except FileNotFoundError:
+            self.logger.info(f"Checkpoint already removed: {self.checkpoint_path}")

@@ -1,0 +1,151 @@
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - ======================================================================
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Exp name: B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - ======================================================================
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [experiment] exp_name = B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [experiment] exp_type = B1
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [experiment] random_seed = 42
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [dataset] dataset = CPHL_30T
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [dataset] missing_rate = 0.2
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [dataset] artificial_missing_rate = 0.2
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [dataset] lookback_len = 512
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [imputator] model_type = SAITS
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [predictor] model_type = Sundial
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [training] tip_k = 20
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [training] tip_epsilon = 1e-4
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Loading template config for SAITS from configs/template/imputator/SAITS.ini
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Loading template config for Sundial from configs/template/predictor/Sundial.ini
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Loading template config for dataset 'CPHL_30T' from configs/template/dataset/CPHL_30T.ini
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - ============================== System Info ==============================
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Python version: 3.10.20
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - PyTorch version: 2.12.0+cu130
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - CUDA available: True
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - CUDA device: NVIDIA GeForce RTX 3070 Laptop GPU
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - ===========================================================================
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - ============================== Configuration ==============================
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - [experiment]
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   exp_name = B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   exp_type = B1
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   random_seed = 42
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - [paths]
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   preprocessed_data_dir = ./cache/preprocessed_datasets
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   ckpt_save_dir = ./cache/checkpoints
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   log_save_dir = ./logs
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - [dataset]
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   dataset = CPHL_30T
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   missing_rate = 0.2
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   artificial_missing_rate = 0.2
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   block_size = 20
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   lookback_len = 512
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   val_ratio = 0.1
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   test_ratio = 0.2
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   source = huggingface
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   repo_name = Real-TSF/TIME
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   dataset_name = CPHL
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   frequency = 30T
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   item_id = TAN100
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   column_index = 0
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   pred_len = 12
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - [training]
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   max_epoch = 10000
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   warmup_epoch = 3
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   patience = 5
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   device = cuda
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   batch_size = 128
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   auto_batch_size = true
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   micro_batch_size = 0
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   optimizer = AdamW
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   lr = 1e-4
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   tip_k = 20
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   tip_epsilon = 1e-4
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   tip_pretrain_epochs = 2
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - [imputator]
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   model_type = SAITS
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   n_groups = 2
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   n_group_inner_layers = 1
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   d_model = 256
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   d_inner = 128
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   n_head = 4
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   d_k = 64
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   d_v = 64
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   dropout = 0.1
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   param_sharing_strategy = inner_group
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   diagonal_attention_mask = True
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - [predictor]
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   model_type = Sundial
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   num_samples = 100
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   sample_aggregation = mean
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   train_method = forward
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - ===========================================================================
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Random seed set to 42
+2026-06-23 03:57:48 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Generated preprocess UID: 187ac729df0e1a51
+2026-06-23 03:57:49 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Found natural missing values in the dataset. Missing rate: 0.1420
+2026-06-23 03:57:49 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Preprocessed data saved to cache/preprocessed_datasets/187ac729df0e1a51
+2026-06-23 03:57:59 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   batch_size=  1 → 4.36s  (0.23 samples/s)
+2026-06-23 03:57:59 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Ternary search over 2^[1, 7] = [2, 128]
+2026-06-23 03:58:07 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   batch_size=  8 → 4.89s  (1.63 samples/s)
+2026-06-23 03:58:17 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   batch_size= 32 → 6.26s  (5.12 samples/s)
+2026-06-23 03:58:20 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   batch_size= 16 → killed (>3.1s, best_tp=5.12)
+2026-06-23 03:58:30 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   batch_size= 64 → 7.54s  (8.49 samples/s)
+2026-06-23 03:58:46 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   batch_size=128 → killed (>15.1s, best_tp=8.49)
+2026-06-23 03:58:46 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Auto batch size: 64 (throughput: 8.49 samples/s, target was 128)
+2026-06-23 03:58:46 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Effective batch_size: 128 | Micro batch_size: 64 | Gradient accumulation steps: 2
+2026-06-23 03:58:46 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - 
+2026-06-23 03:58:46 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - ============================================================
+2026-06-23 03:58:46 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -   Phase: B1 — Standard Imputer Training (10000 max epochs)
+2026-06-23 03:58:46 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - ============================================================
+2026-06-23 04:03:35 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 001/10000 | train loss: 0.902327 | val loss: 0.284698 | *Best Model Saved*
+2026-06-23 04:08:25 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 002/10000 | train loss: 0.645756 | val loss: 0.220442 | *Best Model Saved*
+2026-06-23 04:13:13 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 003/10000 | train loss: 0.578884 | val loss: 0.190264 | *Best Model Saved*
+2026-06-23 04:18:03 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 004/10000 | train loss: 0.546313 | val loss: 0.175401 | *Best Model Saved*
+2026-06-23 04:22:52 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 005/10000 | train loss: 0.524025 | val loss: 0.154238 | *Best Model Saved*
+2026-06-23 04:27:42 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 006/10000 | train loss: 0.505724 | val loss: 0.143798 | *Best Model Saved*
+2026-06-23 04:32:30 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 007/10000 | train loss: 0.491318 | val loss: 0.131392 | *Best Model Saved*
+2026-06-23 04:37:20 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 008/10000 | train loss: 0.479883 | val loss: 0.124774 | *Best Model Saved*
+2026-06-23 04:42:09 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 009/10000 | train loss: 0.470250 | val loss: 0.120594 | *Best Model Saved*
+2026-06-23 04:46:58 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 010/10000 | train loss: 0.464649 | val loss: 0.117022 | *Best Model Saved*
+2026-06-23 04:51:47 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 011/10000 | train loss: 0.458543 | val loss: 0.113524 | *Best Model Saved*
+2026-06-23 04:56:39 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 012/10000 | train loss: 0.454626 | val loss: 0.111477 | *Best Model Saved*
+2026-06-23 05:01:31 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 013/10000 | train loss: 0.451146 | val loss: 0.109883 | *Best Model Saved*
+2026-06-23 05:06:20 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 014/10000 | train loss: 0.446340 | val loss: 0.110376
+2026-06-23 05:11:11 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 015/10000 | train loss: 0.443554 | val loss: 0.110639
+2026-06-23 05:15:59 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 016/10000 | train loss: 0.441163 | val loss: 0.107752 | *Best Model Saved*
+2026-06-23 05:20:51 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 017/10000 | train loss: 0.437036 | val loss: 0.107019 | *Best Model Saved*
+2026-06-23 05:25:40 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 018/10000 | train loss: 0.435514 | val loss: 0.107894
+2026-06-23 05:30:31 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 019/10000 | train loss: 0.432354 | val loss: 0.104230 | *Best Model Saved*
+2026-06-23 05:35:22 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 020/10000 | train loss: 0.429973 | val loss: 0.105564
+2026-06-23 05:40:11 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 021/10000 | train loss: 0.427618 | val loss: 0.105501
+2026-06-23 05:45:02 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 022/10000 | train loss: 0.426176 | val loss: 0.103937 | *Best Model Saved*
+2026-06-23 05:49:52 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 023/10000 | train loss: 0.423839 | val loss: 0.104649
+2026-06-23 05:54:44 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 024/10000 | train loss: 0.421580 | val loss: 0.101455 | *Best Model Saved*
+2026-06-23 05:59:33 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 025/10000 | train loss: 0.420234 | val loss: 0.112657
+2026-06-23 06:04:25 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 026/10000 | train loss: 0.419298 | val loss: 0.101314 | *Best Model Saved*
+2026-06-23 06:09:15 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 027/10000 | train loss: 0.415576 | val loss: 0.101104 | *Best Model Saved*
+2026-06-23 06:14:06 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 028/10000 | train loss: 0.414202 | val loss: 0.102894
+2026-06-23 06:18:56 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 029/10000 | train loss: 0.412966 | val loss: 0.100005 | *Best Model Saved*
+2026-06-23 06:23:46 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 030/10000 | train loss: 0.411719 | val loss: 0.102261
+2026-06-23 06:28:38 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 031/10000 | train loss: 0.410822 | val loss: 0.099219 | *Best Model Saved*
+2026-06-23 06:33:28 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 032/10000 | train loss: 0.408276 | val loss: 0.104690
+2026-06-23 06:38:20 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 033/10000 | train loss: 0.408287 | val loss: 0.102474
+2026-06-23 06:43:12 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 034/10000 | train loss: 0.405390 | val loss: 0.098166 | *Best Model Saved*
+2026-06-23 06:48:06 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 035/10000 | train loss: 0.403568 | val loss: 0.099742
+2026-06-23 06:53:00 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 036/10000 | train loss: 0.402886 | val loss: 0.099213
+2026-06-23 06:57:52 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 037/10000 | train loss: 0.401488 | val loss: 0.099680
+2026-06-23 07:02:47 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 038/10000 | train loss: 0.400862 | val loss: 0.103435
+2026-06-23 07:07:41 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 039/10000 | train loss: 0.400492 | val loss: 0.101932
+2026-06-23 07:07:41 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - No improvement for 5 epochs. Early stopping at epoch 39 in phase 'b1'.
+2026-06-23 07:07:41 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Finished Phase: b1. Best Val Loss: 0.098166
+2026-06-23 07:07:41 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Training completed.
+2026-06-23 07:07:41 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Starting evaluation...
+2026-06-23 07:07:41 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - No ground truth for natural missing positions. Skipping imputation evaluation.
+2026-06-23 07:08:50 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - --------------------------------------------------
+2026-06-23 07:08:50 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Evaluation Results Summary:
+2026-06-23 07:08:50 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO -            Prediction          
+2026-06-23 07:08:50 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - --------------------------------------------------
+2026-06-23 07:08:50 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - MAE        N/A                  0.772475            
+2026-06-23 07:08:50 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - MSE        N/A                  1.148063            
+2026-06-23 07:08:50 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - MRE        N/A                  0.748085            
+2026-06-23 07:08:50 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - RMSE       N/A                  0.993835            
+2026-06-23 07:08:50 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - --------------------------------------------------
+2026-06-23 07:08:50 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Evaluation completed.
+2026-06-23 07:08:50 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Deleted checkpoint: cache/checkpoints/B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42/best_model.pt
+2026-06-23 07:08:50 - B1_CPHL_30T_SAITS_Sundial_mr0.2_L512_s42 - INFO - Experiment completed successfully!

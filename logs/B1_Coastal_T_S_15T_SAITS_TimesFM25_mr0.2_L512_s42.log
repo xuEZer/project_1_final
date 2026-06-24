@@ -1,0 +1,134 @@
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - ======================================================================
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Exp name: B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - ======================================================================
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Overriding config: [experiment] exp_name = B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Overriding config: [experiment] exp_type = B1
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Overriding config: [experiment] random_seed = 42
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Overriding config: [dataset] dataset = Coastal_T_S_15T
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Overriding config: [dataset] missing_rate = 0.2
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Overriding config: [dataset] artificial_missing_rate = 0.2
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Overriding config: [dataset] lookback_len = 512
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Overriding config: [imputator] model_type = SAITS
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Overriding config: [predictor] model_type = TimesFM25
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Overriding config: [training] tip_k = 20
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Overriding config: [training] tip_epsilon = 1e-4
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Loading template config for SAITS from configs/template/imputator/SAITS.ini
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Loading template config for TimesFM25 from configs/template/predictor/TimesFM25.ini
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Loading template config for dataset 'Coastal_T_S_15T' from configs/template/dataset/Coastal_T_S_15T.ini
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - ============================== System Info ==============================
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Python version: 3.12.0
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - PyTorch version: 2.12.0+cu130
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - CUDA available: True
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - CUDA device: NVIDIA GeForce RTX 3070 Laptop GPU
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - ===========================================================================
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - ============================== Configuration ==============================
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - [experiment]
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   exp_name = B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   exp_type = B1
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   random_seed = 42
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - [paths]
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   preprocessed_data_dir = ./cache/preprocessed_datasets
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   ckpt_save_dir = ./cache/checkpoints
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   log_save_dir = ./logs
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - [dataset]
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   dataset = Coastal_T_S_15T
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   missing_rate = 0.2
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   artificial_missing_rate = 0.2
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   block_size = 20
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   lookback_len = 512
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   val_ratio = 0.1
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   test_ratio = 0.2
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   source = huggingface
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   repo_name = Real-TSF/TIME
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   dataset_name = Coastal_T_S
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   frequency = 15T
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   item_id = NRSMAI
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   column_index = 0
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   pred_len = 12
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - [training]
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   max_epoch = 10000
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   warmup_epoch = 3
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   patience = 5
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   device = cuda
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   batch_size = 128
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   auto_batch_size = true
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   micro_batch_size = 0
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   optimizer = AdamW
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   lr = 1e-4
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   tip_k = 20
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   tip_epsilon = 1e-4
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   tip_pretrain_epochs = 2
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - [imputator]
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   model_type = SAITS
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   n_groups = 2
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   n_group_inner_layers = 1
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   d_model = 256
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   d_inner = 128
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   n_head = 4
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   d_k = 64
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   d_v = 64
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   dropout = 0.1
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   param_sharing_strategy = inner_group
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   diagonal_attention_mask = True
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - [predictor]
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   model_type = TimesFM25
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   model_name = google/timesfm-2.5-200m-pytorch
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   max_context = 1024
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   normalize_inputs = true
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   use_continuous_quantile_head = true
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   force_flip_invariance = true
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   infer_is_positive = true
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   fix_quantile_crossing = true
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - ===========================================================================
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Random seed set to 42
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Generated preprocess UID: 60903fde891c0cc6
+2026-06-21 12:01:05 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Data already preprocessed. Loading from cache/preprocessed_datasets/60903fde891c0cc6
+2026-06-21 12:01:22 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   batch_size=  1 → 6.44s  (0.16 samples/s)
+2026-06-21 12:01:22 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Ternary search over 2^[1, 7] = [2, 128]
+2026-06-21 12:01:32 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   batch_size=  8 → 6.10s  (1.31 samples/s)
+2026-06-21 12:01:42 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   batch_size= 32 → 6.63s  (4.82 samples/s)
+2026-06-21 12:01:48 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   batch_size= 16 → killed (>3.3s, best_tp=4.82)
+2026-06-21 12:01:58 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   batch_size= 64 → 6.98s  (9.17 samples/s)
+2026-06-21 12:02:12 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   batch_size=128 → killed (>14.0s, best_tp=9.17)
+2026-06-21 12:02:12 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Auto batch size: 64 (throughput: 9.17 samples/s, target was 128)
+2026-06-21 12:02:12 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Effective batch_size: 128 | Micro batch_size: 64 | Gradient accumulation steps: 2
+2026-06-21 12:02:12 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - 
+2026-06-21 12:02:12 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - ============================================================
+2026-06-21 12:02:12 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   Phase: B1 — Standard Imputer Training (10000 max epochs)
+2026-06-21 12:02:12 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - ============================================================
+2026-06-21 12:05:54 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 001/10000 | train loss: 0.622533 | val loss: 0.443604 | *Best Model Saved*
+2026-06-21 12:09:33 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 002/10000 | train loss: 0.373007 | val loss: 0.336690 | *Best Model Saved*
+2026-06-21 12:13:12 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 003/10000 | train loss: 0.316555 | val loss: 0.314895 | *Best Model Saved*
+2026-06-21 12:16:54 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 004/10000 | train loss: 0.297090 | val loss: 0.301395 | *Best Model Saved*
+2026-06-21 12:20:33 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 005/10000 | train loss: 0.285973 | val loss: 0.295456 | *Best Model Saved*
+2026-06-21 12:24:15 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 006/10000 | train loss: 0.278774 | val loss: 0.290384 | *Best Model Saved*
+2026-06-21 12:27:54 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 007/10000 | train loss: 0.270908 | val loss: 0.284723 | *Best Model Saved*
+2026-06-21 12:31:34 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 008/10000 | train loss: 0.263797 | val loss: 0.291118
+2026-06-21 12:35:15 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 009/10000 | train loss: 0.259430 | val loss: 0.280292 | *Best Model Saved*
+2026-06-21 12:38:54 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 010/10000 | train loss: 0.253976 | val loss: 0.276928 | *Best Model Saved*
+2026-06-21 12:42:36 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 011/10000 | train loss: 0.250350 | val loss: 0.278311
+2026-06-21 12:46:15 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 012/10000 | train loss: 0.246806 | val loss: 0.272064 | *Best Model Saved*
+2026-06-21 12:49:54 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 013/10000 | train loss: 0.242466 | val loss: 0.271149 | *Best Model Saved*
+2026-06-21 12:53:36 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 014/10000 | train loss: 0.239564 | val loss: 0.273428
+2026-06-21 12:57:15 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 015/10000 | train loss: 0.236469 | val loss: 0.268195 | *Best Model Saved*
+2026-06-21 13:00:54 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 016/10000 | train loss: 0.233605 | val loss: 0.271762
+2026-06-21 13:04:36 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 017/10000 | train loss: 0.230677 | val loss: 0.270890
+2026-06-21 13:08:14 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 018/10000 | train loss: 0.228005 | val loss: 0.276968
+2026-06-21 13:11:55 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 019/10000 | train loss: 0.225446 | val loss: 0.271413
+2026-06-21 13:15:34 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 020/10000 | train loss: 0.224158 | val loss: 0.269335
+2026-06-21 13:15:34 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - No improvement for 5 epochs. Early stopping at epoch 20 in phase 'b1'.
+2026-06-21 13:15:34 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Finished Phase: b1. Best Val Loss: 0.268195
+2026-06-21 13:15:34 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Training completed.
+2026-06-21 13:15:34 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Starting evaluation...
+2026-06-21 13:16:23 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - --------------------------------------------------
+2026-06-21 13:16:23 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Evaluation Results Summary:
+2026-06-21 13:16:23 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -            Imputation           Prediction          
+2026-06-21 13:16:23 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - --------------------------------------------------
+2026-06-21 13:16:23 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - MAE        2.563332             2.632207            
+2026-06-21 13:16:23 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - MSE        10.294305            9.635982            
+2026-06-21 13:16:23 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - MRE        0.821096             0.824245            
+2026-06-21 13:16:23 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - RMSE       3.071775             3.029671            
+2026-06-21 13:16:23 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - --------------------------------------------------
+2026-06-21 13:16:23 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Evaluation completed.
+2026-06-21 13:16:23 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Deleted checkpoint: cache/checkpoints/B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42/best_model.pt
+2026-06-21 13:16:23 - B1_Coastal_T_S_15T_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Experiment completed successfully!

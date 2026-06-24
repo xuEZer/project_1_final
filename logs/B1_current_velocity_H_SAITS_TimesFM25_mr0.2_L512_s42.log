@@ -1,0 +1,145 @@
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - ======================================================================
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Exp name: B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - ======================================================================
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Overriding config: [experiment] exp_name = B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Overriding config: [experiment] exp_type = B1
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Overriding config: [experiment] random_seed = 42
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Overriding config: [dataset] dataset = current_velocity_H
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Overriding config: [dataset] missing_rate = 0.2
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Overriding config: [dataset] artificial_missing_rate = 0.2
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Overriding config: [dataset] lookback_len = 512
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Overriding config: [imputator] model_type = SAITS
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Overriding config: [predictor] model_type = TimesFM25
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Overriding config: [training] tip_k = 20
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Overriding config: [training] tip_epsilon = 1e-4
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Loading template config for SAITS from configs/template/imputator/SAITS.ini
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Loading template config for TimesFM25 from configs/template/predictor/TimesFM25.ini
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Loading template config for dataset 'current_velocity_H' from configs/template/dataset/current_velocity_H.ini
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - ============================== System Info ==============================
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Python version: 3.12.0
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - PyTorch version: 2.12.0+cu130
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - CUDA available: True
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - CUDA device: NVIDIA GeForce RTX 3070 Laptop GPU
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - ===========================================================================
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - ============================== Configuration ==============================
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - [experiment]
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   exp_name = B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   exp_type = B1
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   random_seed = 42
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - [paths]
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   preprocessed_data_dir = ./cache/preprocessed_datasets
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   ckpt_save_dir = ./cache/checkpoints
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   log_save_dir = ./logs
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - [dataset]
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   dataset = current_velocity_H
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   missing_rate = 0.2
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   artificial_missing_rate = 0.2
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   block_size = 20
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   lookback_len = 512
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   val_ratio = 0.1
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   test_ratio = 0.2
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   source = huggingface
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   repo_name = Real-TSF/TIME
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   dataset_name = current_velocity
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   frequency = H
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   item_id = NRS_NRSDAR_Sentinel-or-Monitor-Workhorse-ADCP-17.5_221106To230525
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   column_index = 0
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   pred_len = 24
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - [training]
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   max_epoch = 10000
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   warmup_epoch = 3
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   patience = 5
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   device = cuda
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   batch_size = 128
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   auto_batch_size = true
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   micro_batch_size = 0
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   optimizer = AdamW
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   lr = 1e-4
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   tip_k = 20
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   tip_epsilon = 1e-4
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   tip_pretrain_epochs = 2
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - [imputator]
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   model_type = SAITS
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   n_groups = 2
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   n_group_inner_layers = 1
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   d_model = 256
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   d_inner = 128
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   n_head = 4
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   d_k = 64
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   d_v = 64
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   dropout = 0.1
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   param_sharing_strategy = inner_group
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   diagonal_attention_mask = True
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - [predictor]
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   model_type = TimesFM25
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   model_name = google/timesfm-2.5-200m-pytorch
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   max_context = 1024
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   normalize_inputs = true
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   use_continuous_quantile_head = true
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   force_flip_invariance = true
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   infer_is_positive = true
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   fix_quantile_crossing = true
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - ===========================================================================
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Random seed set to 42
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Generated preprocess UID: 5f0ca80d9d36e1a8
+2026-06-19 21:19:35 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Data already preprocessed. Loading from cache/preprocessed_datasets/5f0ca80d9d36e1a8
+2026-06-19 21:19:52 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   batch_size=  1 → 7.59s  (0.13 samples/s)
+2026-06-19 21:19:52 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Ternary search over 2^[1, 7] = [2, 128]
+2026-06-19 21:20:03 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   batch_size=  8 → 7.79s  (1.03 samples/s)
+2026-06-19 21:20:14 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   batch_size= 32 → 7.33s  (4.37 samples/s)
+2026-06-19 21:20:18 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   batch_size= 16 → killed (>3.7s, best_tp=4.37)
+2026-06-19 21:20:29 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   batch_size= 64 → 7.79s  (8.22 samples/s)
+2026-06-19 21:20:45 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   batch_size=128 → killed (>15.6s, best_tp=8.22)
+2026-06-19 21:20:45 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Auto batch size: 64 (throughput: 8.22 samples/s, target was 128)
+2026-06-19 21:20:45 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Effective batch_size: 128 | Micro batch_size: 64 | Gradient accumulation steps: 2
+2026-06-19 21:20:45 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - 
+2026-06-19 21:20:45 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - ============================================================
+2026-06-19 21:20:45 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -   Phase: B1 — Standard Imputer Training (10000 max epochs)
+2026-06-19 21:20:45 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - ============================================================
+2026-06-19 21:21:21 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 001/10000 | train loss: 1.500472 | val loss: 1.213449 | *Best Model Saved*
+2026-06-19 21:21:57 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 002/10000 | train loss: 1.177942 | val loss: 1.119264 | *Best Model Saved*
+2026-06-19 21:22:33 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 003/10000 | train loss: 1.118678 | val loss: 1.094583 | *Best Model Saved*
+2026-06-19 21:23:09 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 004/10000 | train loss: 1.083847 | val loss: 1.051893 | *Best Model Saved*
+2026-06-19 21:23:45 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 005/10000 | train loss: 1.056924 | val loss: 1.035169 | *Best Model Saved*
+2026-06-19 21:24:20 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 006/10000 | train loss: 1.036722 | val loss: 1.020972 | *Best Model Saved*
+2026-06-19 21:24:56 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 007/10000 | train loss: 1.022450 | val loss: 1.011644 | *Best Model Saved*
+2026-06-19 21:25:32 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 008/10000 | train loss: 1.011471 | val loss: 0.999671 | *Best Model Saved*
+2026-06-19 21:26:08 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 009/10000 | train loss: 1.003502 | val loss: 0.993764 | *Best Model Saved*
+2026-06-19 21:26:44 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 010/10000 | train loss: 0.997170 | val loss: 0.994901
+2026-06-19 21:27:19 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 011/10000 | train loss: 0.994146 | val loss: 0.989511 | *Best Model Saved*
+2026-06-19 21:27:55 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 012/10000 | train loss: 0.992565 | val loss: 0.991617
+2026-06-19 21:28:31 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 013/10000 | train loss: 0.988033 | val loss: 0.985949 | *Best Model Saved*
+2026-06-19 21:29:07 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 014/10000 | train loss: 0.987613 | val loss: 0.983912 | *Best Model Saved*
+2026-06-19 21:29:43 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 015/10000 | train loss: 0.985541 | val loss: 0.983566 | *Best Model Saved*
+2026-06-19 21:30:19 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 016/10000 | train loss: 0.984919 | val loss: 0.983435 | *Best Model Saved*
+2026-06-19 21:30:55 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 017/10000 | train loss: 0.982742 | val loss: 0.981730 | *Best Model Saved*
+2026-06-19 21:31:30 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 018/10000 | train loss: 0.981115 | val loss: 0.981491 | *Best Model Saved*
+2026-06-19 21:32:06 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 019/10000 | train loss: 0.980351 | val loss: 0.979934 | *Best Model Saved*
+2026-06-19 21:32:42 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 020/10000 | train loss: 0.978835 | val loss: 0.979755 | *Best Model Saved*
+2026-06-19 21:33:18 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 021/10000 | train loss: 0.978298 | val loss: 0.980517
+2026-06-19 21:33:54 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 022/10000 | train loss: 0.977343 | val loss: 0.979510 | *Best Model Saved*
+2026-06-19 21:34:29 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 023/10000 | train loss: 0.977001 | val loss: 0.980841
+2026-06-19 21:35:05 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 024/10000 | train loss: 0.975145 | val loss: 0.979095 | *Best Model Saved*
+2026-06-19 21:35:41 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 025/10000 | train loss: 0.973930 | val loss: 0.982637
+2026-06-19 21:36:17 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 026/10000 | train loss: 0.975197 | val loss: 0.978675 | *Best Model Saved*
+2026-06-19 21:36:53 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 027/10000 | train loss: 0.971265 | val loss: 0.981741
+2026-06-19 21:37:28 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 028/10000 | train loss: 0.972174 | val loss: 0.981500
+2026-06-19 21:38:04 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 029/10000 | train loss: 0.972405 | val loss: 0.991520
+2026-06-19 21:38:40 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 030/10000 | train loss: 0.969857 | val loss: 0.980190
+2026-06-19 21:39:15 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Epoch 031/10000 | train loss: 0.969963 | val loss: 0.982645
+2026-06-19 21:39:15 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - No improvement for 5 epochs. Early stopping at epoch 31 in phase 'b1'.
+2026-06-19 21:39:15 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Finished Phase: b1. Best Val Loss: 0.978675
+2026-06-19 21:39:15 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Training completed.
+2026-06-19 21:39:15 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Starting evaluation...
+2026-06-19 21:39:24 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - --------------------------------------------------
+2026-06-19 21:39:24 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Evaluation Results Summary:
+2026-06-19 21:39:24 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO -            Imputation           Prediction          
+2026-06-19 21:39:24 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - --------------------------------------------------
+2026-06-19 21:39:24 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - MAE        0.865695             0.477064            
+2026-06-19 21:39:24 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - MSE        1.008350             0.392866            
+2026-06-19 21:39:24 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - MRE        1.005425             0.560267            
+2026-06-19 21:39:24 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - RMSE       1.002742             0.586711            
+2026-06-19 21:39:24 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - --------------------------------------------------
+2026-06-19 21:39:24 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Evaluation completed.
+2026-06-19 21:39:24 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Deleted checkpoint: cache/checkpoints/B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42/best_model.pt
+2026-06-19 21:39:24 - B1_current_velocity_H_SAITS_TimesFM25_mr0.2_L512_s42 - INFO - Experiment completed successfully!

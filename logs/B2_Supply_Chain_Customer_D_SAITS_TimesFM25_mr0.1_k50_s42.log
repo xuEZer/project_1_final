@@ -1,0 +1,103 @@
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - ======================================================================
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - Exp name: B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - ======================================================================
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - Overriding config: [experiment] exp_name = B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - Overriding config: [experiment] exp_type = B2
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - Overriding config: [experiment] random_seed = 42
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - Overriding config: [dataset] dataset = Supply_Chain_Customer_D
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - Overriding config: [dataset] missing_rate = 0.1
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - Overriding config: [dataset] artificial_missing_rate = 0.1
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - Overriding config: [imputator] model_type = SAITS
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - Overriding config: [predictor] model_type = TimesFM25
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - Overriding config: [training] tip_k = 50
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - Loading template config for SAITS from configs/template/imputator/SAITS.ini
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - Loading template config for TimesFM25 from configs/template/predictor/TimesFM25.ini
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - Loading template config for dataset 'Supply_Chain_Customer_D' from configs/template/dataset/Supply_Chain_Customer_D.ini
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - ============================== System Info ==============================
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - Python version: 3.12.0
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - PyTorch version: 2.12.0+cu130
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - CUDA available: True
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - CUDA device: NVIDIA GeForce RTX 3070 Laptop GPU
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - ===========================================================================
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - ============================== Configuration ==============================
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - [experiment]
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   exp_name = B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   exp_type = B2
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   random_seed = 42
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - [paths]
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   preprocessed_data_dir = ./cache/preprocessed_datasets
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   ckpt_save_dir = ./cache/checkpoints
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   log_save_dir = ./logs
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - [dataset]
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   dataset = Supply_Chain_Customer_D
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   missing_rate = 0.1
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   artificial_missing_rate = 0.1
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   block_size = 20
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   lookback_len = 512
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   val_ratio = 0.1
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   test_ratio = 0.2
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   source = huggingface
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   repo_name = Real-TSF/TIME
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   dataset_name = Supply_Chain_Customer
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   frequency = D
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   item_id = item0
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   column_index = 0
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   pred_len = 30
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - [training]
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   max_epoch = 10000
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   warmup_epoch = 3
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   patience = 5
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   device = cuda
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   batch_size = 128
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   auto_batch_size = true
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   micro_batch_size = 0
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   optimizer = AdamW
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   lr = 1e-4
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   tip_k = 50
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   tip_epsilon = 1e-4
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   tip_pretrain_epochs = 2
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - [imputator]
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   model_type = SAITS
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   n_groups = 2
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   n_group_inner_layers = 1
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   d_model = 256
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   d_inner = 128
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   n_head = 4
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   d_k = 64
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   d_v = 64
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   dropout = 0.1
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   param_sharing_strategy = inner_group
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   diagonal_attention_mask = True
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - [predictor]
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   model_type = TimesFM25
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   model_name = google/timesfm-2.5-200m-pytorch
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   max_context = 1024
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   normalize_inputs = true
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   use_continuous_quantile_head = true
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   force_flip_invariance = true
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   infer_is_positive = true
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   fix_quantile_crossing = true
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - ===========================================================================
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - Random seed set to 42
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - Generated preprocess UID: e524f7e1d589404f
+2026-06-18 11:24:43 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - Data already preprocessed. Loading from cache/preprocessed_datasets/e524f7e1d589404f
+2026-06-18 11:25:01 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   batch_size=  1 → 7.53s  (0.13 samples/s)
+2026-06-18 11:25:01 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - Ternary search over 2^[1, 7] = [2, 128]
+2026-06-18 11:25:15 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   batch_size=  8 → 7.08s  (1.13 samples/s)
+2026-06-18 11:25:28 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   batch_size= 32 → 7.11s  (4.50 samples/s)
+2026-06-18 11:25:31 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   batch_size= 16 → killed (>3.6s, best_tp=4.50)
+2026-06-18 11:25:45 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   batch_size= 64 → 7.37s  (8.69 samples/s)
+2026-06-18 11:26:00 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   batch_size=128 → killed (>14.7s, best_tp=8.69)
+2026-06-18 11:26:00 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - Auto batch size: 64 (throughput: 8.69 samples/s, target was 128)
+2026-06-18 11:26:00 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - Effective batch_size: 128 | Micro batch_size: 64 | Gradient accumulation steps: 2
+2026-06-18 11:26:00 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - 
+2026-06-18 11:26:00 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - ============================================================
+2026-06-18 11:26:00 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   Phase: B2 — TIP Training (10000 max epochs)
+2026-06-18 11:26:00 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - ============================================================
+2026-06-18 11:26:00 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO -   k=50, epsilon=0.0001
+2026-06-18 11:30:27 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - Epoch 001/10000 | train loss: 1.966768 | val loss: 1.982913 | *Best Model Saved*
+2026-06-18 11:34:56 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - Epoch 002/10000 | train loss: 1.698875 | val loss: 2.222420
+2026-06-18 11:39:26 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - Epoch 003/10000 | train loss: 1.620403 | val loss: 1.842520 | *Best Model Saved*
+2026-06-18 11:43:55 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - Epoch 004/10000 | train loss: 1.481941 | val loss: 1.608086 | *Best Model Saved*
+2026-06-18 11:48:24 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - Epoch 005/10000 | train loss: 1.474928 | val loss: 1.562898 | *Best Model Saved*
+2026-06-18 11:52:49 - B2_Supply_Chain_Customer_D_SAITS_TimesFM25_mr0.1_k50_s42 - INFO - Epoch 006/10000 | train loss: 1.423157 | val loss: 1.622182

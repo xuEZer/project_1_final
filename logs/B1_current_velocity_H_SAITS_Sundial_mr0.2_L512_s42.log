@@ -1,0 +1,138 @@
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - ======================================================================
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Exp name: B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - ======================================================================
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [experiment] exp_name = B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [experiment] exp_type = B1
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [experiment] random_seed = 42
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [dataset] dataset = current_velocity_H
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [dataset] missing_rate = 0.2
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [dataset] artificial_missing_rate = 0.2
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [dataset] lookback_len = 512
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [imputator] model_type = SAITS
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [predictor] model_type = Sundial
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [training] tip_k = 20
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Overriding config: [training] tip_epsilon = 1e-4
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Loading template config for SAITS from configs/template/imputator/SAITS.ini
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Loading template config for Sundial from configs/template/predictor/Sundial.ini
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Loading template config for dataset 'current_velocity_H' from configs/template/dataset/current_velocity_H.ini
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - ============================== System Info ==============================
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Python version: 3.10.20
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - PyTorch version: 2.12.0+cu130
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - CUDA available: True
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - CUDA device: NVIDIA GeForce RTX 3070 Laptop GPU
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - ===========================================================================
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - ============================== Configuration ==============================
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - [experiment]
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   exp_name = B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   exp_type = B1
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   random_seed = 42
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - [paths]
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   preprocessed_data_dir = ./cache/preprocessed_datasets
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   ckpt_save_dir = ./cache/checkpoints
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   log_save_dir = ./logs
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - [dataset]
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   dataset = current_velocity_H
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   missing_rate = 0.2
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   artificial_missing_rate = 0.2
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   block_size = 20
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   lookback_len = 512
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   val_ratio = 0.1
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   test_ratio = 0.2
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   source = huggingface
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   repo_name = Real-TSF/TIME
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   dataset_name = current_velocity
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   frequency = H
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   item_id = NRS_NRSDAR_Sentinel-or-Monitor-Workhorse-ADCP-17.5_221106To230525
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   column_index = 0
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   pred_len = 24
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - [training]
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   max_epoch = 10000
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   warmup_epoch = 3
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   patience = 5
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   device = cuda
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   batch_size = 128
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   auto_batch_size = true
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   micro_batch_size = 0
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   optimizer = AdamW
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   lr = 1e-4
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   tip_k = 20
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   tip_epsilon = 1e-4
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   tip_pretrain_epochs = 2
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - [imputator]
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   model_type = SAITS
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   n_groups = 2
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   n_group_inner_layers = 1
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   d_model = 256
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   d_inner = 128
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   n_head = 4
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   d_k = 64
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   d_v = 64
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   dropout = 0.1
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   param_sharing_strategy = inner_group
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   diagonal_attention_mask = True
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - [predictor]
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   model_type = Sundial
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   num_samples = 100
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   sample_aggregation = mean
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   train_method = forward
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - ===========================================================================
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Random seed set to 42
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Generated preprocess UID: 5f0ca80d9d36e1a8
+2026-06-19 20:51:11 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Preprocessed data saved to cache/preprocessed_datasets/5f0ca80d9d36e1a8
+2026-06-19 20:51:24 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   batch_size=  1 → 5.95s  (0.17 samples/s)
+2026-06-19 20:51:24 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Ternary search over 2^[1, 7] = [2, 128]
+2026-06-19 20:51:32 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   batch_size=  8 → 5.40s  (1.48 samples/s)
+2026-06-19 20:51:42 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   batch_size= 32 → 6.24s  (5.13 samples/s)
+2026-06-19 20:51:45 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   batch_size= 16 → killed (>3.1s, best_tp=5.13)
+2026-06-19 20:51:56 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   batch_size= 64 → 7.98s  (8.02 samples/s)
+2026-06-19 20:52:12 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   batch_size=128 → killed (>16.0s, best_tp=8.02)
+2026-06-19 20:52:12 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Auto batch size: 64 (throughput: 8.02 samples/s, target was 128)
+2026-06-19 20:52:12 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Effective batch_size: 128 | Micro batch_size: 64 | Gradient accumulation steps: 2
+2026-06-19 20:52:12 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - 
+2026-06-19 20:52:12 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - ============================================================
+2026-06-19 20:52:12 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -   Phase: B1 — Standard Imputer Training (10000 max epochs)
+2026-06-19 20:52:12 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - ============================================================
+2026-06-19 20:53:10 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 001/10000 | train loss: 1.493302 | val loss: 1.212088 | *Best Model Saved*
+2026-06-19 20:54:08 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 002/10000 | train loss: 1.178416 | val loss: 1.118322 | *Best Model Saved*
+2026-06-19 20:55:05 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 003/10000 | train loss: 1.119861 | val loss: 1.092158 | *Best Model Saved*
+2026-06-19 20:56:03 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 004/10000 | train loss: 1.083048 | val loss: 1.050589 | *Best Model Saved*
+2026-06-19 20:57:02 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 005/10000 | train loss: 1.055249 | val loss: 1.032249 | *Best Model Saved*
+2026-06-19 20:58:00 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 006/10000 | train loss: 1.036668 | val loss: 1.019186 | *Best Model Saved*
+2026-06-19 20:58:58 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 007/10000 | train loss: 1.020678 | val loss: 1.008236 | *Best Model Saved*
+2026-06-19 20:59:56 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 008/10000 | train loss: 1.009283 | val loss: 1.000966 | *Best Model Saved*
+2026-06-19 21:00:55 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 009/10000 | train loss: 1.002299 | val loss: 0.993810 | *Best Model Saved*
+2026-06-19 21:01:53 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 010/10000 | train loss: 0.996538 | val loss: 0.994045
+2026-06-19 21:02:52 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 011/10000 | train loss: 0.993707 | val loss: 0.989689 | *Best Model Saved*
+2026-06-19 21:03:50 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 012/10000 | train loss: 0.992380 | val loss: 0.987031 | *Best Model Saved*
+2026-06-19 21:04:47 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 013/10000 | train loss: 0.991110 | val loss: 0.994280
+2026-06-19 21:05:45 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 014/10000 | train loss: 0.987811 | val loss: 0.987168
+2026-06-19 21:06:44 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 015/10000 | train loss: 0.985986 | val loss: 0.983438 | *Best Model Saved*
+2026-06-19 21:07:42 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 016/10000 | train loss: 0.985473 | val loss: 0.981665 | *Best Model Saved*
+2026-06-19 21:08:40 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 017/10000 | train loss: 0.980645 | val loss: 0.980173 | *Best Model Saved*
+2026-06-19 21:09:38 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 018/10000 | train loss: 0.979844 | val loss: 0.981442
+2026-06-19 21:10:36 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 019/10000 | train loss: 0.979924 | val loss: 0.987393
+2026-06-19 21:11:33 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 020/10000 | train loss: 0.980647 | val loss: 0.981125
+2026-06-19 21:12:31 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 021/10000 | train loss: 0.978543 | val loss: 0.980631
+2026-06-19 21:13:29 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 022/10000 | train loss: 0.976974 | val loss: 0.979570 | *Best Model Saved*
+2026-06-19 21:14:28 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 023/10000 | train loss: 0.975727 | val loss: 0.978459 | *Best Model Saved*
+2026-06-19 21:15:26 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 024/10000 | train loss: 0.975474 | val loss: 0.979294
+2026-06-19 21:16:24 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 025/10000 | train loss: 0.974816 | val loss: 0.987522
+2026-06-19 21:17:21 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 026/10000 | train loss: 0.974123 | val loss: 0.978652
+2026-06-19 21:18:20 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 027/10000 | train loss: 0.971678 | val loss: 0.979288
+2026-06-19 21:19:18 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Epoch 028/10000 | train loss: 0.971117 | val loss: 0.978794
+2026-06-19 21:19:18 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - No improvement for 5 epochs. Early stopping at epoch 28 in phase 'b1'.
+2026-06-19 21:19:18 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Finished Phase: b1. Best Val Loss: 0.978459
+2026-06-19 21:19:18 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Training completed.
+2026-06-19 21:19:18 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Starting evaluation...
+2026-06-19 21:19:31 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - --------------------------------------------------
+2026-06-19 21:19:31 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Evaluation Results Summary:
+2026-06-19 21:19:31 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO -            Imputation           Prediction          
+2026-06-19 21:19:31 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - --------------------------------------------------
+2026-06-19 21:19:31 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - MAE        0.864751             0.485653            
+2026-06-19 21:19:31 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - MSE        1.005134             0.381917            
+2026-06-19 21:19:31 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - MRE        1.004364             0.596709            
+2026-06-19 21:19:31 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - RMSE       1.001183             0.592720            
+2026-06-19 21:19:31 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - --------------------------------------------------
+2026-06-19 21:19:31 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Evaluation completed.
+2026-06-19 21:19:31 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Deleted checkpoint: cache/checkpoints/B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42/best_model.pt
+2026-06-19 21:19:31 - B1_current_velocity_H_SAITS_Sundial_mr0.2_L512_s42 - INFO - Experiment completed successfully!

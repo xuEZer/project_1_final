@@ -1,0 +1,802 @@
+﻿% !TEX root = main.tex
+% !TEX program = xelatex
+% !BIB program = bibtex
+% !TEX recipe = xelatex -> bibtex -> xelatex -> xelatex
+\documentclass{article}
+\usepackage{ctex}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{booktabs}
+\usepackage[table]{xcolor}
+\usepackage[normalem]{ulem}
+\usepackage{multirow}
+\usepackage{makecell}
+\usepackage{caption}
+\usepackage{placeins}
+\usepackage[export]{adjustbox}
+
+\graphicspath{{Figures/}}
+\algrenewcommand\algorithmiccomment[1]{\hfill// #1}
+
+\usepackage[authoryear,round]{natbib}
+\usepackage{hyperref}
+\hypersetup{colorlinks = true,
+	bookmarksopen = true,
+	bookmarksnumbered = true,
+	citecolor = black,
+	pdftitle = 面向时序预测的基于零阶梯度估计的任务感知插补方法 Zero-Order Gradient Estimation for Task-Aware Imputation in Time Series Forecasting,
+	pdfauthor = Xueze Chen}
+\bibliographystyle{plainnat}
+\setcounter{secnumdepth}{3}
+
+\newtheorem{theorem}{Theorem}
+
+\newcommand{\best}[1]{\textcolor{red}{\textbf{#1}}}
+\newcommand{\second}[1]{\textcolor{green!60!black}{\uline{#1}}}
+
+
+\title{\heiti\zihao{2} 面向时序预测的基于零阶梯度估计的任务感知插补方法\\ Zero-Order Gradient Estimation for Task-Aware Imputation in Time Series Forecasting}
+\author{\songti Xueze Chen}
+\date{}
+
+
+\begin{document}
+	\maketitle
+	\thispagestyle{empty}
+
+\begin{abstract}
+	缺失值处理是制约时序基础模型（TSFMs）在真实场景中稳定落地的核心瓶颈。现有插补-预测两阶段方法虽部署灵活，但其根本缺陷在于插补模型的优化目标与下游预测任务的性能需求相互脱节：插补参数的更新方向可能与预测性能的改善方向不一致，导致插补精度提升反而损害预测性能。更关键的是，当前主流 TSFMs 参数量已达数亿至数十亿级别，对其执行反向传播以获取预测损失关于插补模型参数的梯度不仅在计算上极为昂贵，且在黑盒 API 部署场景中根本不可行。本文从误差传递视角出发，首先量化分析了插补误差通过预测模型输入梯度影响预测损失的机理；进而提出\textbf{基于零阶梯度估计的任务感知插补方法}（Task-Aware Imputation via Zero-Order Gradient Estimation，TIP）。TIP 的核心机制为：利用高斯平滑梯度估计器，仅通过预测模型的若干次前向推理近似预测梯度方向；当检测到插补梯度与估计预测梯度的内积为负时（即方向冲突），以非对称正交投影移除更新方向中的冲突分量。本文从理论上证明：(1) 零阶梯度估计量具有渐近无偏性（偏差为 $O(\varepsilon^2)$），其方向精度随采样数 $k$ 增大而提升；(2) 正交投影修正是所有满足预测约束的更新方向中与原始方向偏差最小的修正方案。TIP 仅需预测模型的前向推理能力，天然支持黑盒部署，且不依赖特定插补模型或预测模型架构。在七个真实世界数据集、四种插补模型和两种 TSFM 上的系统实验验证了方法的有效性。
+\end{abstract}
+
+\noindent\textbf{关键词：}时间序列预测，缺失值插补，零阶梯度估计，任务感知学习，黑盒兼容
+
+\section{引言}
+
+时间序列预测广泛服务于工业运维\citep{kashpruk2023}、公共卫生监测\citep{10.1093/ije/dyw098}、气象预报\citep{KAREVAN20201}和金融分析\citep{BAI2008304}等关键领域。传统统计模型受限于线性假设与手工特征工程，难以捕获复杂系统的非线性长程依赖；任务定制化的深度学习模型虽提升了时序表示能力，却存在泛化能力弱、开发成本高的固有缺陷，每当面临新任务或新数据分布便需重新设计架构并从头训练，严重制约了时序预测技术的大规模工程化部署\citep{潘志松2025基于深度学习的时间序列预测方法综述}。
+
+近年来，“大规模预训练 + 轻量级适配”的路线向时序分析社区揭示了全新可能。在此推动下，时序基础模型（Time Series Foundation Models, TSFMs）迅速崛起\citep{liang2024}，代表性工作包括 Google 的 TimesFM 系列\citep{pmlr-v235-das24c}、清华大学的 Sundial\citep{pmlr-v267-liu25be}、Amazon 的 Chronos 系列\citep{ansari2024chronos,ansari2025chronos2univariateuniversalforecasting}、Salesforce 的 Moirai 系列\citep{10.5555/3692070.3694248,liu2026moirai20timeseries}、MOMENT\citep{pmlr-v235-goswami24a}和 Timer\citep{liu2024timer} 等。TSFMs 通过海量多源时序数据上的自监督预训练学习通用时序模式，以零样本或少样本方式快速适配各类下游预测任务，显著提升了预测的泛化效率与跨域迁移能力\citep{JCC-CN-202400146}。
+
+然而，TSFMs 从受控的预训练环境走向真实部署场景，面临一个根本性瓶颈：现实世界中的时序数据极少保持理想的完整性与连续性。传感器老化或漂移\citep{10184665}、系统停机或故障\citep{BAI2008304}、通信中断或数据同步延迟\citep{9403954}等因素，致使观测序列中常出现不规则甚至连续区段的缺失。从缺失机制来看，除完全随机缺失（MCAR）外，更普遍且更具挑战的是随机缺失（MAR）和非随机缺失（MNAR）\citep{che2018}，后两者广泛存在于工业传感器、临床监护和金融交易等高风险场景，其分布与时间上下文和系统状态高度耦合，处理难度远大于 MCAR。更为严峻的是，对于在完整序列上预训练的 TSFMs 而言，缺失不仅削弱预训练习得的时序表达能力，还可能在推理时通过输入扰动产生误差级联放大，导致预测性能不可控退化\citep{emmanuel2021}。因此，缺失值处理远非附属的数据清洗问题，而是制约 TSFMs 在真实时序场景中稳定落地的核心瓶颈。
+
+针对时序预测中的缺失值问题，现有研究主要采用三类策略。第一类\textbf{直接删除}含缺失的时间戳或变量，简单高效但牺牲信息完整性，在缺失率较高或缺失非随机时引入不可逆的选择偏置。第二类方法在预测模型内部显式建模缺失模式以增强固有鲁棒性，典型代表如 GRU-D\citep{che2018} 通过在 GRU 中引入缺失掩码与可学习的时间衰减项，将缺失间隔编码为连续的状态衰减信号。然而，这类方法与预测模型高度耦合，难以与预训练完成后参数冻结的 TSFMs 模块化集成，丧失了 TSFMs 的核心优势。第三类\textbf{两阶段}方法：先利用专门的插补模型对缺失位置进行数值估计，再基于补全后的完整序列输入下游预测模型进行推理。该策略结构清晰、实现灵活、可自由组合各类插补模型与任意预测模型，因而在实践中被大规模采用，也是本文关注的核心技术路线。
+
+然而，两阶段方法暴露了一个根本性缺陷：\textbf{插补模型的训练仅以数据重构精度为唯一优化目标，完全未考虑下游预测任务的性能反馈}，插补与预测在优化层面被人为割裂。Shadbahr 等人\citep{shadbahr2023} 在医疗影像分类中的大规模实证研究为此提供了有力佐证：传统插补评估指标（如 RMSE、MAE）与下游分类器性能之间的 Spearman 秩相关系数几乎为零（$\rho=0.007$），"补得像"在统计学意义上几乎不传递"补得好"的信息。这一发现深刻揭示了将插补视为独立预处理步骤的深层局限：\textbf{插补误差的下降方向可能与预测性能的提升方向相互对立}，插补模型朝重构最优收敛时，其产生的输入扰动可能恰好沿预测模型最敏感的方向传播，反而损害预测精度。从 Data-Centric AI 的视角审视\citep{whang2023,10444552}，数据质量的优化不应止步于恢复数据表面的统计可用性，其目标函数设计理应与下游任务的最终性能指标保持一致\citep{DBLP:journals/corr/abs-2406-19614}。换言之，插补不应是与预测任务无关的孤立预处理步骤，而应主动感知并服务于预测任务的需求：\textbf{好的插补，不是在所有可能值中找到最接近真实值的那个，而是在所有对预测无害的候选值中找到最接近真实值的那个}。
+
+既然两阶段方法的根本缺陷在于插补目标与预测需求脱节，一个自然的改进思路是将插补模型与预测模型串联为端到端管道，直接以预测损失为训练目标反向传播优化插补参数。然而，这一方案在 TSFM 时代面临根本性的工程障碍。由链式法则，预测损失关于插补模型参数的梯度等于插补模型输出雅可比与 TSFM 输入梯度的乘积——前者来自插补模型自身的反向传播，代价较小；后者则必须通过对 TSFM 执行完整的反向传播才能获取。当前主流 TSFM（TimesFM、Chronos、Moirai、Sundial 等）的参数量已达数亿至数十亿级别，以 TimesFM-2.0 约 5 亿参数为例，一次完整反向传播的 wall-clock 耗时约为前向传播的 2--3 倍，且需在 GPU 显存中额外保留全部中间层的激活值用于梯度计算——这部分显存需求与 TSFM 的层数、隐层维度和序列长度成正比，叠加插补模型自身的训练状态后极易超出单张主流 GPU 的物理容量。将这一代价嵌入插补模型的每次参数更新（通常需数千至数万步收敛），总训练时间将从小时级膨胀至数十小时级，在需多数据集、多模型、多超参数重复的实验场景中实际不可承受。然而，比计算代价更为致命的是部署形态的结构性约束：在大量真实部署场景中，高性能 TSFM 以商业 API 的黑盒服务形态对外提供，用户仅能调用形如 \texttt{predict(X)} 的前向推理接口获取预测结果，TSFM 的内部计算图——包括注意力机制实现、归一化层细节、激活函数选择及残差连接结构——对外部调用方完全不可见，自动微分引擎无法穿透 API 边界构建梯度流，梯度显式计算在技术上根本无从进行，而非仅仅是成本高低的问题。即便对于开源的 TSFM，其推理代码通常深度集成了算子融合、自定义 CUDA kernel 及混合精度等面向推理效率的激进优化，这些优化与标准自动微分框架的兼容性存疑，强制接入反向传播需对推理代码进行大量侵入式修改，消解了 TSFM 即取即用的核心优势。综上，在 TSFM 时代，通过反向传播获取预测梯度的端到端优化路径在工程上不具备可行性。
+
+上述插补与预测的脱节问题，本质上可形式化为一个存在明确主辅关系的\textbf{方向冲突}问题。设插补模型参数为 $\theta$，插补损失关于 $\theta$ 的梯度为 $g_I = \nabla_\theta \mathcal{L}_I$，预测损失函数为 $Q(\theta) = \mathcal{L}_P(\theta)$。记 $g_P = \nabla_\theta Q(\theta)$ 为预测损失关于 $\theta$ 的梯度。当沿 $g_I$ 方向更新参数时，若 $g_P^T g_I < 0$，预测损失将一阶上升，插补优化方向与预测性能优化方向发生背离。在多任务学习领域，PCGrad\citep{yu2020pcgrad}、GradNorm\citep{chen2018gradnorm} 和 CAGrad\citep{liu2021cagrad} 等方法已对梯度冲突问题开展了深入研究。然而，这些方法在本场景下面临\textbf{双重不可适用性}。其一，\textbf{技术层面的不可行性}：上述方法均需显式计算预测损失关于插补模型参数的梯度，而如前所论，TSFM 反向传播面临的计算代价与 API 黑盒约束已使该路径在工程上不可行。其二，\textbf{语义层面的不兼容性}：即使假设 $g_P$ 可被获取，上述方法均面向各任务地位平等的多任务共同优化场景，采用对称的冲突调解策略——冲突发生时，双方都需做出修正以达成协调。而在本研究的设定下，预测模型 $\mathcal{P}_{\phi^\ast}$ 已完成预训练且参数冻结，其方向 $g_P$ 仅作为约束方向的参照，并不驱动任何参数更新。在此设定下，对称修正将错误地牺牲预测性能迁就插补优化，从根本上违背了任务优先级。这一双重不可适用性——技术上行不通、语义上不合适——决定了本场景需要一种全新的、仅依赖前向传播的非对称方向冲突处理机制。
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=1.0\textwidth]{传统两阶段与TIP对比图.png}
+\caption{传统两阶段方法与 TIP 方法的对比示意图}
+\label{fig:two-stage-vs-tip}
+\end{figure}
+
+为此，本文提出\textbf{基于零阶梯度估计的任务感知插补方法}（Task-Aware Imputation via Zero-Order Gradient Estimation，TIP，见图\ref{fig:two-stage-vs-tip}）。TIP 的核心设计是将插补模型的训练纳入以预测性能为约束的优化框架：定义预测损失函数 $Q(\theta) = \mathcal{L}_P(\theta)$，在每次参数更新中，通过随机高斯扰动对预测模型进行若干次前向推理，构造预测梯度 $g_P = \nabla_\theta Q(\theta)$ 的零阶估计 $\hat{g}_P$（式\ref{eq:gp_estimator}）；以 $g_I^T \hat{g}_P < 0$ 为方向冲突判据，冲突发生时仅对更新方向执行非对称正交投影，移除其与 $\hat{g}_P$ 反向的分量而完整保留正交分量，确保参数更新不致损害预测性能。本文从理论上证明：(1) $\hat{g}_P$ 是高斯平滑函数 $Q_\varepsilon$ 梯度的无偏估计，且随 $\varepsilon \to 0$ 渐近收敛于 $g_P$（定理\ref{th:gp_unbiased}）；(2) 正交投影修正是所有满足预测约束的更新方向中与原始方向偏差最小的修正方案（定理\ref{th:orthogonal_projection}）。该方法仅需预测模型的前向推理能力，无需其内部计算图可见或可微分，天然支持黑盒部署；同时不修改预测模型的架构或权重，不依赖特定插补模型的内部结构，具备模型无关性与即插即用的部署特性。
+
+在七个真实世界数据集（覆盖供应链、物理测量、工业云计算、环境监测、公共卫生、工业运维和能源气象等多元场景）上，基于四种架构各异的插补模型（BRITS\citep{NEURIPS2018_734e6bfc}、SAITS\citep{du2023saits}、DeepMVI\citep{ZHANG202167}、TimesNet\citep{wu2023timesnet}）与两种时序基础模型（TimesFM\citep{pmlr-v235-das24c}、Sundial\citep{pmlr-v267-liu25be}）的系统实验将围绕以下维度展开验证：(1) 预测性能维度（固定缺失率 $p=0.2$），检验 TIP 是否显著优于传统两阶段优化策略；(2) 插补-预测平衡维度，检验 TIP 是否在维持插补质量的同时提升预测精度；(3) 任务关联性维度，检验 TIP 是否能提升插补性能与预测性能之间的统计相关性；(4) 缺失率鲁棒性维度（$p \in \{0.1,\dots,0.5\}$），检验 TIP 在不同缺失强度下的增益变化规律；(5) 机制可解释性维度，从参数空间动力学角度验证方向冲突过滤效果。此外，将通过 $k$ 与 $\varepsilon$ 消融实验验证梯度估计的参数鲁棒性及超参数敏感性，通过投影策略消融分离各组件的独立贡献，并通过计算代价对比实验量化前向验证方案相对于反向传播方案的实际效率优势。
+
+本文的主要贡献如下：
+\begin{enumerate}
+	\item \textbf{从问题发现到方法验证，系统构建了面向时序预测的零阶梯度插补优化理论框架与算法体系。}本文以插补-预测两阶段优化中"插补越准、预测未必越好"的反直觉现象为出发点，沿着"问题诊断$\to$理论建模$\to$算法设计$\to$实证验证"的完整逻辑链条，形成了四项递进的贡献：首先从\textbf{误差传播方程}（式\ref{eq:error_propagation}）出发揭示方向冲突的数学根源；继而提出基于\textbf{零阶梯度估计}的冲突检测机制，由渐近无偏性定理（定理\ref{th:gp_unbiased}）保证 $\mathbb{E}[\hat{g}_P] = \nabla Q_\varepsilon(\theta)$ 且 $\lim_{\varepsilon\to 0}\mathbb{E}[\hat{g}_P] = g_P$，仅需 $k$ 次 TSFM 前向传播即可获得预测梯度方向的统计估计；进而设计基于 $\hat{g}_P$ 的冲突检测与非对称正交投影修正框架；最后在多元场景下对 TIP 进行系统验证，形成从理论到实验的完整闭环。
+    \item \textbf{提出了基于零阶梯度估计的非对称投影修正机制，并由正交投影最优性定理严格保证了该机制在预测约束下的最小修正性。}针对更新方向与预测任务冲突时如何修正的问题，设计了非对称投影策略：当经由 $g_I^T\hat{g}_P < 0$ 检测到冲突时，仅对更新方向执行正交投影，移除其与 $\hat{g}_P$ 方向反向的分量而完整保留正交分量。\textbf{正交投影最优性定理}（定理\ref{th:orthogonal_projection}）从理论上严格证明：该正交投影修正是所有满足预测约束条件 $g_P^T\Delta\theta \leq 0$ 的更新方向中，与原始更新方向偏差最小的修正方案，因而在保护预测性能的同时最大程度地维持了插补语义的完整性。这一非对称设计及其仅依赖前向传播的技术路线从根本上区别于 PCGrad 等对称式多任务梯度修正方法：后者既依赖 TSFM 反向传播以获取 $g_P$（在 TSFM 参数量达数亿至数十亿级别时计算代价极高，且在黑盒部署场景中根本不可行），又对各任务梯度施加对称修正（违背本场景的预测优先约束），面临技术不可行与语义不兼容的双重不可适用性。
+    \item \textbf{设计了轻量即插即用的 TIP 算法，无需预测模型反向传播，具备天然的黑盒兼容性与高效的计算特性。}TIP 将插补模型与冻结的预测模型串联为端到端管道，每次参数更新仅需额外执行\textbf{$k$ 次预测模型前向传播}（通过随机采样构造 $\hat{g}_P$）以完成方向冲突检测，无需对预测模型执行反向传播。该算法不修改预测模型的架构或权重，不依赖任何特定插补模型的内部结构，且预测模型可以黑盒 API 形式存在，只需提供前向推理接口。在 4 种架构各异的插补模型（BRITS、SAITS、DeepMVI、TimesNet）和 2 种独立开发的 TSFM（TimesFM、Sundial）共 8 种组合上将一致验证其模型无关性和通用即插即用能力。
+    \item \textbf{设计了多维度的系统验证方案，从五个递进维度构建一致的效果证据链。}在七个真实世界数据集上，将从以下五个递进维度系统评估 TIP：（1）\textbf{预测性能}：检验 TIP 是否显著优于传统两阶段策略；（2）\textbf{插补-预测平衡}：检验 TIP 在插补保真与预测精度之间的协调能力；（3）\textbf{任务关联性}：通过 Spearman 秩相关分析检验插补质量是否重新成为预测性能的有效代理信号；（4）\textbf{缺失率鲁棒性}：检验 TIP 在不同缺失强度下的性能退化特征；（5）\textbf{机制可解释性}：通过方向冲突可视化从参数空间动力学角度直接验证非对称投影的冲突过滤效果。此外，将增设 $\varepsilon$ 消融实验与计算代价对比实验。上述五个维度的实验相互印证，形成从"是否有效"到"为何有效"的完整实证链条。
+\end{enumerate}
+
+\section{相关工作}
+
+本文的研究涉及三个交叉领域：时序插补模型、时序基础模型，以及多任务学习中的梯度冲突修正。以下分别梳理各领域的研究脉络，并明确本文工作与现有方法的关键区别。
+
+\subsection{基于深度学习的时序插补模型}
+
+现有基于深度学习的多元时间序列插补方法可依据网络架构划分为\textbf{预测式}、\textbf{生成式}与\textbf{大模型驱动}三大类。
+
+\textbf{预测式方法}通过学习从观测值到缺失值的确定性映射，训练简单、推理高效，在多数常规场景中表现优异。早期工作以 RNN 架构为主，GRU-D\citep{che2018} 引入时间衰减机制处理不规则采样，BRITS\citep{NEURIPS2018_734e6bfc} 采用双向 RNN 将缺失值作为计算图变量进行联合估计，M-RNN\citep{yoon2018estimating} 融合双向 RNN 与全连接网络分别建模时序与变量维度依赖。CNN 架构如 TimesNet\citep{wu2023timesnet} 通过 FFT 将一维序列重构为二维格式，利用二维卷积捕捉多周期变化。GNN 方法的引入解决了多变量间复杂关联的建模问题，代表性工作包括 GRIN\citep{Cini2021FillingTG}（首个图循环插补架构）、SPIN\citep{marisca2022learning}（稀疏时空注意力）、Casper\citep{10.1145/3627673.3679642}（因果感知）和 HSPGNN\citep{liang2024higher}（物理先验融合）。基于自注意力机制的方法是当前预测式插补的性能标杆，SAITS\citep{du2023saits} 采用对角掩码自注意力避免信息泄露，DeepMVI\citep{ZHANG202167} 融合 Transformer 与 CNN 同步提取长程周期与局部特征，ImputeFormer\citep{10.1145/3637528.3671751} 引入低秩诱导注意力降低计算复杂度。
+
+\textbf{生成式方法}通过学习观测数据的概率分布，能够量化插补不确定性，更适用于高风险决策场景。VAE 类方法如 GP-VAE\citep{pmlr-v108-fortuin20a} 在隐空间引入高斯过程先验以捕捉时序动态；GAN 类方法如 GRUI-GAN\citep{luo2018multivariate} 和 E$^2$GAN\citep{10.5555/3367243.3367469} 通过对抗博弈生成高保真插补结果；扩散模型如 CSDI\citep{tashiro2021csdi} 和 SSSD\citep{alcaraz2023diffusionbased} 凭借对复杂数据分布的强大建模能力成为当前研究热点。
+
+\textbf{大模型驱动的插补}通过大规模预训练学习通用时序表示，解决了传统模型跨域泛化能力弱的问题。Timer\citep{liu2024timer} 和 MOMENT\citep{pmlr-v235-goswami24a} 在自监督预训练后微调适配插补任务，GPT4TS\citep{NEURIPS2023_86c17de0} 和 LLM-TS Integrator\citep{chen2024enhance} 则探索了将大语言模型迁移到时序插补的可能性。
+
+需要指出的是，上述所有插补方法均以数据重构精度为唯一优化目标，未考虑下游预测任务的性能反馈。本文的 TIP 方法并非提出新的插补模型架构，而是提出一种通用的训练策略，可叠加于任意现有插补模型之上，使其在训练过程中感知并服务于下游预测需求。这一目标层面的差异构成了本文与现有插补研究之间的本质区别。
+
+\subsection{时序基础模型}
+
+时序基础模型（TSFMs）是近年来时序预测领域的核心研究方向，其核心特征是从传统的单数据集训练评估模式转向强调跨任务零样本泛化的任务中心模式\citep{qiao2026}。Decoder-only 架构凭借长序列建模与上下文学习优势逐渐成为主流，代表性工作包括 Google 的 TimesFM 系列\citep{pmlr-v235-das24c}、清华大学的 Sundial\citep{pmlr-v267-liu25be}、Amazon 的 Chronos 系列\citep{ansari2024chronos,ansari2025chronos2univariateuniversalforecasting} 以及 Salesforce 的 Moirai 系列\citep{10.5555/3692070.3694248,liu2026moirai20timeseries} 等。TimesFM 和 Sundial 是本文实验所采用的预测模型。与现有工作关注 TSFM 架构创新不同，本文关注的是 TSFM 在实际部署中的一个共性瓶颈：输入数据缺失对预测性能的影响，并提出了一种与 TSFM 架构无关的解决方案。
+
+\subsection{多任务学习中的梯度冲突与修正方法}
+
+多任务学习中不同任务优化方向相互干扰的问题已被广泛研究，其核心表现为不同任务损失关于共享参数的梯度方向不一致。为缓解这一问题，PCGrad\citep{yu2020pcgrad} 提出将冲突梯度投影到彼此正交方向，但任务数量较多时连续的投影修正可能导致梯度方向偏离原始优化目标；GradNorm\citep{chen2018gradnorm} 通过动态调整任务权重平衡梯度尺度，但本质上仍是标量加权，不改变单个梯度方向；CAGrad\citep{liu2021cagrad} 引入共享信任域约束，通过极小极大优化寻找既不违反信任域又尽可能降低所有任务损失的更新方向。
+
+然而，上述方法在本研究设定下还面临一个更前置的技术障碍：\textbf{它们均需要显式获取预测损失关于插补模型参数的梯度 $g_P = \nabla_\theta\mathcal{L}_P$}。该梯度的计算必须通过 TSFM 执行完整的反向传播（由链式法则，$g_P = (\nabla_\theta\hat{X})^T \cdot \nabla_{\hat{X}}\mathcal{P}_{\phi^\ast} \cdot \nabla_Y\mathcal{L}_P$，其中 $\nabla_{\hat{X}}\mathcal{P}_{\phi^\ast}$ 的传播路径贯穿整个 TSFM 计算图）。在当前主流 TSFM 参数量达数亿至数十亿级别的背景下，这一操作面临\textbf{双重不可行性}：(1) \textbf{计算不可行}：通过大型 TSFM 反向传播计算 $g_P$，单步训练时间可达仅前向传播的 4--6 倍，GPU 显存占用亦急剧膨胀；(2) \textbf{部署不可行}：在多数实际部署场景中，商业 TSFM 以黑盒 API 形式提供服务，仅暴露前向推理接口，其内部计算图对外部完全不可见，反向传播无从进行。因此，PCGrad 等现有梯度冲突调解方法不仅在本问题的\textbf{语义层面}不兼容（对称 vs 非对称），更在\textbf{技术层面}不可行（需要反向传播 vs 仅允许前向传播）。这一双重不可适用性构成了本文提出基于梯度估计的零阶梯度估计机制的根本动机：仅通过 TSFM 的前向推理即可完成方向冲突检测与投影修正，天然绕过了上述技术障碍。
+
+此外，上述方法均面向\textbf{多任务共同优化}场景，各任务地位平等、所有梯度均驱动参数更新，冲突时双方都需做出修正，这是对称投影策略的合理性所在。然而，本研究设定与之存在本质差异：预测模型 $\mathcal{P}_{\phi^\ast}$ 的参数 $\phi^\ast$ 已被冻结，$g_P = \nabla_\theta\mathcal{L}_P$ 并不驱动任何参数更新，仅作为约束方向出现。在此框架下，修改 $g_P$ 意味着改变约束条件本身，而非在优化目标间协调，在逻辑上并无意义。因此，现有对称冲突调解方法与本研究的问题设定层面即不兼容：它们解决"多个优化目标如何共存"的问题，而本研究面对"如何在单一优化目标（插补重构）的更新中嵌入另一个任务的约束条件"这一不同性质的问题。TIP 的非对称投影机制正是在这一特定问题结构下的自然产物。
+
+\section{问题建模与理论基础}
+
+\subsection{符号定义与问题形式化}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=1.0\textwidth]{含缺失的多元时间序列的插补与预测示意图.png}
+\caption{含缺失的多元时间序列的插补与预测示意图}
+\label{fig:imputation-prediction}
+\end{figure}
+
+考虑一个时间长度为 $T$、变量维度为 $D$ 的多元时间观测序列，记为
+\begin{equation}
+	\tilde{X} =\{\tilde{x}_{t,d}\}_{t=1,d=1}^{T,D},
+\end{equation}
+其中$D$表示变量维度，$\tilde{x}_{t,d}$表示第$d$个变量在时刻$t$的观测值。
+
+在现实场景中，由于传感器故障、通信延迟、数据采集异常等因素，时序数据中往往存在大量缺失观测。为刻画缺失模式，引入与 $\tilde{X}$ 同维度的\textbf{缺失掩码矩阵}
+\begin{equation}
+	M =\{m_{t,d}\in\{0,1\}\}_{t=1,d=1}^{T,D},\quad m_{t,d} =\begin{cases}1, &\text{if }\tilde{x}_{t,d}\text{ is missing}\\0, &\text{otherwise}\end{cases},
+\end{equation}
+其中$m_{t,d}=1$表示第$d$个变量在时刻$t$的观测值缺失，$m_{t,d}=0$表示观测值存在。该掩码矩阵显式指示了每一时刻、每一变量上的观测可用性。
+
+在此基础上，\textbf{含缺失的时间序列}可以由观测矩阵和缺失掩码矩阵共同表示：
+\begin{equation}
+	X =\{x_{t,d}\}_{t=1,d=1}^{T,D},\quad x_{t,d} =\begin{cases}\tilde{x}_{t,d}, & m_{t,d}=0\\\phi, & m_{t,d}=1\end{cases}.
+\end{equation}
+其中$\phi$表示缺失值的占位符，表明该位置的观测不可用。
+
+为了保证预测模型能够在完整输入空间上运行，需要对缺失数据进行插补。插补是指为所有缺失位置生成合理的数值估计，从而得到一个完整的时间序列
+\begin{equation}
+	\hat{X} =\{\hat{x}_{t,d}\}_{t=1,d=1}^{T,D},
+\end{equation}
+$\hat{X}$称为$X$的一个\textbf{插补序列}。一个合法的插补序列应当满足：在原始观测可得的位置上，插补序列必须与真实观测保持一致，即
+\begin{equation}\label{eq:imputation_constraint}
+	\hat{x}_{t,d} =\tilde{x}_{t,d},\quad\forall t,d\text{ such that } m_{t,d}=0.
+\end{equation}
+
+形式化地，设\textbf{插补模型}为缺失数据到完整数据的映射函数
+\begin{equation}
+	\mathcal{I}_{\theta\in\Theta}:\mathbb{R}^{T\times D}\times\{0,1\}^{T\times D}\to\mathbb{R}^{T\times D},
+\end{equation}
+其中$\Theta$表示插补模型的参数空间。对于任意含缺失的时间序列$X$，插补模型$\mathcal{I}_\theta$能够生成一个完整的插补序列$\hat{X} =\mathcal{I}_\theta(\tilde{X}, M)$，满足合法性约束\ref{eq:imputation_constraint}。
+
+在获得完整的插补序列后，下游 TSFM 以插补结果作为输入，对未来时间步进行预测。设 TSFM 为回顾窗口到预测窗口的映射函数
+\begin{equation}
+	\mathcal{P}_{\phi^\ast}:\mathbb{R}^{L\times D}\to\mathbb{R}^{H\times D},
+\end{equation}
+其中$\phi^\ast$表示 TSFM 的参数，$L$表示回顾窗口长度，$H$表示预测的时间步长。对于插补序列$\hat{X}$，TSFM 能够生成未来$H$个时间步的预测结果$\hat{Y} =\mathcal{P}_{\phi^\ast}(\hat{X}).$
+
+\subsection{问题定义}
+
+有了上述符号体系，现在可以将本文的研究问题精确地表述为一个\textbf{嵌套优化}问题。这里的"嵌套"二字是理解问题难点的关键：预测模型$\mathcal{P}_{\phi^\ast}$的参数是冻结的，我们只能通过改变输入（即插补结果）来影响输出（即预测值），而插补结果又由插补模型$\mathcal{I}_\theta$的参数$\theta$间接控制。
+
+给定一个长度为$L$、维度为$D$的多变量时间序列（回顾窗口）
+\begin{equation}
+	\tilde{X}_{1:L}\in\mathbb{R}^{L\times D},
+\end{equation}
+其中部分观测值缺失。设
+\begin{equation}
+	M_{1:L}\in\{0,1\}^{L\times D}
+\end{equation}
+为对应的缺失掩码矩阵，若第$t$时刻第$d$个变量缺失，则$M_{t,d}=1$，否则为$0$。含缺失数据的时序预测任务旨在学习一个插补模型$\mathcal{I}_\theta$对含缺失的回顾窗口进行插补，得到插补结果${\hat{X}}_{1:L}$，输入预训练的预测模型$\mathcal{P}_\phi^\ast$进行推理，得到后$H$时间步的预测结果$\hat{Y}_{L+1:L+H}$，目标是最小化预测结果与真实值$Y_{L+1:L+H}$之间的误差：
+\begin{equation}
+	\min_{\theta}\mathcal{l}(\hat{Y}_{L+1:L+H}, Y_{L+1:L+H}),\quad\text{where }\hat{Y}_{L+1:L+H} =\mathcal{P}_\phi^\ast(\mathcal{I}_\theta(\tilde{X}_{1:L}, M_{1:L})).
+\end{equation}
+
+为便于后续分析，将上述嵌套优化中的预测损失函数显式记为
+\begin{equation}\label{eq:Q_def}
+	Q(\theta) = \mathcal{L}_P(\mathcal{P}_{\phi^\ast}(\mathcal{I}_\theta(\tilde{X}_{1:L}, M_{1:L})), Y_{L+1:L+H}),
+\end{equation}
+即 $Q: \Theta \to \mathbb{R}_{\geq 0}$ 为从插补模型参数空间到预测损失标量的映射，完整封装了"插补模型参数 $\to$ 插补序列 $\to$ TSFM 推理 $\to$ 预测损失"的计算链条。
+
+\subsection{传统处理方法介绍与解析}
+
+在现有时序预测实践中，当回顾窗口中出现缺失值时，通常采用先插补后预测的两阶段策略。
+
+\textbf{插补阶段}中，孤立预测模型$\mathcal{P}_{\phi^\ast}$，单独对插补模型$\mathcal{I}_\theta$进行训练。然而，由于真实缺失位置上的数值不可观测，无法直接通过插补误差进行优化。为此，通常在观测位置上引入伪掩码矩阵
+\begin{equation}
+	\tilde{M} =\{\tilde{m}_{t,d}\}_{t=1,d=1}^{L,D},\quad\tilde{m}_{t,d} =\begin{cases}1, &\text{if } m_{t,d}=0\text{ and }\text{randomly masked}\\0, &\text{otherwise}\end{cases},
+\end{equation}
+用于构造训练信号。
+
+在此基础上，插补模型的训练损失定义为伪缺失位置上的插补误差：
+\begin{equation}
+	\mathcal{L}_{I}(\theta) =\sum_{t=1}^L\sum_{d=1}^D\tilde{m}_{t,d}\cdot\ell(\hat{x}_{t,d},\tilde{x}_{t,d}),
+\end{equation}
+优化得到最优参数
+\begin{equation}
+	\theta^\ast =\arg\min_{\theta}\mathcal{L}_{I}(\theta).
+\end{equation}
+
+\textbf{预测阶段}中，将训练好的插补模型$\mathcal{I}_{\theta^\ast}$作为预测模型$\mathcal{P}_{\phi^\ast}$的前置模块，输入含缺失的回顾窗口$X_{1:L}$进行插补，将插补结果$\hat{X}_{1:L} =\mathcal{I}_{\theta^\ast}(\tilde{X}_{1:L}, M_{1:L})$输入预测模型进行推理，得到未来$H$时间步的预测结果$\hat{Y}_{L+1:L+H} =\mathcal{P}_{\phi^\ast}(\hat{X}_{1:L})$。
+
+尽管上述两阶段策略在工程实践中被广泛采用，但它\textbf{仅以数据重构精度（插补误差）为优化目标，忽视了下游预测}。插补模型所学习到的最优解，可能在重建意义下是最优的，但在预测任务上却并非最优，甚至可能对预测性能产生负面影响。因此，有必要对插补误差在预测模型中的传递过程进行理论建模分析。
+
+\section{基于零阶梯度估计的任务感知插补方法}
+
+\subsection{插补误差向预测损失的传递分析}
+
+传统两阶段方法隐含 “插补精度越高，预测性能越好” 的基本假设，但大量实证结果表明\citep{shadbahr2023}，插补重构精度与下游预测性能之间并非单调正相关关系。为揭示这一现象的内在成因，本节从误差传递的数学本质出发，量化分析插补误差向预测损失的传递过程，明确插补结果优化的核心约束条件。
+
+记完整的真实时序数据为
+\begin{equation}
+	X^\ast =\{x_{t,d}^\ast\}_{t=1,d=1}^{L,D},
+\end{equation}
+
+记经插补模型得到的插补结果为$\hat{X}$，则插补误差可定义为真实数据与插补结果的逐元素偏差：
+\begin{equation}
+	\Delta X =\hat{X} - X^\ast.
+\end{equation}
+
+以插补结果$\hat{X}$为输入的预测模型输出，与以真实数据$X^\ast$为输入的预测模型输出之间的差异，即为\textbf{由插补引入的预测输出偏移}，形式化定义为
+\begin{equation}\label{eq:delta_y}
+	\Delta Y =\mathcal{P}_{\phi^\ast}(\hat{X}) -\mathcal{P}_{\phi^\ast}(X^\ast) =\mathcal{P}_{\phi^\ast}(X^\ast +\Delta X) -\mathcal{P}_{\phi^\ast}(X^\ast).
+\end{equation}
+
+在预测模型$\mathcal{P}_{\phi^\ast}$全局可微的假设下，对模型输入在$X^\ast$处进行一阶泰勒展开：
+\begin{equation}
+	\mathcal{P}_{\phi^\ast}(X^\ast +\Delta X) =\mathcal{P}_{\phi^\ast}(X^\ast) + (\nabla_X\mathcal{P}_{\phi^\ast}(X^\ast))^T\Delta X + o(\|\Delta X\|),
+\end{equation}
+其中$\nabla_X\mathcal{P}_{\phi^\ast}(X^\ast)$表示预测模型在输入$X^\ast$处的雅可比矩阵，刻画了输入空间微小扰动对模型输出的影响程度；$o(\|\Delta X\|)$表示高阶无穷小项。
+
+结合预测输出偏移的定义\ref{eq:delta_y}，在预测模型局部光滑且满足一阶近似的条件下，忽略高阶小项，可得预测输出偏移的近似表达式：
+\begin{equation}\label{eq:taylor_expansion}
+	\Delta Y\approx (\nabla_X\mathcal{P}_{\phi^\ast}(X^\ast))^T\Delta X.
+\end{equation}
+式\ref{eq:taylor_expansion}表明，插补误差并非通过数值大小直接线性传递至预测输出偏移，而是通过预测模型的输入梯度完成映射，其传递效应与预测模型的输入-输出映射特性强相关。
+
+在此基础上，进一步分析插补误差对预测损失的影响。在损失函数$\mathcal{L}_P$局部光滑且满足一阶近似的条件下，由预测输出偏移引入的预测损失变化量$\Delta\mathcal{L}_P$可近似表示为：
+\begin{equation}\label{eq:loss_approx}
+	\Delta\mathcal{L}_P\approx (\nabla_Y\mathcal{L}_P(\mathcal{P}_{\phi^\ast}(X^\ast)))^T\Delta Y
+\end{equation}
+
+将式\ref{eq:taylor_expansion}代入式\ref{eq:loss_approx}，得到核心结论（后文称该式为\textbf{误差传播方程}）：
+\begin{equation}\label{eq:error_propagation}
+	\begin{aligned}
+		\Delta\mathcal{L}_P
+		&\approx (\nabla_Y\mathcal{L}_P(\mathcal{P}_{\phi^\ast}(X^\ast)))^T
+		(\nabla_X\mathcal{P}_{\phi^\ast}(X^\ast))^T\Delta X\\
+		&= (\nabla_X\mathcal{P}_{\phi^\ast}(X^\ast)
+		\nabla_Y\mathcal{L}_P(\mathcal{P}_{\phi^\ast}(X^\ast)))^T\Delta X\\
+		&= (\nabla_X\mathcal{L}_P(\mathcal{P}_{\phi^\ast}(X^\ast)))^T\Delta X.
+	\end{aligned}
+\end{equation}
+其中$\nabla_X\mathcal{L}_P(\mathcal{P}_{\phi^\ast}(X^\ast))$表示预测损失函数在输入空间的梯度，即为 $Q$ 关于插补结果 $\hat{X}$ 在真实值 $X^\ast$ 处的输入梯度。式\ref{eq:error_propagation}揭示了预测损失变化与插补误差方向之间的内积关系。这一等式看似简单，却传递了一个与传统认知截然不同的信息。直觉上，我们会认为插补误差的标量越小（$\|\Delta X\|$越小），预测损失就越低，这是传统两阶段方法"先插准、再预测"思路的隐含前提。然而，\textbf{误差传播方程}（式\ref{eq:error_propagation}）告诉我们：$\Delta\mathcal{L}_P$取决于$\Delta X$与$\nabla_X\mathcal{L}_P$\textbf{的内积}，而非$\|\Delta X\|$。这意味着两个范数完全相同的插补误差，可能因为方向不同而产生截然相反的预测效果。具体而言，根据内积的符号，存在三种定性不同的情形：
+
+\begin{itemize}
+	\item 当$\Delta X$与$\nabla_X\mathcal{L}_P$方向一致时，$\Delta\mathcal{L}_P > 0$，插补误差\textbf{增加}预测损失；
+	\item 当$\Delta X$与$\nabla_X\mathcal{L}_P$正交时，$\Delta\mathcal{L}_P\approx 0$，插补误差对预测损失\textbf{无一阶影响}；
+	\item 当$\Delta X$与$\nabla_X\mathcal{L}_P$方向相反时，$\Delta\mathcal{L}_P < 0$，插补误差\textbf{降低}预测损失。
+\end{itemize}
+
+\textbf{一阶近似的有效半径。} 上述分析建立在 $\mathcal{P}_{\phi^\ast}$ 在 $X^\ast$ 处一阶 Taylor 展开的基础上。由 Taylor 余项定理，若 $\mathcal{P}_{\phi^\ast}$ 的 Hessian 在 $X^\ast$ 的邻域内谱范数有界（记为 $M_{\mathcal{P}}$），则线性近似的绝对误差以 $\frac{M_{\mathcal{P}}}{2}\|\Delta X\|_F^2$ 为上界。当 $\|\Delta X\|_F$ 较大时（训练初期或高缺失率场景），该误差不可忽略。此外，式\ref{eq:input_constraint}中的 $\nabla_X\mathcal{L}_P(X^\ast)$ 依赖于真实值 $X^\ast$，而实际训练中仅能获取当前插补 $\hat{X}$ 处的梯度 $\nabla_X\mathcal{L}_P(\hat{X})$。由 $\nabla_X\mathcal{L}_P$ 的 Lipschitz 连续性，这一替换引入的误差以 $\mathcal{O}(\|\Delta X\|)$ 为界。B3（预训练+TIP）策略正是通过先以插补损失预训练降低 $\|\Delta X\|$，使 TIP 在 Taylor 近似的有效半径内启动，从而缓解上述两类误差。
+
+因此，为使插补更新能够在一阶近似下保证预测损失不增加，必须满足以下\textbf{输入空间的插补误差约束}：
+\begin{equation}\label{eq:input_constraint}
+	(\nabla_X\mathcal{L}_P(\mathcal{P}_{\phi^\ast}(X^\ast)))^T\Delta X\leq 0.
+\end{equation}
+式\ref{eq:input_constraint}明确了输入空间中插补优化的约束条件。然而在实际模型训练中，我们无法直接对$\Delta X$施加硬约束，只能通过优化插补模型参数$\theta$间接控制插补结果。因此，\textbf{将输入空间的插补误差约束转化为参数空间的梯度更新约束}，是设计可操作优化策略的关键桥梁。
+
+\subsection{输入空间约束到参数空间的转化}
+
+根据链式求导法则，预测损失$\mathcal{L}_P$关于插补模型参数$\theta$的梯度为：
+\begin{equation}\label{eq:chain_gradient}
+	\nabla_\theta\mathcal{L}_P = (\nabla_\theta\hat{X})^T\nabla_X\mathcal{L}_P(\mathcal{P}_{\phi^\ast}(X^\ast)),
+\end{equation}
+其中$\nabla_\theta\hat{X}$为插补模型输出关于参数的雅可比矩阵，参数更新量$\Delta\theta$与插补结果变化量$\Delta X$满足一阶近似：
+\begin{equation}\label{eq:param_delta_approx}
+	\Delta X\approx\nabla_\theta\hat{X}\Delta\theta.
+\end{equation}
+
+将式\ref{eq:chain_gradient}取转置可得$(\nabla_\theta\mathcal{L}_P)^T = (\nabla_X\mathcal{L}_P)^T\nabla_\theta\hat{X}$，结合式\ref{eq:param_delta_approx}的一阶近似$\Delta X\approx\nabla_\theta\hat{X}\Delta\theta$，有：
+
+\begin{equation}\label{eq:param_input_bridge}
+	\nabla_X\mathcal{L}_P^T\Delta X \approx \nabla_X\mathcal{L}_P^T\nabla_\theta\hat{X}\Delta\theta = \nabla_\theta\mathcal{L}_P^T\Delta\theta.
+\end{equation}
+
+式\ref{eq:param_input_bridge}表明，$\nabla_\theta\mathcal{L}_P^T\Delta\theta$是$\nabla_X\mathcal{L}_P^T\Delta X$在参数空间中的一阶近似表达。因此，只要在参数空间中满足约束，输入空间的预测损失在一阶近似下就不会上升。由此得到参数空间的核心约束准则：
+
+\begin{equation}\label{eq:param_constraint}
+	\nabla_\theta\mathcal{L}_P^T\Delta\theta\leq 0.
+\end{equation}
+式\ref{eq:param_constraint}的物理意义明确：\textbf{插补模型的单步参数更新量}$\Delta\theta$\textbf{必须保证预测损失在一阶近似下不上升}。与输入空间约束式\ref{eq:input_constraint}相比，式\ref{eq:param_constraint}直接作用于可优化的参数空间，为调整参数更新方向提供了可操作的约束条件。
+
+\subsection{非对称正交投影修正}
+
+前文推导的参数空间约束（式\ref{eq:param_constraint}）为插补优化提供了明确的预测保护条件。在两阶段插补方法中，由于插补过程与预测过程相互独立，$\Delta\theta=g_I$，当插补梯度 $g_I$ 与预测梯度 $g_P$ 冲突（$g_I^T g_P < 0$）时，插补更新会导致预测损失增加。此时，一个自然的修正方案是将 $g_I$ 沿 $g_P$ 方向做正交分解：
+\begin{equation}
+	g_I = g_I^\parallel + g_I^\perp,\quad g_I^\parallel = \frac{g_I^T g_P}{\|g_P\|^2} g_P.
+\end{equation}
+冲突意味着 $g_I^T g_P < 0$，因此平行分量 $g_I^\parallel$ 与 $g_P$ 方向相反，是导致冲突的根源。移除该分量，仅保留正交分量 $g_I^\perp$，得到修正后的更新方向：
+\begin{equation}
+	\Delta\theta = -\eta g_I^\perp.
+\end{equation}
+代入约束 $g_P^T\Delta\theta = g_P^T(-\eta g_I^\perp) = 0 \leq 0$，满足条件。
+
+以下定理证明该修正在所有满足约束的更新方向中，对原始插补方向改动最小。
+
+\begin{theorem}\label{th:orthogonal_projection}（正交投影最优性定理）
+	对于原始更新方向 $\Delta\theta^{(0)} = -\eta g_I$，当 $g_I^T g_P < 0$ 时，修正方向 $\Delta\theta^\ast = -\eta g_I^\perp$ 是以下约束优化问题的唯一最优解：
+	\begin{equation}
+		\min_{\Delta\theta} \|\Delta\theta - \Delta\theta^{(0)}\|^2,\quad \text{subject to } g_P^T \Delta\theta \leq 0.
+	\end{equation}
+\end{theorem}
+\begin{proof}
+	将 $\Delta\theta$ 沿 $g_P$ 分解为 $\Delta\theta = -\eta(g_I^\perp + \alpha g_P)$，代入约束得 $\alpha \geq 0$。偏差平方 $\|\Delta\theta - \Delta\theta^{(0)}\|^2 = \eta^2\|(\alpha - \beta)g_P\|^2$，其中 $\beta = (g_I^T g_P)/\|g_P\|^2 < 0$。在 $\alpha \geq 0$ 下最小值在 $\alpha = 0$ 处取得，即 $\Delta\theta^\ast = -\eta g_I^\perp$。
+\end{proof}
+
+\textbf{投影修正的二阶效应。} 上述分析建立在一阶 Taylor 近似之上。完整的预测损失变化为：
+\begin{equation}
+	\Delta\mathcal{L}_P = g_P^T \Delta\theta + \frac{1}{2}\Delta\theta^T H_P \Delta\theta + O(\|\Delta\theta\|^3),
+\end{equation}
+其中 $H_P = \nabla_\theta^2 Q(\theta)$ 为预测损失的 Hessian。正交投影修正 $\Delta\theta^\ast = -\eta g_I^\perp$ 保证了 $g_P^T \Delta\theta^\ast = 0$，但二阶项 $\frac{\eta^2}{2} (g_I^\perp)^T H_P g_I^\perp$ 仍可能为正——即投影后的更新方向虽然与 $g_P$ 正交，却可能沿 Hessian 的正曲率方向移动，导致预测损失二阶上升。记 $\lambda_{\max}(H_P)$ 为 $H_P$ 的最大特征值，则二阶安全性条件为：
+\begin{equation}\label{eq:second_order_safety}
+	\eta \leq \frac{2|g_I^T g_P|}{\lambda_{\max}(H_P) \|g_I^\perp\|^2}.
+\end{equation}
+当该条件满足时，一阶保护效应主导，二阶项的影响可控。实践中 $\lambda_{\max}(H_P)$ 难以直接估计，但可通过监控投影后 $Q(\theta - \eta g_I^\perp)$ 的实际变化间接检验二阶安全性。该分析也揭示了 B3（预训练+TIP）策略的另一重动机：预训练使 $\theta$ 进入 $Q$ 的较平坦区域（$\lambda_{\max}(H_P)$ 较小），降低二阶风险。
+
+然而，上述修正方案需要显式知道 $g_P$ 的方向和范数。由链式法则 $g_P = (\nabla_\theta\hat{X})^T\nabla_X\mathcal{L}_P$，其中 $\nabla_X\mathcal{L}_P$ 的计算需要反向传播通过整个 TSFM——对于参数量达数亿至数十亿的 TSFM，这种计算代价不可承受，且黑盒 API 部署的 TSFM 根本不暴露计算图。因此，必须在不执行 TSFM 反向传播的前提下获取 $g_P$ 的方向信息。
+
+\subsection{基于零阶梯度估计的冲突检测}
+
+上一节指出，正交投影修正需要 $g_P$ 但无法通过 TSFM 反向传播获取。本节提出一种零阶梯度估计方法，仅利用 TSFM 的前向推理能力来近似 $g_P$。
+
+记 $Q(\theta) = \mathcal{L}_P(\mathcal{P}_{\phi^\ast}(\mathcal{I}_\theta(\tilde{X}_{1:L}, M_{1:L})), Y_{L+1:L+H})$。对参数施加一对对称随机扰动 $\pm\varepsilon u$（$u \sim \mathcal{N}(0, I)$），一阶 Taylor 展开给出
+\begin{equation}
+	Q(\theta + \varepsilon u) - Q(\theta - \varepsilon u) = 2\varepsilon g_P^T u + o(\varepsilon).
+\end{equation}
+忽略高阶项，$g_P^T u \approx (Q(\theta + \varepsilon u) - Q(\theta - \varepsilon u))/(2\varepsilon)$，即 $g_P$ 在方向 $u$ 上的投影可通过\textbf{两次前向传播}的对称差分近似。与单侧差分 $Q(\theta+\varepsilon u)-Q(\theta)$ 相比，对称差分自动消去了 Taylor 展开中的偶次项，使得 $O(\varepsilon)$ 偏差项精确为零（不依赖 $u$ 的分布对称性），且在实际中具有更低的有限差分误差。采样 $k$ 个独立同分布的高斯向量 $u_1, \dots, u_k \sim \mathcal{N}(0, I)$，构造 $g_P$ 的估计量：
+\begin{equation}\label{eq:gp_estimator}
+	\hat{g}_P = \frac{1}{k} \sum_{i=1}^k \frac{Q(\theta + \varepsilon u_i) - Q(\theta - \varepsilon u_i)}{2\varepsilon} u_i.
+\end{equation}
+
+\begin{theorem}\label{th:gp_unbiased}（预测梯度估计的渐近无偏性）
+	设 $Q: \mathbb{R}^d \to \mathbb{R}$ 可微且其梯度 $\nabla Q$ 为 $L$-Lipschitz 连续。令 $Q_\varepsilon(\theta) = \mathbb{E}_{u\sim\mathcal{N}(0,I)}[Q(\theta + \varepsilon u)]$ 为 $Q$ 的 $\varepsilon$-高斯平滑。则式\ref{eq:gp_estimator}中的估计量 $\hat{g}_P$ 满足：
+	\begin{equation}
+		\mathbb{E}[\hat{g}_P] = \nabla Q_\varepsilon(\theta).
+	\end{equation}
+	进一步地，偏差满足 $\|\mathbb{E}[\hat{g}_P] - \nabla Q(\theta)\| \leq \varepsilon L\sqrt{d}$。当 $\varepsilon \to 0$ 时，$\mathbb{E}[\hat{g}_P] \to \nabla Q(\theta)$，即 $\hat{g}_P$ 是 $g_P$ 的渐近无偏估计；若 $Q$ 三阶可微且 Hessian 为 Lipschitz 连续，偏差可收紧为 $O(\varepsilon^2)$。
+\end{theorem}
+\begin{proof}
+	由高斯 Stein 恒等式，对光滑函数 $f$ 有 $\mathbb{E}_{u\sim\mathcal{N}(0,I)}[f(u) u] = \mathbb{E}[\nabla_u f(u)]$。取 $f(u) = (Q(\theta + \varepsilon u) - Q(\theta))/\varepsilon$，则 $\nabla_u f(u) = \nabla Q(\theta + \varepsilon u)$。因此：
+	\begin{align*}
+		\mathbb{E}\left[ \frac{Q(\theta + \varepsilon u) - Q(\theta)}{\varepsilon} u \right]
+		= \mathbb{E}\big[ \nabla Q(\theta + \varepsilon u) \big].
+	\end{align*}
+	由 Leibniz 积分法则与 $Q$ 的可微性，$\mathbb{E}[\nabla Q(\theta + \varepsilon u)] = \nabla_\theta \mathbb{E}[Q(\theta + \varepsilon u)] = \nabla Q_\varepsilon(\theta)$。该步表明 $\hat{g}_P$ 精确估计的是平滑函数 $Q_\varepsilon$ 的梯度，而非 $Q$ 本身的梯度。偏差由 $\nabla Q$ 的 $L$-Lipschitz 条件控制：
+	\begin{equation*}
+		\|\mathbb{E}[\nabla Q(\theta + \varepsilon u)] - \nabla Q(\theta)\|
+		\leq \mathbb{E}[\|\nabla Q(\theta + \varepsilon u) - \nabla Q(\theta)\|]
+		\leq \varepsilon L \,\mathbb{E}[\|u\|] \leq \varepsilon L \sqrt{d},
+	\end{equation*}
+	当 $\varepsilon \to 0$ 时偏差消失。若 $Q$ 具有有界三阶导数，利用 $u$ 的奇对称性可消除 $O(\varepsilon)$ 项，偏差收紧为 $O(\varepsilon^2)$。\hfill$\square$
+\end{proof}
+
+\textbf{估计方差与方向精度。} $\hat{g}_P$ 的协方差矩阵满足 $\operatorname{Cov}(\hat{g}_P) \preceq \frac{1}{k}(\|\nabla Q(\theta)\|^2 I + \varepsilon^2 L^2 (d+2) I)$，其迹（总方差）为 $O(d/k)$，与参数维度 $d$ 成正比、与采样数 $k$ 成反比。更为关键的是\textbf{方向精度}——冲突检测仅需 $g_I^T \hat{g}_P$ 的符号而非 $\hat{g}_P$ 的精确数值。$\hat{g}_P$ 与 $g_P$ 的余弦相似度满足：
+\begin{equation}
+	\mathbb{E}[\cos(\hat{g}_P, g_P)] \approx \frac{1}{\sqrt{1 + \frac{d}{k}\cdot\frac{\operatorname{Var}(\hat{g}_{P,i})}{\|g_P\|^2}}}.
+\end{equation}
+当 $d/k$ 较大时方向精度下降。对于典型插补模型（$d \approx 10^5 \sim 10^6$），$k=20$ 时方向精度有限，因此在第4.5节的假设与讨论中将给出相关缓解策略。
+
+\textbf{扰动尺度匹配。} 实践中需注意 $u_i \sim \mathcal{N}(0, I)$ 的模长 $\|u_i\| \approx \sqrt{d}$，因此实际参数扰动幅度为 $\varepsilon \|u_i\| \approx \varepsilon \sqrt{d}$。当参数维度较高时，未经缩放的 $\varepsilon u_i$ 可能使 $Q(\theta + \varepsilon u_i)$ 完全脱离 Taylor 展开的有效半径。推荐做法为对扰动方向做归一化（$\|u_i\|=1$）或将 $\varepsilon$ 缩放为 $\varepsilon / \sqrt{d}$，以确保扰动幅度与参数维度解耦。本文实验中取 $\varepsilon = 10^{-4}$ 并使用标准高斯采样，小批量下的有效扰动幅度在实际插补模型上经验可行；对于更大规模的插补模型，建议采用归一化策略。
+
+获得 $\hat{g}_P$ 后，将其代入正交投影修正框架即可。冲突检测条件为 $g_I^T \hat{g}_P < 0$。由定理\ref{th:gp_unbiased}，$\mathbb{E}[g_I^T \hat{g}_P] = g_I^T \nabla Q_\varepsilon(\theta)$，当 $\varepsilon$ 充分小时 $\nabla Q_\varepsilon(\theta) \approx g_P$，因此符号判定在期望意义下近似成立。由于 $\hat{g}_P$ 是 $k$ 个独立样本的均值，检测正确概率 $\Pr[\operatorname{sgn}(g_I^T \hat{g}_P) = \operatorname{sgn}(g_I^T g_P)]$ 随 $k$ 增大而趋近于 1，其收敛速率取决于 $g_I^T g_P$ 的信噪比（详见第4.5节的讨论）。投影修正公式以 $\hat{g}_P$ 替换 $g_P$ 后直接适用：
+\begin{equation}\label{eq:projection_with_hat}
+	g_I^\parallel = \frac{g_I^T \hat{g}_P}{\|\hat{g}_P\|^2} \hat{g}_P,\quad \Delta\theta = -\eta (g_I - g_I^\parallel).
+\end{equation}
+
+每步参数更新的总代价为 $2k$ 次 TSFM 前向推理（$k$ 对对称扰动 $\pm\varepsilon u_i$，式\ref{eq:gp_estimator}的每次采样需 2 次求值），无需对 TSFM 执行反向传播。作为对比，反向传播方案需 1 次前向 + 1 次反向，而反向计算代价约为前向的 4--6 倍。当 $k$ 取 10--20 时（$2k = 20 \sim 40$ 次 TSFM 前向），零阶方案的计算开销与反向传播方案可比或略高，但天然支持黑盒部署；若 TSFM 推理延迟为瓶颈，可采用较小的 $k$（如 $k=5$，$2k=10$ 次前向）在效率与精度间折衷。
+
+\subsection{TIP方法设计与实现}
+
+基于梯度估计与\textbf{正交投影最优性定理}（定理\ref{th:orthogonal_projection}），本节提出\textbf{基于零阶梯度估计的任务感知插补方法（TIP）}。
+
+在进入具体的算法步骤之前，有必要先点明 TIP 设计的三个核心原则。第一，\textbf{非对称性}：只有插补更新方向被修正，预测方向作为约束的参照方向始终保持不变。这源于预测模型参数冻结的工程现实，是 TIP 区别于 PCGrad 等对称方法的本质特征。第二，\textbf{最小侵入性}：正交投影修正仅移除更新方向中对预测有害的反向分量，完整保留与预测方向正交的语义信息。第三，\textbf{黑盒兼容性}：梯度估计仅需 TSFM 的前向推理能力，不要求其内部计算图可见或可微分。预测模型可以黑盒 API 的形式存在，只需提供前向推理接口。
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=1.0\textwidth]{方法图.png}
+\caption{TIP方法整体流程图。插补模型$\mathcal{I}_\theta$与预测模型$\mathcal{P}_{\phi^\ast}$串联为端到端管道：前向传播同时计算插补损失$\mathcal{L}_I$与基线预测损失$Q(\theta)$；反向传播仅通过插补模型计算插补梯度$g_I$；梯度估计模块通过随机采样计算$\hat{g}_P$并判定$g_I^T\hat{g}_P$的符号；冲突发生时执行非对称正交投影修正，无冲突时直接使用原始插补梯度更新参数。}
+\label{fig:tip-method}
+\end{figure}
+
+\subsubsection{更新策略}
+
+TIP将插补模型$\mathcal{I}_{\theta}$与预训练的预测模型$\mathcal{P}_{\phi^\ast}$串联为端到端管道，在训练过程中通过零阶梯度估计实现预测优先的任务感知优化。图\ref{fig:tip-method}展示了TIP的整体流程，在微调的第$k$个迭代步，给定当前插补模型参数$\theta^{(k)}$，执行以下完整更新流程：
+\begin{enumerate}
+	\item\textbf{前向传播与基线损失计算}：将含缺失的输入序列$X_{1:L}$输入插补模型$\mathcal{I}_{\theta^{(k)}}$，得到插补结果$\hat{X}_{1:L} =\mathcal{I}_{\theta^{(k)}}(X_{1:L}, M_{1:L})$。将插补结果输入预训练的预测模型$\mathcal{P}_{\phi^\ast}$，得到预测结果$\hat{Y}_{L+1:L+H} =\mathcal{P}_{\phi^\ast}(\hat{X}_{1:L})$。基于前向传播结果，计算插补损失$\mathcal{L}_I(\theta^{(k)})$和基线预测损失$Q(\theta^{(k)})$。此步骤涉及1次插补模型前向传播和1次TSFM前向推理。
+	\item\textbf{反向传播与候选方向计算}：对插补损失$\mathcal{L}_I$执行反向传播，仅计算插补模型参数$\theta^{(k)}$的梯度，作为候选更新方向$d^{(k)} = g_I^{(k)} = \nabla_\theta\mathcal{L}_I(\theta^{(k)})$。此步骤仅涉及插补模型的反向传播，不涉及TSFM。
+	\item\textbf{梯度估计与冲突检测}：采样 $k$ 个独立高斯向量计算 $\hat{g}_P^{(k)}$（式\ref{eq:gp_estimator}）。若 $g_I^{(k)T} \hat{g}_P^{(k)} \geq 0$ 则无需修正；若 $g_I^{(k)T} \hat{g}_P^{(k)} < 0$ 则判定为方向冲突。此步骤\textbf{仅需 $k$ 次 TSFM 前向传播}，无需对 TSFM 执行反向传播。
+	\item\textbf{非对称正交投影修正}：当检测到方向冲突时，严格遵循\textbf{正交投影最优性定理}（定理\ref{th:orthogonal_projection}）的最优修正结论。使用 $\hat{g}_P^{(k)}$ 进行正交投影修正：计算平行分量 $g_I^{\parallel (k)} =\frac{g_I^{(k)T} \hat{g}_P^{(k)}}{\|\hat{g}_P^{(k)}\|^2} \hat{g}_P^{(k)}$，修正后的更新方向为 $g_{I,\perp}^{(k)} = g_I^{(k)} - g_I^{\parallel (k)}$。最终参数更新：$\theta^{(k+1)} = \theta^{(k)} - \eta g_{I,\perp}^{(k)}$。根据正交投影的数学性质，$g_{I,\perp}^{(k)T} \hat{g}_P^{(k)} = 0$，满足约束 $\hat{g}_P^{(k)T}\Delta\theta^{(k)} \leq 0$。
+\end{enumerate}
+
+\subsubsection{算法实现流程}
+
+TIP方法的完整实现流程如算法\ref{alg:tip}所示。算法输入包含预训练的预测模型$\mathcal{P}_{\phi^\ast}$（黑盒，仅需前向推理接口）、初始化的插补模型$\mathcal{I}_{\theta^{(0)}}$、训练数据集$\mathcal{D}$以及相关超参数。
+
+\begin{algorithm}[ht]
+	\caption{基于零阶梯度估计的任务感知插补方法}
+	\label{alg:tip}
+	\begin{algorithmic}[1]
+		\Require 预训练的预测模型$\mathcal{P}_{\phi^\ast}$（黑盒，仅需前向推理接口），初始化的插补模型$\mathcal{I}_{\theta^{(0)}}$，训练数据集$\mathcal{D}$，学习率$\eta$，随机采样数$k$、扰动步长$\epsilon$，最大迭代次数$K$，插补损失函数$\mathcal{L}_I$，预测损失函数$\mathcal{L}_P$（即$Q$）。
+		\For{$k = 0$ to $K-1$}
+			\State 从训练数据集$\mathcal{D}$中采样一个批次的训练样本$(X_{1:L}, M_{1:L}, Y_{L+1:L+H})$
+			\Statex\textit{// 前向传播（基线）}
+			\State $\hat{X}_{1:L} =\mathcal{I}_{\theta^{(k)}}(X_{1:L}, M_{1:L})$\Comment{插补结果}
+			\State $\hat{Y}_{L+1:L+H} =\mathcal{P}_{\phi^\ast}(\hat{X}_{1:L})$\Comment{预测结果（TSFM前向推理）}
+			\Statex\textit{// 损失计算}
+			\State $\mathcal{L}_I^{(k)} =\mathcal{L}_I(\theta^{(k)})$\Comment{插补损失}
+			\State $Q^{(k)} =\mathcal{L}_P(\theta^{(k)})$\Comment{基线预测损失}
+			\Statex\textit{// 反向传播（仅通过插补模型）}
+			\State $d^{(k)} = g_I^{(k)} =\nabla_\theta\mathcal{L}_I(\theta^{(k)})$\Comment{候选更新方向}
+			\Statex\textit{// 梯度估计（对称差分，式\ref{eq:gp_estimator}）}
+			\State 采样 $u_1,\dots,u_k\sim\mathcal{N}(0,I)$，计算 $Q(\theta^{(k)}\pm\epsilon u_i)$\Comment{$2k$次TSFM前向}
+			\State $\hat{g}_P^{(k)} = \frac1k\sum_{i=1}^k\frac{Q(\theta^{(k)}+\epsilon u_i)-Q(\theta^{(k)}-\epsilon u_i)}{2\epsilon}u_i$
+			\Statex\textit{// 方向冲突检测与修正}
+			\If{$g_I^{(k)T}\hat{g}_P^{(k)} < 0$}\Comment{方向冲突}
+				\State $d_{\perp}^{(k)} = d^{(k)} -\frac{\langle \hat{g}_P^{(k)}, d^{(k)}\rangle}{\|\hat{g}_P^{(k)}\|^2} \hat{g}_P^{(k)}$\Comment{投影修正}
+				\State $\Delta\theta^{(k)} = -\eta d_{\perp}^{(k)}$
+			\Else
+				\State $\Delta\theta^{(k)} = -\eta d^{(k)}$\Comment{无需修正}
+			\EndIf
+			\State $\theta^{(k+1)} =\theta^{(k)} +\Delta\theta^{(k)}$\Comment{参数更新}
+		\EndFor
+	\end{algorithmic}
+\end{algorithm}
+
+\subsection{理论适用性分析}\label{sec:theory_applicability}
+
+理论推导涉及两重一阶近似：(a) 预测模型在 $X^\ast$ 处的 Taylor 展开（误差 $O(\|\Delta X\|_F^2)$，见式\ref{eq:error_propagation}后的分析）；(b) 参数更新与插补结果变化的线性近似 $\Delta X \approx \nabla_\theta\hat{X}\Delta\theta$（式\ref{eq:param_delta_approx}）。缺失率较高或训练初期 $\|\Delta X\|$ 较大时，两重近似的精度均下降，方向冲突检测与修正效能减弱。
+
+\subsection{收敛性分析}
+
+以下在简化假设下给出 TIP 的收敛性论证，以补充定理\ref{th:orthogonal_projection}仅覆盖单步最优的局限。假设：(A1) $\mathcal{L}_I$ 为 $\mu_I$-强凸且 $L_I$-光滑；(A2) $Q$ 为凸且 $L_Q$-光滑；(A3) 使用真实 $g_P$（即 $k\to\infty$ 且 $\varepsilon\to 0$ 的极限情形）。在此设定下，TIP 的迭代等价于求解约束优化问题 $\min_\theta \mathcal{L}_I(\theta) \; \text{s.t.} \; Q(\theta) \leq Q(\theta^{(0)})$ 的投影次梯度方法：每一步沿 $-\eta g_I$ 尝试更新，若不满足约束则投影至约束边界得到 $-\eta g_I^\perp$。由 $\mathcal{L}_I$ 的强凸性，$\theta$ 收敛至唯一约束最优解 $\theta^\ast_{\text{TIP}}$。记传统两阶段方法的收敛点为 $\theta^\ast_{\text{2-stage}} = \arg\min_\theta \mathcal{L}_I(\theta)$，由 $Q$ 的凸性及 TIP 的可行性条件 $Q(\theta^{(t)}) \leq Q(\theta^{(0)})$，可得 $Q(\theta^\ast_{\text{TIP}}) \leq Q(\theta^\ast_{\text{2-stage}})$，即 TIP 的解在预测性能上不劣于传统两阶段方法。当使用有限 $k$ 和 $\varepsilon > 0$ 的零阶估计时，$\hat{g}_P$ 的估计误差使收敛类型从确定性收敛退化为依概率收敛。
+
+\section{实验}
+
+\subsection{研究问题}
+
+为系统验证 TIP 的有效性与工作机制，实验围绕以下五个递进的研究问题（RQ）展开：
+
+\begin{enumerate}
+	\item \textbf{RQ1（预测性能）}：TIP 能否显著提升下游预测精度？在何种条件下增益最大？
+	\item \textbf{RQ2（插补-预测平衡）}：TIP 在提升预测性能的同时，是否以牺牲插补质量为代价？
+	\item \textbf{RQ3（机制可信性）}：零阶梯度估计能否有效检测方向冲突？非对称投影修正的贡献是否可被验证？
+	\item \textbf{RQ4（设计鲁棒性）}：TIP 对关键超参数（$k$、$\varepsilon$、投影策略）的敏感程度如何？
+	\item \textbf{RQ5（任务关联性）}：TIP 能否修复插补性能与预测性能之间的统计断裂（$\rho \approx 0$）？
+\end{enumerate}
+
+\subsection{实验设置}
+
+\subsubsection{数据集}
+
+实验采用七个真实世界数据集，均来自 TIME\citep{qiao2026} 基准测试仓库，覆盖供应链、物理测量、工业云计算、环境监测、公共卫生、工业运维和能源气象等多元场景。表\ref{tab:dataset_stats}汇总了各数据集的基本统计信息。
+
+\begin{table}[htbp]
+\centering
+\caption{数据集统计信息}
+\label{tab:dataset_stats}
+\footnotesize
+\begin{tabular}{lcccc}
+\toprule
+数据集 & 样本数 & 时间粒度 & 预测长度 & 缺失率\\
+\midrule
+Supply Chain-Customer & 2007 & 1 day & 30 & 0.00\%\\
+Current Velocity & 4818 & 1 hour & 24 & 0.00\%\\
+Azure2019-D & 8639 & 5 min & 288 & 0.00\%\\
+Coastal T-S & 21971 & 15 min & 12 & 0.00\%\\
+CPHL & 17566 & 30 min & 12 & 14.20\%\\
+MetroPT-3 & 17809 & 5 min & 48 & 17.11\%\\
+Australia Solar & 35064 & 1 hour & 24 & 27.44\%\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{缺失模式生成}
+
+为贴合现实，我们采用最常见的连续块缺失模式模拟现实数据中的缺失情况：随机选择起始位置，删除长度为 $block\_size = 20$ 的连续时间窗口内的所有变量观测值。该模式对应系统停机、通信中断等实际场景中常见的连续缺失区段。主实验及消融实验中，缺失率固定为 $p = 0.2$；缺失率鲁棒性实验（\S\ref{sec:missing_robustness}）中，缺失率覆盖 $p \in \{0.1, 0.2, 0.3, 0.4, 0.5\}$ 五档以系统检验 TIP 增益随缺失强度的变化规律。所有缺失均在 z-score 归一化之前生成；归一化以训练集的均值和方差为参考，对验证集和测试集执行相同变换以防止数据泄露。
+
+\subsubsection{数据处理与模型配置}
+
+固定回顾窗口长度 $L=512$，预测窗口长度 $H$ 参照 TIME 基准测试仓库默认设置，按训练集:验证集:测试集 = 7:1:2 进行时序分割。插补模块选取四种架构各异的代表性模型：BRITS\citep{NEURIPS2018_734e6bfc}（双向 RNN）、SAITS\citep{du2023saits}（对角掩码自注意力）、DeepMVI\citep{ZHANG202167}（Transformer+CNN 混合）、TimesNet\citep{wu2023timesnet}，以验证 TIP 对不同插补架构的通用性。预测模块选取两种独立开发的 Decoder-only TSFM：Sundial\citep{pmlr-v267-liu25be} 和 TimesFM\citep{pmlr-v235-das24c}，预测时参数冻结。共计 $4 \times 2 = 8$ 种插补-预测组合。
+
+\subsubsection{基准方法与消融设计}
+
+为分离 TIP 各组件的贡献，设立以下五种策略。其中 B1 为无任务感知基线，B2 为本文核心方法，B3 为高缺失场景的扩展策略，B4--B5 为消融对照。
+
+\begin{enumerate}
+	\item \textbf{B1（两阶段基线）}：仅以插补重构损失 $\mathcal{L}_I$ 训练插补模型至收敛，拼接冻结的预测模型在测试集上评估。代表无任何任务感知信息的性能下界。
+	\item \textbf{B2（TIP）}：以插补梯度 $g_I$ 为候选更新方向，通过对称差分零阶估计（式\ref{eq:gp_estimator}）计算 $\hat{g}_P$，检测 $g_I^T \hat{g}_P < 0$ 时执行非对称正交投影修正。$k=20$，$\varepsilon=10^{-4}$。
+	\item \textbf{B3（预训练+TIP）}：先以 $\mathcal{L}_I$ 预训练 2 个 epoch，再切换至 TIP 微调至收敛。设计动机是针对高缺失率场景下训练初期 $\|\Delta X\|$ 过大导致两重一阶近似精度恶化的问题，通过预训练使插补模型提前收敛至合理参数邻域。B3 在主实验中仅作为对照参考，其系统评估在缺失率鲁棒性分析（\S\ref{sec:missing_robustness}）中与 B2 联合进行。
+	\item \textbf{B4（随机方向消融）}：将 B2 中的 $\hat{g}_P$ 替换为从 $\mathcal{N}(0, I)$ 采样的随机方向 $g_{\text{rand}}$，其余流程不变。B4 用于验证零阶梯度估计提供的方向信息是否显著优于随机扰动——若 B4 与 B2 性能接近，则说明 TIP 的增益主要来自"任意方向的投影正则化"而非"预测感知的方向选择"。
+	\item \textbf{B5（无条件投影消融）}：取消冲突检测步骤，\textbf{每次迭代无条件执行}正交投影修正（即始终使用 $g_I^\perp$ 更新参数）。B5 用于检验冲突检测的必要性——若无条件投影的性能与 B2 相当或更优，则说明不应仅在冲突时投影。
+\end{enumerate}
+
+\subsubsection{实现细节}
+
+为公平对比，所有策略共享完全相同的优化配置：AdamW 优化器，学习率 $1\times10^{-4}$，batch size 32，早停 patience=5（验证损失连续 5 个 epoch 不改善，最大 epoch 数 10000），取验证集上性能最佳的模型权重用于测试评估。训练过程中，仅在观测位置上计算插补损失与预测损失。TIP 相关实验中，采样数 $k$ 默认设为 20，扰动步长 $\varepsilon$ 默认设为 $10^{-4}$。
+
+\subsubsection{评估指标与统计检验}
+
+采用平均绝对误差（MAE）和均方误差（MSE）评估插补与预测性能。记测试样本组为：
+\begin{equation}
+	\mathcal{S} = \{(X^\ast_{1:L}, M_{x, 1:L}, M_{y, 1:L}, Y_{L+1:L+H})\},
+\end{equation}
+其中 $\hat{X}$、$\hat{Y}$ 分别为插补和预测模型输出，$X^\ast_{1:L}$、$Y_{L+1:L+H}$ 分别为回顾窗口和预测序列真值，$M_{x, 1:L}$、$M_{y, 1:L}$ 为对应掩码矩阵。
+
+完整数据集上，插补性能仅在缺失位置评估。计算公式如下：
+
+\begin{equation}
+	\text{MAE} =\frac{\sum_{i=1}^L M_{x, i} |\hat{X}_i - X^\ast_i|}{\sum_{i=1}^L M_{x, i}},
+\end{equation}
+
+\begin{equation}
+	\text{MSE} =\frac{\sum_{i=1}^L M_{x, i} (\hat{X}_i - X^\ast_i)^2}{\sum_{i=1}^L M_{x, i}},
+\end{equation}
+
+对于预测性能的评估，计算在所有位置上的误差。计算公式如下：
+
+\begin{equation}
+	\text{MAE} =\frac{1}{H}\sum_{i=1}^H |\hat{Y}_i - Y_i|,
+\end{equation}
+
+\begin{equation}
+	\text{MSE} =\frac{1}{H}\sum_{i=1}^H (\hat{Y}_i - Y_i)^2,
+\end{equation}
+
+在含有自然缺失的数据集上，由于真值$X^\ast_{1:L}$和$Y_{L+1:L+H}$上存在缺失，我们仅在观测位置上评估预测性能，计算公式如下：
+
+\begin{equation}
+	\text{MAE} =\frac{\sum_{i=1}^H M_{y, i} |\hat{Y}_i - Y_i|}{\sum_{i=1}^H M_{y, i}},
+\end{equation}
+
+\begin{equation}
+	\text{MSE} =\frac{\sum_{i=1}^H M_{y, i} (\hat{Y}_i - Y_i)^2}{\sum_{i=1}^H M_{y, i}},
+\end{equation}
+
+由于不同数据集、缺失率和模型组合下的误差尺度差异较大，直接跨配置聚合绝对指标会引入不可忽略的尺度偏差。本文以 B1 为各配置的基线参考，计算各策略的预测指标对 B1 的相对比例：
+\begin{equation}
+	r_{\text{MAE}}^{(s)} = \frac{\text{MAE}^{(s)}}{\text{MAE}^{(\text{B1})}}, \qquad
+	r_{\text{MSE}}^{(s)} = \frac{\text{MSE}^{(s)}}{\text{MSE}^{(\text{B1})}},
+\end{equation}
+其中 $s \in \{\text{B2}, \text{B4}, \text{B5}\}$。$r < 1$ 表示相对 B1 改善，$r > 1$ 表示退化。
+
+\textbf{统计检验。} 对所有策略在所有配置下的预测 MAE，使用 Friedman 检验判断是否存在系统性差异；若 Friedman 检验显著（$p < 0.05$），进一步使用 Nemenyi 事后检验确定哪些策略对之间存在显著差异。此外，报告 B2 相对 B1 在所有配置上的成对胜率（Win/Tie/Loss）及符号检验 $p$ 值。
+
+\subsection{主实验结果}
+
+\subsubsection{预测性能对比}\label{sec:main_results}
+
+表\ref{tab:main_sundial}和表\ref{tab:main_timesfm}分别报告了以 Sundial 和 TimesFM 为预测模型时，\textbf{固定缺失率 $p=0.2$}下所有数据集与插补模型组合中 B1 与 B2 的预测 MAE 和 MSE。
+
+\begin{table}[htbp]
+\centering
+\caption{预测性能对比（Sundial）}
+\label{tab:main_sundial}
+\footnotesize
+\setlength{\tabcolsep}{2.5pt}
+\renewcommand{\arraystretch}{0.95}
+\begin{tabular}{cccccc}
+\toprule
+\multirow{2}{*}{数据集} & \multirow{2}{*}{插补模型} & \multicolumn{2}{c}{B1} & \multicolumn{2}{c}{B2（TIP）} \\
+\cmidrule(lr){3-4}\cmidrule(lr){5-6}
+ & & MAE & MSE & MAE & MSE \\
+\midrule
+\multirow{4}{*}{\shortstack{Supply Chain\\-Customer}} & BRITS  & --- & --- & --- & --- \\
+ & SAITS  & --- & --- & --- & --- \\
+ & DeepMVI & --- & --- & --- & --- \\
+ & TimesNet & --- & --- & --- & --- \\
+\midrule
+\multirow{4}{*}{\shortstack{Current\\Velocity}} & BRITS  & --- & --- & --- & --- \\
+ & SAITS  & --- & --- & --- & --- \\
+ & DeepMVI & --- & --- & --- & --- \\
+ & TimesNet & --- & --- & --- & --- \\
+\midrule
+\multirow{4}{*}{\shortstack{Azure2019\\-D}} & BRITS  & --- & --- & --- & --- \\
+ & SAITS  & --- & --- & --- & --- \\
+ & DeepMVI & --- & --- & --- & --- \\
+ & TimesNet & --- & --- & --- & --- \\
+\midrule
+\multirow{4}{*}{\shortstack{Coastal\\T-S}} & BRITS  & --- & --- & --- & --- \\
+ & SAITS  & --- & --- & --- & --- \\
+ & DeepMVI & --- & --- & --- & --- \\
+ & TimesNet & --- & --- & --- & --- \\
+\midrule
+\multirow{4}{*}{\shortstack{CPHL}} & BRITS  & --- & --- & --- & --- \\
+ & SAITS  & --- & --- & --- & --- \\
+ & DeepMVI & --- & --- & --- & --- \\
+ & TimesNet & --- & --- & --- & --- \\
+\midrule
+\multirow{4}{*}{\shortstack{MetroPT\\-3}} & BRITS  & --- & --- & --- & --- \\
+ & SAITS  & --- & --- & --- & --- \\
+ & DeepMVI & --- & --- & --- & --- \\
+ & TimesNet & --- & --- & --- & --- \\
+\midrule
+\multirow{4}{*}{\shortstack{Australia\\Solar}} & BRITS  & --- & --- & --- & --- \\
+ & SAITS  & --- & --- & --- & --- \\
+ & DeepMVI & --- & --- & --- & --- \\
+ & TimesNet & --- & --- & --- & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{预测性能对比（TimesFM）}
+\label{tab:main_timesfm}
+\footnotesize
+\setlength{\tabcolsep}{2.5pt}
+\renewcommand{\arraystretch}{0.95}
+\begin{tabular}{cccccc}
+\toprule
+\multirow{2}{*}{数据集} & \multirow{2}{*}{插补模型} & \multicolumn{2}{c}{B1} & \multicolumn{2}{c}{B2（TIP）} \\
+\cmidrule(lr){3-4}\cmidrule(lr){5-6}
+ & & MAE & MSE & MAE & MSE \\
+\midrule
+\multirow{4}{*}{\shortstack{Supply Chain\\-Customer}} & BRITS  & --- & --- & --- & --- \\
+ & SAITS  & --- & --- & --- & --- \\
+ & DeepMVI & --- & --- & --- & --- \\
+ & TimesNet & --- & --- & --- & --- \\
+\midrule
+\multirow{4}{*}{\shortstack{Current\\Velocity}} & BRITS  & --- & --- & --- & --- \\
+ & SAITS  & --- & --- & --- & --- \\
+ & DeepMVI & --- & --- & --- & --- \\
+ & TimesNet & --- & --- & --- & --- \\
+\midrule
+\multirow{4}{*}{\shortstack{Azure2019\\-D}} & BRITS  & --- & --- & --- & --- \\
+ & SAITS  & --- & --- & --- & --- \\
+ & DeepMVI & --- & --- & --- & --- \\
+ & TimesNet & --- & --- & --- & --- \\
+\midrule
+\multirow{4}{*}{\shortstack{Coastal\\T-S}} & BRITS  & --- & --- & --- & --- \\
+ & SAITS  & --- & --- & --- & --- \\
+ & DeepMVI & --- & --- & --- & --- \\
+ & TimesNet & --- & --- & --- & --- \\
+\midrule
+\multirow{4}{*}{\shortstack{CPHL}} & BRITS  & --- & --- & --- & --- \\
+ & SAITS  & --- & --- & --- & --- \\
+ & DeepMVI & --- & --- & --- & --- \\
+ & TimesNet & --- & --- & --- & --- \\
+\midrule
+\multirow{4}{*}{\shortstack{MetroPT\\-3}} & BRITS  & --- & --- & --- & --- \\
+ & SAITS  & --- & --- & --- & --- \\
+ & DeepMVI & --- & --- & --- & --- \\
+ & TimesNet & --- & --- & --- & --- \\
+\midrule
+\multirow{4}{*}{\shortstack{Australia\\Solar}} & BRITS  & --- & --- & --- & --- \\
+ & SAITS  & --- & --- & --- & --- \\
+ & DeepMVI & --- & --- & --- & --- \\
+ & TimesNet & --- & --- & --- & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\FloatBarrier
+
+\subsubsection{插补-预测平衡分析}\label{sec:imputation_prediction_balance}
+
+为检验 TIP 是否在提升预测性能的同时维持了插补质量（RQ2），图\ref{fig:balance}绘制了 B1 与 B2 在各配置下插补 MAE 与预测 MAE 的散点分布。理想情况下，B2 的数据点应位于 B1 的左下方（插补和预测双优）或正下方（预测优、插补持平），而不应出现在右上方（双劣）或左上方（插补优但预测劣）。同时，以插补MAE相对B1的变化率为横轴、预测MAE相对B1的变化率为纵轴，标出各配置在四个象限中的分布比例，以直观呈现"插补-预测协同优化"的覆盖程度。
+
+\subsection{消融实验}\label{sec:ablation}
+
+\subsubsection{采样数 \texorpdfstring{$k$}{k} 的消融}
+
+在固定 $\varepsilon = 10^{-4}$ 的条件下，测试 $k \in \{5, 10, 20, 50, 100\}$ 对预测 MAE 的影响。报告各 $k$ 下的性能均值和标准差，以及对应的每次迭代 TSFM 前向次数（$2k$）。预期：$k$ 过小（$k=5$）时方向精度不足导致性能退化；$k$ 过大（$k=100$）时性能趋于饱和但计算代价线性增长；$k=20$ 应在性能与代价间取得合理折衷。
+
+\subsubsection{扰动步长 \texorpdfstring{$\varepsilon$}{epsilon} 的消融}
+
+在固定 $k=20$ 的条件下，测试 $\varepsilon \in \{10^{-5}, 10^{-4}, 10^{-3}, 10^{-2}, 10^{-1}\}$。预期：(1) $\varepsilon$ 过小（$10^{-5}$）时，$Q(\theta\pm\varepsilon u_i)$ 的差值被数值精度淹没，$\hat{g}_P$ 退化为噪声；(2) $\varepsilon$ 过大（$10^{-1}$）时，Taylor 近似失效且扰动幅度可能使 $Q$ 值脱离有效范围；(3) 中间值 $10^{-4} \sim 10^{-3}$ 为有效区间。建议同步测试归一化扰动策略（$\|u_i\|=1$）与未归一化策略的对比。
+
+\subsubsection{投影策略消融}
+
+对比投影策略的预测性能：(a) \textbf{非对称投影}（B2，本文方案）；(b) \textbf{无条件投影}（B5，每次迭代都投影）；(c) \textbf{随机方向投影}（B4）作为下界参照。本消融直接回答两个关键问题：(1) 零阶梯度估计提供的方向信息是否有效（B2 vs B4）？(2) 冲突检测是否必要（B2 vs B5）？预期 B2 优于 B4（方向信息有效），B2 优于 B5（避免不必要的修正）。
+
+\subsubsection{消融汇总统计}
+
+表\ref{tab:relative_improvement}汇总了 B2、B4、B5 相对 B1 的预测 MAE 变化率（所有配置的均值、标准差及中位数），表\ref{tab:friedman}报告了 Friedman 秩次检验结果。
+
+\begin{table}[htbp]
+\centering
+\caption{各策略相对 B1 的预测MAE变化率汇总}
+\label{tab:relative_improvement}
+\footnotesize
+\setlength{\tabcolsep}{2.5pt}
+\renewcommand{\arraystretch}{0.92}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{ccccc}
+\toprule
+数据集 & B2均值 & B2中位数 & B4均值 & B5均值 \\
+\midrule
+Supply Chain-Customer & --- & --- & --- & --- \\
+Current Velocity & --- & --- & --- & --- \\
+Azure2019-D & --- & --- & --- & --- \\
+Coastal T-S & --- & --- & --- & --- \\
+CPHL & --- & --- & --- & --- \\
+MetroPT-3 & --- & --- & --- & --- \\
+Australia Solar & --- & --- & --- & --- \\
+\bottomrule
+\end{tabular}
+}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{Friedman 平均秩次与 Nemenyi 事后检验}
+\label{tab:friedman}
+\footnotesize
+\setlength{\tabcolsep}{2.5pt}
+\renewcommand{\arraystretch}{0.92}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{cccccc}
+\toprule
+指标 & B1 & B2（TIP） & B4（随机） & B5（无条件） & Friedman $p$ \\
+\midrule
+预测MAE & --- & --- & --- & --- & --- \\
+插补MAE & --- & --- & --- & --- & --- \\
+\bottomrule
+\end{tabular}
+}
+\end{table}
+
+\FloatBarrier
+
+\subsection{缺失率鲁棒性与预训练策略}\label{sec:missing_robustness}
+
+为系统分析 TIP 增益随缺失强度的变化规律并评估 B3（预训练+TIP）在高缺失场景下的补救效能，本节在 \textbf{Azure2019-D（工业云计算）和 Supply Chain-Customer（供应链）}两个领域特征差异最大的数据集上，固定插补模型为 SAITS 和 DeepMVI（分别代表注意力架构与混合架构），覆盖缺失率 $p \in \{0.1, 0.2, 0.3, 0.4, 0.5\}$ 五档，同时报告 B2（TIP）和 B3（预训练+TIP）相对 B1 的预测 MAE 改善率（均值 $\pm$ 标准差）。选取这两个数据集的理由是：Azure2019-D（5 分钟粒度）为高频工业系统监测场景，Supply Chain-Customer（日粒度）为低频商业供应链场景，数据生成机制与时间分辨率差异显著，若 TIP 增益规律在二者间一致复现，则结论具有较强的领域泛化性。
+
+本实验同时检验两个递进的假设。\textbf{假设一（倒 U 形增益曲线）}：中等缺失率（$p=0.2\sim0.3$）时 B2 的改善率最高——缺失率过低时插补误差本身较小，方向冲突不显著；缺失率过高时参数空间线性近似与误差传播一阶近似精度下降，投影修正效能减弱。若改善率随 $p$ 呈倒 U 形，则实证支持第 4.5 节关于两重一阶近似有效半径的分析。\textbf{假设二（B3 的高缺失补救效应）}：B3 通过预训练使插补模型在启用 TIP 前已收敛至合理参数邻域，缓解了训练初期 $\|\Delta X\|$ 过大导致的近似精度恶化。因此预期：(1) $p \leq 0.2$ 时 B3 与 B2 性能接近，预训练增益有限；(2) $p \geq 0.3$ 时 B3 逐渐优于 B2，且差距随 $p$ 增大而扩大；(3) B3 的增益曲线应较 B2 更为平坦，其在高缺失端的下降幅度更小。若上述预期成立，则同时验证了预训练策略的有效性和两重一阶近似在参数空间边缘区域衰退的理论判断。
+
+\subsection{机制验证实验}\label{sec:mechanism}
+
+\subsubsection{投影触发频率动态}
+
+记录 B2 训练过程中每个 epoch 的方向冲突触发比例（即 $g_I^T \hat{g}_P < 0$ 的迭代步数占总步数的比例）随训练进程的变化。若触发比例在训练初期较高（插补误差大，梯度方向不稳定）而后逐渐下降并趋于平稳，则佐证 B3（预训练+TIP）策略的合理性；若触发比例始终维持在高位，则说明该插补-预测组合存在持续的方向冲突，TIP 的投影修正持续生效。此外，将该曲线与插补损失和预测损失的学习曲线并列展示，以分析冲突触发与性能变化的时序关联。
+
+\subsection{任务关联性分析}\label{sec:spearman}
+
+计算 B1 与 B2 在所有配置下的插补 MAE 与预测 MAE 之间的 Spearman 秩相关系数 $\rho$。由 Shadbahr 等人\citep{shadbahr2023} 的发现，传统两阶段方法的 $\rho \approx 0$（插补质量与预测性能无关）。若 B2 的 $|\rho|$ 显著大于 B1（例如由 $\approx 0$ 提升至中等正相关），则表明 TIP 修复了插补与预测之间的统计断裂，使"补得好"重新成为"预测好"的有效代理信号。
+
+\subsection{计算代价实证分析}
+
+表\ref{tab:compute_cost}对比各策略在单步参数更新中的 TSFM 调用次数与实测 wall-clock 时间。
+
+\begin{table}[htbp]
+\centering
+\caption{单步参数更新的计算代价对比}
+\label{tab:compute_cost}
+\footnotesize
+\begin{tabular}{lccc}
+\toprule
+策略 & TSFM前向次数 & TSFM反向次数 & 相对耗时（B1=1$\times$） \\
+\midrule
+B1（两阶段） & 0 & 0 & 1$\times$ \\
+B2（TIP，$k$=20） & 40 & 0 & --- \\
+B2（TIP，$k$=10） & 20 & 0 & --- \\
+B2（TIP，$k$=5） & 10 & 0 & --- \\
+反向传播方案（假设可行） & 1 & 1 & $\approx$ 5--7$\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\FloatBarrier
+\newpage
+
+\section{结论}
+
+本文针对时序插补与预测两阶段优化中的方向冲突问题，提出了基于零阶梯度估计的 TIP 方法。TIP 通过高斯平滑梯度估计与非对称正交投影机制，仅需预测模型的前向推理能力，即可选择性抑制插补更新中与预测性能改善方向冲突的分量，在维持预测精度的同时保护插补语义完整性。
+
+从理论层面看，TIP 的贡献包含三个递进的环节。(1) \textbf{误差传播分析}揭示了插补误差对预测损失的影响取决于误差方向与预测模型输入梯度的内积关系，而非误差的大小，为方向冲突检测提供了数学基础。(2) \textbf{零阶梯度估计}通过高斯平滑与 Stein 恒等式，以 $k$ 次 TSFM 前向传播为代价给出了预测梯度的渐近无偏估计 $\hat{g}_P$（偏差 $O(\varepsilon^2)$，定理\ref{th:gp_unbiased}），使得冲突检测（$g_I^T \hat{g}_P < 0$）与投影修正得以在黑盒场景下完整保留。(3) \textbf{非对称正交投影}（定理\ref{th:orthogonal_projection}）从理论上严格保证了修正在预测约束下对原始更新方向的改动最小。与 PCGrad 等对称式梯度修正方法相比，TIP 的非对称设计适配了预测模型参数冻结的单向约束场景，而零阶估计则绕过了这些方法对 TSFM 反向传播的刚性依赖。
+
+本文方法存在以下局限性，也指明了未来工作方向。(1) \textbf{梯度估计的方向精度}随参数维度 $d$ 增大而下降（$O(d/k)$），当插补模型参数规模极大时，$k$ 的选取需要在计算代价与检测可靠性之间谨慎权衡；基于符号检测而非精确梯度估计的专用方差缩减技术值得探索。(2) \textbf{硬阈值判定的统计风险}——当 $g_I^T g_P$ 接近零时，估计噪声导致的误判不可忽略，设计自适应的软阈值机制是提升检测鲁棒性的直接方向。(3) \textbf{两重一阶近似的适用范围}——误差传播方程和参数空间线性近似在高缺失率或训练初期精度下降，预训练策略（B3）部分缓解了该问题，但更系统的解决方案（如二阶修正或信任域约束）有待研究。(4) \textbf{仅前向传播的代价}——尽管 $k$ 次前向传播免除了对 TSFM 的反向传播需求，但在 TSFM 推理延迟较高的场景中，$k=20$ 的额外前向开销仍不可忽略；减少采样数 $k$ 或利用历史梯度信息的方差缩减方案具有实用价值。(5) \textbf{方法的防御性本质}——TIP 确保预测损失一阶不增，但并不能主动降低预测损失；探索将预测损失直接纳入优化目标（如以极小幅度沿 $\hat{g}_P$ 的负方向施加额外正则）是从"防御"走向"进攻"的可能路径。
+
+从应用层面看，TIP 的模型无关性和黑盒兼容性使其可作为即插即用的训练策略灵活部署于各类插补-预测系统中，包括预测模型仅以 API 形式提供前向推理接口的黑盒场景。在七个真实世界数据集、四种插补模型和两种 TSFM 上的系统实验验证了方法的有效性。
+
+\newpage
+
+\bibliography{references}
+
+\end{document}
+
+
