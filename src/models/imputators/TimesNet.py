@@ -5,23 +5,13 @@ Paper: https://openreview.net/pdf?id=ju_Uqw384Oq
 
 from __future__ import annotations
 
-import sys
 from argparse import Namespace
-from pathlib import Path
 
 import torch
 import torch.nn as nn
 
 from src.models.extern.SAITS.utils import masked_mae_cal
-
-_TIMESNET_DIR = Path(__file__).resolve().parents[2] / "extern" / "TimesNet"
-
-
-def _ensure_timesnet_importable() -> None:
-    """Add TimesNet parent to sys.path so internal relative imports resolve."""
-    _parent = str(_TIMESNET_DIR.parent)
-    if _parent not in sys.path:
-        sys.path.insert(0, _parent)
+from src.models.extern.TimesNet.TimesNet import Model
 
 
 class TimesNet(nn.Module):
@@ -58,9 +48,6 @@ class TimesNet(nn.Module):
 
         """
         super().__init__()
-
-        _ensure_timesnet_importable()
-        from TimesNet.TimesNet import Model
 
         configs = Namespace(
             task_name="imputation",

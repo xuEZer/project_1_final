@@ -2,43 +2,11 @@
 
 from __future__ import annotations
 
-import importlib.util
-import sys
-from pathlib import Path
-from types import ModuleType
-
 import torch
 import torch.nn as nn
 
+from src.models.extern.DeepMVI.model import OurModel
 from src.models.extern.SAITS.utils import masked_mae_cal
-
-_DEEPMVI_DIR = Path(__file__).resolve().parents[2] / "extern" / "DeepMVI"
-_DEEPMVI_MODEL_PATH = _DEEPMVI_DIR / "model.py"
-_DEEPMVI_MODULE_NAME = "_external_deepmvi_model"
-
-
-def _load_deepmvi_module() -> ModuleType:
-    """Load DeepMVI's model module without modifying external source code."""
-    if not _DEEPMVI_MODEL_PATH.exists():
-        raise FileNotFoundError(f"DeepMVI model file not found: {_DEEPMVI_MODEL_PATH}")
-
-    if _DEEPMVI_MODULE_NAME in sys.modules:
-        return sys.modules[_DEEPMVI_MODULE_NAME]
-
-    if str(_DEEPMVI_DIR) not in sys.path:
-        sys.path.insert(0, str(_DEEPMVI_DIR))
-
-    spec = importlib.util.spec_from_file_location(
-        _DEEPMVI_MODULE_NAME,
-        _DEEPMVI_MODEL_PATH,
-    )
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Failed to create import spec for {_DEEPMVI_MODEL_PATH}")
-
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[_DEEPMVI_MODULE_NAME] = module
-    spec.loader.exec_module(module)
-    return module
 
 
 class DeepMVI(nn.Module):
@@ -77,13 +45,9 @@ class DeepMVI(nn.Module):
                 "kernel_size % block_size == 0 when use_local=True"
             )
 
-        deepmvi_module = _load_deepmvi_module()
-        if not hasattr(deepmvi_module, "OurModel"):
-            raise ImportError("DeepMVI module does not expose 'OurModel'")
-
         self.d_feature = d_feature
         self.device = device
-        self.backbone = deepmvi_module.OurModel(
+        self.backbone = OurModel(
             sizes=[1],
             kernel_size=kernel_size,
             block_size=block_size,
