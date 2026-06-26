@@ -17,7 +17,7 @@
 #   - 数据集: 7 个真实世界数据集 (覆盖供应链、物理、云计算、环境、公共卫生、运维、能源)
 #   - 插补模型: SAITS, BRITS, DeepMVI, TimesNet
 #   - 预测模型: Sundial, TimesFM25
-#   - 固定参数: 缺失率 p=0.2, block_size=20, 回顾窗口 L=128
+#   - 固定参数: 缺失率 p=0.2, block_size=20, 回顾窗口 L=512
 #
 #   B3 (预训练+TIP) 缺失率鲁棒性实验见 scripts/run_missing_rate_robustness.sh
 
@@ -237,17 +237,26 @@ run_one() {
 # 并行执行辅助函数 (job pool)
 # ---------------------------------------------------------------------------
 
-declare -A _PID_TO_NAME _PID_TO_EXIT
+declare -A _PID_TO_NAME _PID_TO_EXIT _PID_TO_LOG _PID_TO_LOCK
 
-_reap_finished() {
-    # 回收所有已完成的 background jobs,打印结果并更新计数
-    local new_pids=()
+_reap_one() {
+    # 由 wait -n 触发,扫描 _POOL_PIDS 找到第一个已退出的 job 并回收
+    local new_pids=()  found=
     for p in "${_POOL_PIDS[@]}"; do
-        if kill -0 "$p" 2>/dev/null; then
-            new_pids+=("$p")
-        else
+        if [[ -z "$found" ]] && ! kill -0 "$p" 2>/dev/null; then
+            found=1
             local name="${_PID_TO_NAME[$p]}"
             local exit_file="${_PID_TO_EXIT[$p]}"
+            local log_file="${_PID_TO_LOG[$p]}"
+            local lock_file="${_PID_TO_LOCK[$p]}"
+
+            # 短暂等待 exit 文件写入
+            local waited=0
+            while [[ ! -f "$exit_file" ]] && [[ $waited -lt 5 ]]; do
+                sleep 0.1
+                waited=$((waited + 1))
+            done
+
             if [[ -f "$exit_file" ]]; then
                 local code
                 code="$(cat "$exit_file")"
@@ -255,16 +264,18 @@ _reap_finished() {
                     echo "[OK  ] $name"
                     passed=$((passed + 1))
                 else
-                    echo "[FAIL] $name (exit code $code)"
+                    echo "[FAIL] $name (exit code $code) — log: $log_file"
                     failed=$((failed + 1))
                 fi
                 rm -f "$exit_file"
             else
-                echo "[FAIL] $name (no exit code)"
+                echo "[FAIL] $name (no exit code) — log: $log_file"
                 failed=$((failed + 1))
             fi
-            unset '_PID_TO_NAME[$p]'
-            unset '_PID_TO_EXIT[$p]'
+            rm -f "$lock_file"
+            unset '_PID_TO_NAME[$p]' '_PID_TO_EXIT[$p]' '_PID_TO_LOG[$p]' '_PID_TO_LOCK[$p]'
+        else
+            new_pids+=("$p")
         fi
     done
     _POOL_PIDS=("${new_pids[@]}")
@@ -281,13 +292,27 @@ _launch_one() {
         exp_name="${exp_type}_${dataset}_${imputator}_${predictor}_mr${missing_rate}_L${LOOKBACK_LEN}_k${TIP_K}_s${seed}"
     fi
 
+    local lock_file="${PROJECT_DIR}/logs/${exp_name}.lock"
+    local log_file="${PROJECT_DIR}/logs/${exp_name}.log"
+    local exit_file="${PROJECT_DIR}/logs/${exp_name}.exit"
+
+    # 用 lock 文件防止同一个实验被并发启动 (例如多次运行 --failed-only)
+    if [[ -f "$lock_file" ]]; then
+        local lock_pid
+        lock_pid="$(cat "$lock_file" 2>/dev/null)"
+        if [[ -n "$lock_pid" ]] && kill -0 "$lock_pid" 2>/dev/null; then
+            echo "[SKIP] $exp_name (lock held by pid $lock_pid, still running)"
+            skipped=$((skipped + 1))
+            return 0
+        fi
+        rm -f "$lock_file"
+    fi
+
     if [[ "$FAILED_ONLY" == true ]] && is_completed "$exp_name"; then
         skipped=$((skipped + 1))
         return 0
     fi
 
-    local log_file="${PROJECT_DIR}/logs/${exp_name}.log"
-    local exit_file="${PROJECT_DIR}/logs/${exp_name}.exit"
     rm -f "$exit_file"
 
     echo "[START] $exp_name  | 策略: $(get_exp_type_label "$exp_type")"
@@ -295,6 +320,7 @@ _launch_one() {
     echo "        log: $log_file"
 
     (
+        echo "$BASHPID" > "$lock_file"
         if run_one "$exp_type" "$dataset" "$imputator" "$predictor" "$missing_rate" "$seed"; then
             echo "0" > "$exit_file"
         else
@@ -306,6 +332,8 @@ _launch_one() {
     _POOL_PIDS+=("$pid")
     _PID_TO_NAME[$pid]="$exp_name"
     _PID_TO_EXIT[$pid]="$exit_file"
+    _PID_TO_LOG[$pid]="$log_file"
+    _PID_TO_LOCK[$pid]="$lock_file"
     total=$((total + 1))
 }
 
@@ -356,10 +384,10 @@ if [[ $JOBS -gt 1 ]]; then
 
                         _launch_one "$exp_type" "$dataset" "$imputator" "$predictor" "$MAIN_MISSING_RATE" "$seed" || continue
 
-                        # 池满则回收已完成的任务
+                        # 池满则等待任一任务完成并回收
                         while [[ ${#_POOL_PIDS[@]} -ge $JOBS ]]; do
-                            sleep 1
-                            _reap_finished
+                            wait -n 2>/dev/null || true
+                            _reap_one
                         done
                     done
                 done
@@ -371,8 +399,8 @@ if [[ $JOBS -gt 1 ]]; then
     echo ""
     echo "  等待剩余 ${#_POOL_PIDS[@]} 个实验完成..."
     while [[ ${#_POOL_PIDS[@]} -gt 0 ]]; do
-        sleep 1
-        _reap_finished
+        wait -n 2>/dev/null || true
+        _reap_one
     done
 
 else
