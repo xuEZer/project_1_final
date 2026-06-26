@@ -15,7 +15,4 @@ wheels/
 # Runtime data & checkpoints (large / regeneratable)
 cache/
 *.sqlite
-
-# TensorBoard event dirs — keep text logs for progress tracking
 logs/*
-!logs/*.log

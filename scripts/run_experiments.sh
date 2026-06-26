@@ -6,6 +6,8 @@
 #   ./scripts/run_experiments.sh                           # 运行完整实验矩阵
 #   ./scripts/run_experiments.sh --dry-run                 # 只打印命令,不执行
 #   ./scripts/run_experiments.sh --failed-only             # 只重跑失败的实验
+#   ./scripts/run_experiments.sh --jobs 4                  # 同时运行 4 个实验
+#   ./scripts/run_experiments.sh -j 4 --failed-only        # 4 并行 + 只重跑失败
 #   ./scripts/run_experiments.sh --exp B2                  # 只运行 B2 (TIP)
 #   ./scripts/run_experiments.sh --exp B1,B2               # 只运行 B1 和 B2
 #   ./scripts/run_experiments.sh --dataset Supply_Chain_Customer_D  # 指定单个数据集
@@ -24,6 +26,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_DIR"
+mkdir -p logs
 
 # HuggingFace 镜像 (国内加速)
 HF_ENDPOINT="${HF_ENDPOINT:-https://hf-mirror.com}"
@@ -72,6 +75,7 @@ declare -A PYTHON_BIN=(
 # 默认标志
 # ---------------------------------------------------------------------------
 
+JOBS=1
 DRY_RUN=false
 FAILED_ONLY=false
 SELECTED_EXP_TYPES=()
@@ -98,6 +102,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --dataset)
             SELECTED_DATASETS+=("$2")
+            shift 2
+            ;;
+        --jobs|-j)
+            JOBS="$2"
             shift 2
             ;;
         *)
@@ -226,6 +234,82 @@ run_one() {
 }
 
 # ---------------------------------------------------------------------------
+# 并行执行辅助函数 (job pool)
+# ---------------------------------------------------------------------------
+
+declare -A _PID_TO_NAME _PID_TO_EXIT
+
+_reap_finished() {
+    # 回收所有已完成的 background jobs,打印结果并更新计数
+    local new_pids=()
+    for p in "${_POOL_PIDS[@]}"; do
+        if kill -0 "$p" 2>/dev/null; then
+            new_pids+=("$p")
+        else
+            local name="${_PID_TO_NAME[$p]}"
+            local exit_file="${_PID_TO_EXIT[$p]}"
+            if [[ -f "$exit_file" ]]; then
+                local code
+                code="$(cat "$exit_file")"
+                if [[ "$code" == "0" ]]; then
+                    echo "[OK  ] $name"
+                    passed=$((passed + 1))
+                else
+                    echo "[FAIL] $name (exit code $code)"
+                    failed=$((failed + 1))
+                fi
+                rm -f "$exit_file"
+            else
+                echo "[FAIL] $name (no exit code)"
+                failed=$((failed + 1))
+            fi
+            unset '_PID_TO_NAME[$p]'
+            unset '_PID_TO_EXIT[$p]'
+        fi
+    done
+    _POOL_PIDS=("${new_pids[@]}")
+}
+
+_launch_one() {
+    local exp_type="$1" dataset="$2" imputator="$3" predictor="$4"
+    local missing_rate="$5" seed="$6"
+
+    local exp_name
+    if [[ "$exp_type" == "B1" ]]; then
+        exp_name="${exp_type}_${dataset}_${imputator}_${predictor}_mr${missing_rate}_L${LOOKBACK_LEN}_s${seed}"
+    else
+        exp_name="${exp_type}_${dataset}_${imputator}_${predictor}_mr${missing_rate}_L${LOOKBACK_LEN}_k${TIP_K}_s${seed}"
+    fi
+
+    if [[ "$FAILED_ONLY" == true ]] && is_completed "$exp_name"; then
+        skipped=$((skipped + 1))
+        return 0
+    fi
+
+    local log_file="${PROJECT_DIR}/logs/${exp_name}.log"
+    local exit_file="${PROJECT_DIR}/logs/${exp_name}.exit"
+    rm -f "$exit_file"
+
+    echo "[START] $exp_name  | 策略: $(get_exp_type_label "$exp_type")"
+    echo "        数据集: $(get_dataset_label "$dataset") | 插补: $imputator | 预测: $predictor | mr=$missing_rate"
+    echo "        log: $log_file"
+
+    (
+        if run_one "$exp_type" "$dataset" "$imputator" "$predictor" "$missing_rate" "$seed"; then
+            echo "0" > "$exit_file"
+        else
+            echo "$?" > "$exit_file"
+        fi
+    ) > "$log_file" 2>&1 &
+
+    local pid=$!
+    _POOL_PIDS+=("$pid")
+    _PID_TO_NAME[$pid]="$exp_name"
+    _PID_TO_EXIT[$pid]="$exit_file"
+    total=$((total + 1))
+}
+
+# ---------------------------------------------------------------------------
 # 主逻辑
 # ---------------------------------------------------------------------------
 
@@ -241,60 +325,105 @@ echo "  回顾窗口 : L=$LOOKBACK_LEN"
 echo "  TIP-k    : $TIP_K"
 echo "  TIP-ε    : $TIP_EPSILON"
 echo "  seed     : ${SEEDS[*]}"
+echo "  jobs     : $JOBS"
 echo "  dry_run  : $DRY_RUN"
 echo "  failed_only: $FAILED_ONLY"
 echo "=============================================="
 echo ""
 
-# 计算总实验数
 total=0
 passed=0
 failed=0
 skipped=0
+_POOL_PIDS=()
 
-for exp_type in "${SELECTED_EXP_TYPES[@]}"; do
-    for dataset in "${SELECTED_DATASETS[@]}"; do
-        for imputator in "${IMPUTATORS[@]}"; do
-            for predictor in "${PREDICTORS[@]}"; do
-                for seed in "${SEEDS[@]}"; do
-                    exp_name="${exp_type}_${dataset}_${imputator}_${predictor}_mr${MAIN_MISSING_RATE}_L${LOOKBACK_LEN}"
-                    if [[ "$exp_type" != "B1" ]]; then
-                        exp_name="${exp_name}_k${TIP_K}"
-                    fi
-                    exp_name="${exp_name}_s${seed}"
+if [[ $JOBS -gt 1 ]]; then
+    # =========================================================================
+    # 并行模式 — job pool,最多 JOBS 个实验同时运行
+    # =========================================================================
+    echo "  并行模式: 最多 $JOBS 个实验同时运行"
+    echo ""
 
-                    if [[ "$FAILED_ONLY" == true ]] && is_completed "$exp_name"; then
-                        skipped=$((skipped + 1))
-                        continue
-                    fi
-                    total=$((total + 1))
+    for exp_type in "${SELECTED_EXP_TYPES[@]}"; do
+        for dataset in "${SELECTED_DATASETS[@]}"; do
+            for imputator in "${IMPUTATORS[@]}"; do
+                for predictor in "${PREDICTORS[@]}"; do
+                    for seed in "${SEEDS[@]}"; do
+                        if [[ "$DRY_RUN" == true ]]; then
+                            run_one "$exp_type" "$dataset" "$imputator" "$predictor" "$MAIN_MISSING_RATE" "$seed" || true
+                            continue
+                        fi
+
+                        _launch_one "$exp_type" "$dataset" "$imputator" "$predictor" "$MAIN_MISSING_RATE" "$seed" || continue
+
+                        # 池满则回收已完成的任务
+                        while [[ ${#_POOL_PIDS[@]} -ge $JOBS ]]; do
+                            sleep 1
+                            _reap_finished
+                        done
+                    done
                 done
             done
         done
     done
-done
 
-if [[ "$FAILED_ONLY" == true ]]; then
-    echo "  已完成 (跳过): $skipped"
+    # 等待剩余任务全部完成
+    echo ""
+    echo "  等待剩余 ${#_POOL_PIDS[@]} 个实验完成..."
+    while [[ ${#_POOL_PIDS[@]} -gt 0 ]]; do
+        sleep 1
+        _reap_finished
+    done
+
+else
+    # =========================================================================
+    # 串行模式 — 保持原有行为
+    # =========================================================================
+
+    for exp_type in "${SELECTED_EXP_TYPES[@]}"; do
+        for dataset in "${SELECTED_DATASETS[@]}"; do
+            for imputator in "${IMPUTATORS[@]}"; do
+                for predictor in "${PREDICTORS[@]}"; do
+                    for seed in "${SEEDS[@]}"; do
+                        exp_name="${exp_type}_${dataset}_${imputator}_${predictor}_mr${MAIN_MISSING_RATE}_L${LOOKBACK_LEN}"
+                        if [[ "$exp_type" != "B1" ]]; then
+                            exp_name="${exp_name}_k${TIP_K}"
+                        fi
+                        exp_name="${exp_name}_s${seed}"
+
+                        if [[ "$FAILED_ONLY" == true ]] && is_completed "$exp_name"; then
+                            skipped=$((skipped + 1))
+                            continue
+                        fi
+                        total=$((total + 1))
+                    done
+                done
+            done
+        done
+    done
+
+    if [[ "$FAILED_ONLY" == true ]]; then
+        echo "  已完成 (跳过): $skipped"
+    fi
+    echo "  待运行: $total"
+    echo ""
+
+    for exp_type in "${SELECTED_EXP_TYPES[@]}"; do
+        for dataset in "${SELECTED_DATASETS[@]}"; do
+            for imputator in "${IMPUTATORS[@]}"; do
+                for predictor in "${PREDICTORS[@]}"; do
+                    for seed in "${SEEDS[@]}"; do
+                        if run_one "$exp_type" "$dataset" "$imputator" "$predictor" "$MAIN_MISSING_RATE" "$seed"; then
+                            passed=$((passed + 1))
+                        else
+                            failed=$((failed + 1))
+                        fi
+                    done
+                done
+            done
+        done
+    done
 fi
-echo "  待运行: $total"
-echo ""
-
-for exp_type in "${SELECTED_EXP_TYPES[@]}"; do
-    for dataset in "${SELECTED_DATASETS[@]}"; do
-        for imputator in "${IMPUTATORS[@]}"; do
-            for predictor in "${PREDICTORS[@]}"; do
-                for seed in "${SEEDS[@]}"; do
-                    if run_one "$exp_type" "$dataset" "$imputator" "$predictor" "$MAIN_MISSING_RATE" "$seed"; then
-                        passed=$((passed + 1))
-                    else
-                        failed=$((failed + 1))
-                    fi
-                done
-            done
-        done
-    done
-done
 
 echo ""
 echo "=============================================="
