@@ -326,7 +326,7 @@ _launch_one() {
         else
             echo "$?" > "$exit_file"
         fi
-    ) > "$log_file" 2>&1 &
+    ) >/dev/null 2>"$log_file" &
 
     local pid=$!
     _POOL_PIDS+=("$pid")
