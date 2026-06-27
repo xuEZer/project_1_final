@@ -23,6 +23,12 @@
 
 set -euo pipefail
 
+# Ensure running under Bash >= 4.3 for `wait -n`, associative arrays, and BASHPID
+if [[ -z "${BASH_VERSINFO+x}" ]] || (( BASH_VERSINFO[0] < 4 )) || { (( BASH_VERSINFO[0] == 4 )) && (( BASH_VERSINFO[1] < 3 )); }; then
+    echo "This script requires Bash >= 4.3. Run it with: bash $0" >&2
+    exit 1
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_DIR"
@@ -273,7 +279,7 @@ _reap_one() {
                 failed=$((failed + 1))
             fi
             rm -f "$lock_file"
-            unset '_PID_TO_NAME[$p]' '_PID_TO_EXIT[$p]' '_PID_TO_LOG[$p]' '_PID_TO_LOCK[$p]'
+                unset "_PID_TO_NAME[$p]" "_PID_TO_EXIT[$p]" "_PID_TO_LOG[$p]" "_PID_TO_LOCK[$p]"
         else
             new_pids+=("$p")
         fi
