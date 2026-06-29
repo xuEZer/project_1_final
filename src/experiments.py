@@ -63,6 +63,18 @@ def run_experiment(
         )
 
 
+def tip_projection_kwargs(config: ConfigParser) -> dict[str, bool | float]:
+    """Read TIP projection controls from the training config."""
+    return {
+        "preserve_grad_norm": config.getboolean(
+            "training", "tip_preserve_grad_norm", fallback=True
+        ),
+        "norm_scale_cap": config.getfloat(
+            "training", "tip_norm_scale_cap", fallback=0.0
+        ),
+    }
+
+
 # ------------------------------------------------------------------ B1 --
 
 
@@ -115,6 +127,7 @@ def _run_b2(
         variant="B2",
         k=k,
         epsilon=epsilon,
+        **tip_projection_kwargs(config),
     )
 
     return joint_model
@@ -157,6 +170,7 @@ def _run_b3(
         variant="B2",
         k=k,
         epsilon=epsilon,
+        **tip_projection_kwargs(config),
     )
 
     return joint_model
@@ -182,6 +196,7 @@ def _run_b4(
         max_epoch=max_epoch,
         patience=patience,
         variant="B4",
+        **tip_projection_kwargs(config),
     )
 
     return joint_model
@@ -212,6 +227,7 @@ def _run_b5(
         variant="B5",
         k=k,
         epsilon=epsilon,
+        **tip_projection_kwargs(config),
     )
 
     return joint_model

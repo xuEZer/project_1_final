@@ -100,8 +100,15 @@ COMPUTE_ARGS=()
 bash "${SCRIPT_DIR}/run_compute_cost_probe.sh" "${COMMON_ARGS[@]}" "${COMPUTE_ARGS[@]}"
 
 echo "[7/7] Collect results"
+COLLECT_ARGS=()
+if [[ "$QUICK" == true ]]; then
+    COLLECT_ARGS+=(--quick --compute-max-epoch 1)
+elif [[ -n "$MAX_EPOCH" ]]; then
+    COLLECT_ARGS+=(--compute-max-epoch "$MAX_EPOCH")
+fi
+
 if [[ "$DRY_RUN" == false ]]; then
-    python3 "${SCRIPT_DIR}/collect_results.py"
+    python3 "${SCRIPT_DIR}/collect_results.py" "${COLLECT_ARGS[@]}"
 else
-    echo "[DRY-RUN] python3 ${SCRIPT_DIR}/collect_results.py"
+    echo "[DRY-RUN] python3 ${SCRIPT_DIR}/collect_results.py ${COLLECT_ARGS[*]}"
 fi

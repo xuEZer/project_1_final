@@ -155,6 +155,17 @@ class JointModel(nn.Module):
             p.grad = flat_grad[offset : offset + numel].view_as(p).clone()
             offset += numel
 
+    @staticmethod
+    def _capture_training_modes(module: nn.Module) -> dict[nn.Module, bool]:
+        """Capture train/eval flags for a module and all descendants."""
+        return {submodule: submodule.training for submodule in module.modules()}
+
+    @staticmethod
+    def _restore_training_modes(training_modes: dict[nn.Module, bool]) -> None:
+        """Restore train/eval flags captured by ``_capture_training_modes``."""
+        for module, is_training in training_modes.items():
+            module.train(is_training)
+
     @torch.no_grad()
     def _compute_Q(
         self,
@@ -204,7 +215,7 @@ class JointModel(nn.Module):
             where uᵢ ~ N(0, I).
 
         Returns ĝ_P as a flat 1-D tensor.  Always restores the original
-        imputer parameters before returning.
+        imputer parameters and train/eval mode before returning.
         """
         params = list(self.imputer.parameters())
         theta_flat = torch.nn.utils.parameters_to_vector(params)
@@ -213,22 +224,26 @@ class JointModel(nn.Module):
         dtype = theta_flat.dtype
 
         gp_hat = torch.zeros(d, device=device, dtype=dtype)
+        training_modes = self._capture_training_modes(self.imputer)
+        try:
+            self.imputer.eval()
 
-        for _ in range(k):
-            u = torch.randn(d, device=device, dtype=dtype)
+            for _ in range(k):
+                u = torch.randn(d, device=device, dtype=dtype)
 
             # Q(θ + ε·u)
-            torch.nn.utils.vector_to_parameters(theta_flat + epsilon * u, params)
-            Q_plus = self._compute_Q(X_NA, X_NA_mask, X_N, X_A_mask, Y_N, Y_N_mask)
+                torch.nn.utils.vector_to_parameters(theta_flat + epsilon * u, params)
+                Q_plus = self._compute_Q(X_NA, X_NA_mask, X_N, X_A_mask, Y_N, Y_N_mask)
 
             # Q(θ − ε·u)
-            torch.nn.utils.vector_to_parameters(theta_flat - epsilon * u, params)
-            Q_minus = self._compute_Q(X_NA, X_NA_mask, X_N, X_A_mask, Y_N, Y_N_mask)
+                torch.nn.utils.vector_to_parameters(theta_flat - epsilon * u, params)
+                Q_minus = self._compute_Q(X_NA, X_NA_mask, X_N, X_A_mask, Y_N, Y_N_mask)
 
-            gp_hat += (Q_plus - Q_minus) / (2.0 * epsilon) * u
+                gp_hat += (Q_plus - Q_minus) / (2.0 * epsilon) * u
 
-        # Restore original parameters
-        torch.nn.utils.vector_to_parameters(theta_flat, params)
+        finally:
+            torch.nn.utils.vector_to_parameters(theta_flat, params)
+            self._restore_training_modes(training_modes)
 
         return gp_hat / k
 
@@ -237,6 +252,8 @@ class JointModel(nn.Module):
         g_I: torch.Tensor,
         gp_hat: torch.Tensor,
         conditional: bool,
+        preserve_norm: bool = False,
+        norm_scale_cap: float = 0.0,
     ) -> torch.Tensor:
         """Orthogonal projection: remove the component of *g_I* parallel to
         *gp_hat*.
@@ -258,7 +275,16 @@ class JointModel(nn.Module):
         if should_project:
             gp_norm_sq = torch.dot(gp_hat, gp_hat)
             if gp_norm_sq > 1e-12:
-                return g_I - (dot / gp_norm_sq) * gp_hat
+                projected = g_I - (dot / gp_norm_sq) * gp_hat
+                if preserve_norm:
+                    g_norm = torch.linalg.vector_norm(g_I)
+                    projected_norm = torch.linalg.vector_norm(projected)
+                    if g_norm > 1e-12 and projected_norm > 1e-12:
+                        scale = g_norm / projected_norm
+                        if norm_scale_cap > 0:
+                            scale = torch.clamp(scale, max=norm_scale_cap)
+                        projected = projected * scale
+                return projected
 
         return g_I
 
@@ -481,6 +507,8 @@ class JointModel(nn.Module):
         variant: str = "B2",
         k: int = 20,
         epsilon: float = 1e-4,
+        preserve_grad_norm: bool = True,
+        norm_scale_cap: float = 0.0,
         accum_steps: int | None = None,
         on_epoch_end: collections.abc.Callable[
             [int, float, float, "JointModel"], None
@@ -505,6 +533,9 @@ class JointModel(nn.Module):
             k: Number of random samples for zero-order estimation
                 (ignored by B4).
             epsilon: Perturbation step size (ignored by B4).
+            preserve_grad_norm: Preserve ``g_I`` norm after projection.
+            norm_scale_cap: Optional maximum rescale factor.  ``0`` disables
+                the cap.
             accum_steps: Micro-batches per optimizer step.
             on_epoch_end: Optional per-epoch callback.
 
@@ -563,7 +594,13 @@ class JointModel(nn.Module):
                 return
 
             conditional = variant != "B5"
-            g_I = model._apply_projection(g_I, gp_hat, conditional=conditional)
+            g_I = model._apply_projection(
+                g_I,
+                gp_hat,
+                conditional=conditional,
+                preserve_norm=preserve_grad_norm,
+                norm_scale_cap=norm_scale_cap,
+            )
             model._set_flattened_grad(g_I)
 
         def _tip_epoch_end(
