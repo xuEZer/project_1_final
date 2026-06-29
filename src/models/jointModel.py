@@ -501,7 +501,7 @@ class JointModel(nn.Module):
             phase_name: Human-readable phase name (for logging).
             max_epoch: Maximum epochs for this phase.
             patience: Early-stopping patience.
-            variant: One of ``"B2"``, ``"B4"``, ``"B5"``.
+            variant: One of ``"B2"``, ``"B4"``, ``"B5"``, ``"B6"``.
             k: Number of random samples for zero-order estimation
                 (ignored by B4).
             epsilon: Perturbation step size (ignored by B4).
@@ -511,6 +511,16 @@ class JointModel(nn.Module):
         Returns:
             Best validation loss achieved.
         """
+        if variant not in {"B2", "B4", "B5", "B6"}:
+            raise ValueError(f"Unknown TIP variant: {variant}")
+
+        tip_stats = {
+            "steps": 0,
+            "conflicts": 0,
+            "projections": 0,
+            "dot_sum": 0.0,
+            "gp_norm_sum": 0.0,
+        }
 
         def _tip_modifier(
             model: "JointModel", batch_data: dict[str, torch.Tensor]
@@ -533,9 +543,77 @@ class JointModel(nn.Module):
                     epsilon=epsilon,
                 )
 
+            dot = torch.dot(g_I, gp_hat).detach()
+            gp_norm = torch.linalg.vector_norm(gp_hat).detach()
+            conflict = dot.item() < 0.0
+            projection = (
+                variant != "B6"
+                and (variant == "B5" or conflict)
+                and gp_norm.item() > 1e-12
+            )
+
+            tip_stats["steps"] += 1
+            tip_stats["conflicts"] += int(conflict)
+            tip_stats["projections"] += int(projection)
+            tip_stats["dot_sum"] += float(dot.item())
+            tip_stats["gp_norm_sum"] += float(gp_norm.item())
+
+            if variant == "B6":
+                model._set_flattened_grad(gp_hat)
+                return
+
             conditional = variant != "B5"
             g_I = model._apply_projection(g_I, gp_hat, conditional=conditional)
             model._set_flattened_grad(g_I)
+
+        def _tip_epoch_end(
+            epoch: int,
+            train_loss: float,
+            val_loss: float,
+            model: "JointModel",
+        ) -> None:
+            steps = int(tip_stats["steps"])
+            if steps > 0:
+                conflict_rate = tip_stats["conflicts"] / steps
+                projection_rate = tip_stats["projections"] / steps
+                mean_dot = tip_stats["dot_sum"] / steps
+                mean_gp_norm = tip_stats["gp_norm_sum"] / steps
+                model.logger.info(
+                    "TIP stats | variant=%s | steps=%d | conflict_rate=%.6f | "
+                    "projection_rate=%.6f | mean_dot=%.6e | mean_gp_norm=%.6e",
+                    variant,
+                    steps,
+                    conflict_rate,
+                    projection_rate,
+                    mean_dot,
+                    mean_gp_norm,
+                )
+                model.tb_summary_writer.add_scalar(
+                    f"tip/{phase_name}/conflict_rate",
+                    conflict_rate,
+                    epoch,
+                )
+                model.tb_summary_writer.add_scalar(
+                    f"tip/{phase_name}/projection_rate",
+                    projection_rate,
+                    epoch,
+                )
+                model.tb_summary_writer.add_scalar(
+                    f"tip/{phase_name}/mean_dot",
+                    mean_dot,
+                    epoch,
+                )
+                model.tb_summary_writer.add_scalar(
+                    f"tip/{phase_name}/mean_gp_norm",
+                    mean_gp_norm,
+                    epoch,
+                )
+
+            for key in tip_stats:
+                tip_stats[key] = 0.0
+
+            if on_epoch_end is not None:
+                on_epoch_end(epoch, train_loss, val_loss, model)
 
         return self.fit(
             data_loader,
@@ -543,7 +621,7 @@ class JointModel(nn.Module):
             max_epoch,
             patience,
             accum_steps=accum_steps,
-            on_epoch_end=on_epoch_end,
+            on_epoch_end=_tip_epoch_end,
             grad_modifier=_tip_modifier,
         )
 

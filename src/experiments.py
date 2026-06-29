@@ -7,6 +7,8 @@ Supported experiment types (``exp_type``):
 - ``B3``: Pre-training (2 epochs L_I) then TIP fine-tuning.
 - ``B4``: Random-direction ablation (random vector replaces ĝ_P).
 - ``B5``: Unconditional-projection ablation (always project).
+- ``B6``: Direct prediction-direction update (use ĝ_P as the optimizer
+  gradient).
 """
 
 from __future__ import annotations
@@ -52,8 +54,10 @@ def run_experiment(
         return _run_b4(joint_model, train_loader, config, logger)
     elif exp_type == "B5":
         return _run_b5(joint_model, train_loader, config, logger)
+    elif exp_type == "B6":
+        return _run_b6(joint_model, train_loader, config, logger)
     else:
-        available = "B1, B2, B3, B4, B5"
+        available = "B1, B2, B3, B4, B5, B6"
         raise ValueError(
             f"Unknown experiment type '{exp_type}'. Available types: {available}"
         )
@@ -206,6 +210,36 @@ def _run_b5(
         max_epoch=max_epoch,
         patience=patience,
         variant="B5",
+        k=k,
+        epsilon=epsilon,
+    )
+
+    return joint_model
+
+
+# ------------------------------------------------------------------ B6 --
+
+
+def _run_b6(
+    joint_model: JointModel,
+    train_loader: dict[str, DataLoader],
+    config: ConfigParser,
+    logger: logging.Logger,
+) -> JointModel:
+    """B6: Directly update the imputer with the estimated prediction gradient."""
+    max_epoch = config.getint("training", "max_epoch")
+    patience = config.getint("training", "patience")
+    k = config.getint("training", "tip_k", fallback=20)
+    epsilon = config.getfloat("training", "tip_epsilon", fallback=1e-4)
+
+    log_phase(logger, "B6 - Direct Prediction Gradient", max_epoch)
+    logger.info(f"  k={k}, epsilon={epsilon}")
+    joint_model.fit_tip(
+        data_loader=train_loader,
+        phase_name="b6",
+        max_epoch=max_epoch,
+        patience=patience,
+        variant="B6",
         k=k,
         epsilon=epsilon,
     )

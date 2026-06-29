@@ -3,6 +3,7 @@
 import hashlib
 import json
 import logging
+import time
 from pathlib import Path
 
 import h5py
@@ -76,56 +77,79 @@ def preprocess_dataset(
         logger.info(f"Data already preprocessed. Loading from {save_folder}")
         return save_folder
 
-    save_folder.mkdir(parents=True, exist_ok=True)
+    lock_folder = save_path / f"{uid}.lock"
+    lock_acquired = False
+    while not lock_acquired:
+        try:
+            lock_folder.mkdir(parents=True, exist_ok=False)
+            lock_acquired = True
+        except FileExistsError:
+            logger.info(f"Waiting for preprocessing lock: {lock_folder}")
+            time.sleep(5)
+            if check_if_data_preprocessed(save_folder):
+                logger.info(f"Data already preprocessed. Loading from {save_folder}")
+                return save_folder
 
-    snapshot_dir = snapshot_download(
-        repo_id="Real-TSF/TIME",
-        repo_type="dataset",
-        revision="main",
-        allow_patterns=f"{dataset_name}/{frequency}/*",
-    )
-    dataset = load_from_disk(f"{snapshot_dir}/{dataset_name}/{frequency}")
-    filtered = dataset.filter(lambda x: x["item_id"] == item_id)
-    if len(filtered) == 0:
-        raise ValueError(f"item_id '{item_id}' not found in dataset")
-    dataset = np.array(filtered[0]["target"])
-    data = dataset[column_index, :] if dataset.ndim > 1 else dataset
-    data = data.reshape(-1, 1)
+    try:
+        if check_if_data_preprocessed(save_folder):
+            logger.info(f"Data already preprocessed. Loading from {save_folder}")
+            return save_folder
 
-    data, N_data, NA_data, N_mask, A_mask, NA_mask = generate_missing(
-        data, missing_rate, artificial_missing_rate, block_size, random_seed, logger
-    )
+        save_folder.mkdir(parents=True, exist_ok=True)
 
-    train_data, val_data, test_data = split_data(
-        data,
-        N_data,
-        NA_data,
-        N_mask,
-        A_mask,
-        NA_mask,
-        lookback_len,
-        pred_len,
-        val_ratio,
-        test_ratio,
-    )
+        snapshot_dir = snapshot_download(
+            repo_id="Real-TSF/TIME",
+            repo_type="dataset",
+            revision="main",
+            allow_patterns=f"{dataset_name}/{frequency}/*",
+        )
+        dataset = load_from_disk(f"{snapshot_dir}/{dataset_name}/{frequency}")
+        filtered = dataset.filter(lambda x: x["item_id"] == item_id)
+        if len(filtered) == 0:
+            raise ValueError(f"item_id '{item_id}' not found in dataset")
+        dataset = np.array(filtered[0]["target"])
+        data = dataset[column_index, :] if dataset.ndim > 1 else dataset
+        data = data.reshape(-1, 1)
 
-    train_data, val_data, test_data, scaler = standardize_data(
-        train_data, val_data, test_data
-    )
+        data, N_data, NA_data, N_mask, A_mask, NA_mask = generate_missing(
+            data, missing_rate, artificial_missing_rate, block_size, random_seed, logger
+        )
 
-    train_data, val_data, test_data = white_nan_with_zero(
-        train_data, val_data, test_data
-    )
+        train_data, val_data, test_data = split_data(
+            data,
+            N_data,
+            NA_data,
+            N_mask,
+            A_mask,
+            NA_mask,
+            lookback_len,
+            pred_len,
+            val_ratio,
+            test_ratio,
+        )
 
-    train_set, val_set, test_set = truncate_data(
-        train_data, val_data, test_data, lookback_len, pred_len
-    )
+        train_data, val_data, test_data, scaler = standardize_data(
+            train_data, val_data, test_data
+        )
 
-    save_h5(train_set, val_set, test_set, save_folder / "dataset.h5")
-    joblib.dump(scaler, save_folder / "scaler.pkl")
+        train_data, val_data, test_data = white_nan_with_zero(
+            train_data, val_data, test_data
+        )
 
-    logger.info(f"Preprocessed data saved to {save_folder}")
-    return save_folder
+        train_set, val_set, test_set = truncate_data(
+            train_data, val_data, test_data, lookback_len, pred_len
+        )
+
+        save_h5(train_set, val_set, test_set, save_folder / "dataset.h5")
+        joblib.dump(scaler, save_folder / "scaler.pkl")
+
+        logger.info(f"Preprocessed data saved to {save_folder}")
+        return save_folder
+    finally:
+        try:
+            lock_folder.rmdir()
+        except FileNotFoundError:
+            pass
 
 
 def generate_preprocess_uid(
