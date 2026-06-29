@@ -457,12 +457,12 @@ def truncate_data(
         data: dict[str, np.ndarray | None], lookback_len: int, pred_len: int
     ) -> dict[str, np.ndarray | None]:
         def window_truncate(data: np.ndarray, window_size: int) -> np.ndarray:
-            truncated_data = []
-            num_rows = data.shape[0]
-            for start in range(0, num_rows - window_size + 1):
-                end = start + window_size
-                truncated_data.append(data[start:end])
-            return np.array(truncated_data)
+            windows = np.lib.stride_tricks.sliding_window_view(
+                data,
+                window_shape=window_size,
+                axis=0,
+            )
+            return np.ascontiguousarray(np.moveaxis(windows, -1, 1))
 
         data_set = {}
         len_data = len(data["N_data"])
@@ -584,12 +584,16 @@ def load_h5(h5_path: Path) -> dict[str, any]:
 def get_tensor_data_loader(
     dataset: dict[str, any],
     batch_size: int,
+    num_workers: int = 0,
+    pin_memory: bool = False,
 ) -> tuple[dict[str, DataLoader], dict[str, DataLoader], bool]:
     """Build training and evaluation dataloaders from numpy datasets.
 
     Args:
         dataset: Dataset dictionary containing train, val, and test arrays.
         batch_size: Batch size for all dataloaders.
+        num_workers: Number of worker subprocesses for each dataloader.
+        pin_memory: Whether dataloaders should allocate pinned host memory.
 
     Returns:
         A tuple of train/val dataloaders, test dataloader, and no-ground-truth flag.
@@ -612,8 +616,22 @@ def get_tensor_data_loader(
         torch.from_numpy(dataset["val"]["Y_N_mask"]).float(),
     )
     data_loader = {
-        "train": DataLoader(train_ds, batch_size=batch_size, shuffle=True),
-        "val": DataLoader(val_ds, batch_size=batch_size, shuffle=False),
+        "train": DataLoader(
+            train_ds,
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=num_workers,
+            pin_memory=pin_memory,
+            persistent_workers=num_workers > 0,
+        ),
+        "val": DataLoader(
+            val_ds,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+            pin_memory=pin_memory,
+            persistent_workers=num_workers > 0,
+        ),
     }
 
     no_gt = "X" not in dataset["test"] or dataset["test"]["X"] is None
@@ -631,6 +649,13 @@ def get_tensor_data_loader(
             torch.from_numpy(dataset["test"]["X"]).float(),
             torch.from_numpy(dataset["test"]["Y"]).float(),
         )
-    eval_loader = DataLoader(test_eval_ds, batch_size=batch_size, shuffle=False)
+    eval_loader = DataLoader(
+        test_eval_ds,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        persistent_workers=num_workers > 0,
+    )
 
     return data_loader, eval_loader, no_gt

@@ -60,6 +60,7 @@ class JointModel(nn.Module):
         self.global_optim_step = 0
         self.accum_steps = 1
         self.micro_batch_size = 1
+        self.non_blocking_transfer = str(device).startswith("cuda")
 
         # Only the imputer is trained — predictor is frozen
         self.optimizer = optimizer_dict[optimizer_name](
@@ -82,6 +83,7 @@ class JointModel(nn.Module):
         X_A_mask: torch.Tensor | None = None,
         Y_N: torch.Tensor | None = None,
         Y_N_mask: torch.Tensor | None = None,
+        run_predictor: bool = True,
     ) -> dict[str, torch.Tensor | None]:
         """Run imputation and prediction forward passes.
 
@@ -99,6 +101,8 @@ class JointModel(nn.Module):
             Y_N: Ground-truth future values ``(B, P, D)`` (optional).
             Y_N_mask: Binary mask for future values ``(B, P, D)``
                 (optional, 1 = missing).
+            run_predictor: Whether to run the frozen predictor. Training and
+                validation can skip it when only imputation loss is needed.
 
         Returns:
             Dictionary with keys:
@@ -115,9 +119,11 @@ class JointModel(nn.Module):
         imp_loss = imputer_output["imp_loss"]
 
         # Predictor runs in inference mode — no gradient graph built
-        with torch.no_grad():
-            predictor_output = self.predictor(imputed_X)
-            pred_data = predictor_output.get("pred_data", None)
+        pred_data = None
+        if run_predictor:
+            with torch.no_grad():
+                predictor_output = self.predictor(imputed_X)
+                pred_data = predictor_output.get("pred_data", None)
 
         pred_loss_val = None
         if pred_data is not None and Y_N is not None:
@@ -146,6 +152,15 @@ class JointModel(nn.Module):
             else:
                 grads.append(torch.zeros_like(p).flatten())
         return torch.cat(grads)
+
+    def _move_batch_to_device(
+        self,
+        batch: collections.abc.Iterable[torch.Tensor],
+    ) -> tuple[torch.Tensor, ...]:
+        """Move a dataloader batch to the configured device."""
+        return tuple(
+            t.to(self.device, non_blocking=self.non_blocking_transfer) for t in batch
+        )
 
     def _set_flattened_grad(self, flat_grad: torch.Tensor) -> None:
         """Write a flat gradient vector back to imputer .grad attributes."""
@@ -218,34 +233,35 @@ class JointModel(nn.Module):
         imputer parameters and train/eval mode before returning.
         """
         params = list(self.imputer.parameters())
-        theta_flat = torch.nn.utils.parameters_to_vector(params)
-        d = theta_flat.numel()
-        device = theta_flat.device
-        dtype = theta_flat.dtype
-
-        gp_hat = torch.zeros(d, device=device, dtype=dtype)
+        theta = [p.detach().clone() for p in params]
+        gp_parts = [torch.zeros_like(p) for p in params]
         training_modes = self._capture_training_modes(self.imputer)
         try:
             self.imputer.eval()
 
             for _ in range(k):
-                u = torch.randn(d, device=device, dtype=dtype)
+                directions = [torch.randn_like(p) for p in params]
 
-            # Q(θ + ε·u)
-                torch.nn.utils.vector_to_parameters(theta_flat + epsilon * u, params)
+                # Q(θ + ε·u)
+                for p, base, u in zip(params, theta, directions, strict=True):
+                    p.copy_(base).add_(u, alpha=epsilon)
                 Q_plus = self._compute_Q(X_NA, X_NA_mask, X_N, X_A_mask, Y_N, Y_N_mask)
 
-            # Q(θ − ε·u)
-                torch.nn.utils.vector_to_parameters(theta_flat - epsilon * u, params)
+                # Q(θ − ε·u)
+                for p, base, u in zip(params, theta, directions, strict=True):
+                    p.copy_(base).add_(u, alpha=-epsilon)
                 Q_minus = self._compute_Q(X_NA, X_NA_mask, X_N, X_A_mask, Y_N, Y_N_mask)
 
-                gp_hat += (Q_plus - Q_minus) / (2.0 * epsilon) * u
+                coeff = (Q_plus - Q_minus) / (2.0 * epsilon)
+                for gp_part, u in zip(gp_parts, directions, strict=True):
+                    gp_part.add_(u.mul_(coeff))
 
         finally:
-            torch.nn.utils.vector_to_parameters(theta_flat, params)
+            for p, base in zip(params, theta, strict=True):
+                p.copy_(base)
             self._restore_training_modes(training_modes)
 
-        return gp_hat / k
+        return torch.cat([gp_part.flatten() for gp_part in gp_parts]).div_(k)
 
     @staticmethod
     def _apply_projection(
@@ -355,7 +371,7 @@ class JointModel(nn.Module):
 
             for batch_idx, batch in enumerate(train_loader):
                 X_N, X_NA, X_NA_mask, X_A_mask, Y_N, Y_N_mask = (
-                    t.to(self.device) for t in batch
+                    self._move_batch_to_device(batch)
                 )
 
                 output = self.forward(
@@ -365,6 +381,7 @@ class JointModel(nn.Module):
                     X_A_mask,
                     Y_N,
                     Y_N_mask,
+                    run_predictor=False,
                 )
 
                 loss = output["loss"]  # imp_loss only
@@ -485,13 +502,14 @@ class JointModel(nn.Module):
         with torch.no_grad():
             for batch in val_loader:
                 X_N, X_NA, X_NA_mask, X_A_mask, _Y_N, _Y_N_mask = (
-                    t.to(self.device) for t in batch
+                    self._move_batch_to_device(batch)
                 )
                 output = self.forward(
                     X_NA,
                     X_NA_mask,
                     X_N,
                     X_A_mask,
+                    run_predictor=False,
                 )
 
                 total_loss += output["loss"].item()

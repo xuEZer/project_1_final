@@ -54,7 +54,9 @@ def evaluate(
                 "Skipping imputation evaluation."
             )
             for batch in eval_loader:
-                X_N, X_N_mask, Y_N, Y_N_mask = [b.to(device) for b in batch]
+                X_N, X_N_mask, Y_N, Y_N_mask = (
+                    best_joint_model._move_batch_to_device(batch)
+                )
 
                 outputs = best_joint_model.forward(X_N, X_N_mask)
                 pred = outputs["pred_data"]
@@ -75,7 +77,7 @@ def evaluate(
 
         else:
             for batch in eval_loader:
-                X_N, X_N_mask, X, Y = [b.to(device) for b in batch]
+                X_N, X_N_mask, X, Y = best_joint_model._move_batch_to_device(batch)
 
                 outputs = best_joint_model.forward(X_N, X_N_mask)
 

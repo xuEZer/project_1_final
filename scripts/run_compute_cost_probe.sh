@@ -33,14 +33,14 @@ Options:
   --dataset KEY          Dataset config key. Default: Supply_Chain_Customer_D.
   --imputator NAME       Imputer. Default: SAITS.
   --predictor NAME       Predictor. Default: TimesFM25.
-  --missing-rate 0.2     Missing rate. Default: 0.2.
-  --lookback 512         Lookback length L. Default: 512.
-  --seed 42              Random seed. Default: 42.
-  --epsilon 1e-4         TIP finite-difference step. Default: 1e-4.
+  --missing-rate 0.2     Missing rate. Default: configs/global.ini.
+  --lookback 512         Lookback length L. Default: configs/global.ini.
+  --seed 42              Random seed. Default: configs/global.ini.
+  --epsilon 1e-4         TIP finite-difference step. Default: configs/global.ini.
   --max-epoch N          Short run epochs. Default: 1.
   --patience N           Early-stopping patience. Default: 1.
-  --batch-size N         Effective batch size. Default: 128.
-  --device cuda|cpu      Torch device. Default: cuda.
+  --batch-size N         Effective batch size. Default: configs/global.ini.
+  --device cuda|cpu      Torch device. Default: configs/global.ini.
   --failed-only          Skip completed probe logs.
   --dry-run              Print commands without running them.
   -h, --help             Show this help.

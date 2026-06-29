@@ -14,7 +14,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+# shellcheck source=scripts/common_experiment.sh
+source "${SCRIPT_DIR}/common_experiment.sh"
 cd "$PROJECT_DIR"
 
 # ---------------------------------------------------------------------------
@@ -26,17 +27,12 @@ IMPUTATOR="SAITS"
 PREDICTOR="TimesFM25"       # TSFM
 EXP_TYPE="B2"               # 主 TIP 实验
 MISSING_RATE="0.1"
-SEED="42"
+SEED="${DEFAULT_SEEDS[0]}"
 
 K_VALUES=(5 10 20)
 
 # TimesFM25 环境 (有 torch + timesfm 依赖)
-PYTHON_BIN="${PROJECT_DIR}/src/models/predictors/TimesFM25/.venv/bin/python"
-
-if [[ ! -x "$PYTHON_BIN" ]]; then
-    echo "ERROR: Python not found at $PYTHON_BIN" >&2
-    exit 1
-fi
+PYTHON_BIN="$(python_for_predictor "$PREDICTOR")"
 
 # HuggingFace 镜像 (国内加速)
 HF_ENDPOINT="${HF_ENDPOINT:-https://hf-mirror.com}"
@@ -123,15 +119,15 @@ for k in "${K_VALUES[@]}"; do
     cmd=(
         "$PYTHON_BIN" main.py
         --experiment.exp_name      "$exp_name"
-        --experiment.exp_type      "$EXP_TYPE"
-        --experiment.random_seed   "$SEED"
-        --dataset.dataset          "$DATASET"
-        --dataset.missing_rate     "$MISSING_RATE"
-        --dataset.artificial_missing_rate "$MISSING_RATE"
-        --imputator.model_type     "$IMPUTATOR"
-        --predictor.model_type     "$PREDICTOR"
-        --training.tip_k           "$k"
     )
+    append_config_if_changed experiment exp_type "$EXP_TYPE" "$DEFAULT_EXP_TYPE"
+    append_config_if_changed experiment random_seed "$SEED" "$DEFAULT_RANDOM_SEED"
+    append_config_if_changed dataset dataset "$DATASET" "$DEFAULT_DATASET"
+    append_config_if_changed dataset missing_rate "$MISSING_RATE" "$DEFAULT_MAIN_MISSING_RATE"
+    append_config_if_changed dataset artificial_missing_rate "$MISSING_RATE" "$DEFAULT_ARTIFICIAL_MISSING_RATE"
+    append_config_if_changed imputator model_type "$IMPUTATOR" "$DEFAULT_IMPUTATOR"
+    append_config_if_changed predictor model_type "$PREDICTOR" "$DEFAULT_PREDICTOR"
+    append_config_if_changed training tip_k "$k" "$DEFAULT_TIP_K"
 
     echo "--------------------------------------------------------------------------------"
     echo "[RUN ] k=$k → $exp_name"

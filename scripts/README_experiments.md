@@ -24,6 +24,8 @@ These scripts are generated from the experiment design in `C:\Users\29895\Deskto
 bash scripts/run_experiments.sh --dry-run
 bash scripts/run_core_validation.sh --dry-run
 bash scripts/run_core_validation.sh --failed-only --jobs 1
+bash scripts/run_core_validation.sh --with-sensitivity --dry-run
+bash scripts/run_core_validation.sh --sensitivity-only --epsilon-k 10
 bash scripts/run_experiments.sh --dataset CPHL_30T --exp B2
 bash scripts/run_projection_ablation.sh --representative --dry-run
 bash scripts/run_paper_experiments.sh --quick --dry-run
@@ -64,6 +66,24 @@ The default grid is intentionally small: `B1,B2` on three representative
 datasets, `SAITS,DeepMVI`, `Sundial`, `lookback=128`, `k=5`, `max_epoch=5`,
 and `patience=2`.  This is meant to answer the first question: whether TIP
 shows a consistent signal over B1 under an affordable budget.
+
+The same script can also run a small hyperparameter sensitivity probe:
+
+```bash
+bash scripts/run_core_validation.sh --with-sensitivity --failed-only --jobs 1
+```
+
+This adds B2-only sweeps on the same small matrix:
+
+- `k in {5,10,20}` with `epsilon=1e-4`.
+- `epsilon in {1e-5,1e-4,1e-3}` with fixed `k`, controlled by `--epsilon-k`.
+
+After inspecting the k sweep, you can rerun only the epsilon probe with the
+chosen k:
+
+```bash
+bash scripts/run_core_validation.sh --sensitivity-only --epsilon-k 10 --failed-only
+```
 
 ## Paper defaults
 

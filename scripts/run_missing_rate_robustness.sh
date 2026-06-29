@@ -41,15 +41,15 @@ Options:
   --dataset A,B            Dataset keys. Default: Supply_Chain_Customer_D,azure2019_D_5T.
   --imputator A,B          Imputers. Default: SAITS,DeepMVI.
   --predictor A,B          Predictors. Default: Sundial,TimesFM25.
-  --seed 42,43             Random seeds. Default: 42.
-  --lookback 512           Lookback length L. Default: 512.
-  --k 20                   TIP sampling count. Default: 20.
-  --epsilon 1e-4           TIP finite-difference step. Default: 1e-4.
-  --pretrain-epochs 2      B3 imputation pretraining epochs. Default: 2.
-  --max-epoch N            Max training epochs. Default: 10000.
-  --patience N             Early-stopping patience. Default: 5.
-  --batch-size N           Effective batch size. Default: 128.
-  --device cuda|cpu        Torch device. Default: cuda.
+  --seed 42,43             Random seeds. Default: configs/global.ini.
+  --lookback 512           Lookback length L. Default: configs/global.ini.
+  --k 20                   TIP sampling count. Default: configs/global.ini.
+  --epsilon 1e-4           TIP finite-difference step. Default: configs/global.ini.
+  --pretrain-epochs 2      B3 imputation pretraining epochs. Default: configs/global.ini.
+  --max-epoch N            Max training epochs. Default: configs/global.ini.
+  --patience N             Early-stopping patience. Default: configs/global.ini.
+  --batch-size N           Effective batch size. Default: configs/global.ini.
+  --device cuda|cpu        Torch device. Default: configs/global.ini.
   --jobs N, -j N           Run up to N experiments concurrently. Default: 1.
   --failed-only            Skip completed experiments.
   --dry-run                Print commands without running them.

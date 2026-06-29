@@ -35,14 +35,14 @@ Usage: scripts/run_k_sweep.sh [options]
 Options:
   --k-values 5,10,20,50,100  K values to test.
   --full                     Run all 7 datasets x 4 imputers x 2 predictors.
-  --seed 42,43               Random seeds. Default: 42.
-  --missing-rate 0.2         Missing rate. Default: 0.2.
-  --lookback 512             Lookback length L. Default: 512.
-  --epsilon 1e-4             Fixed epsilon. Default: 1e-4.
-  --max-epoch N              Max training epochs. Default: 10000.
-  --patience N               Early-stopping patience. Default: 5.
-  --batch-size N             Effective batch size. Default: 128.
-  --device cuda|cpu          Torch device. Default: cuda.
+  --seed 42,43               Random seeds. Default: configs/global.ini.
+  --missing-rate 0.2         Missing rate. Default: configs/global.ini.
+  --lookback 512             Lookback length L. Default: configs/global.ini.
+  --epsilon 1e-4             Fixed epsilon. Default: configs/global.ini.
+  --max-epoch N              Max training epochs. Default: configs/global.ini.
+  --patience N               Early-stopping patience. Default: configs/global.ini.
+  --batch-size N             Effective batch size. Default: configs/global.ini.
+  --device cuda|cpu          Torch device. Default: configs/global.ini.
   --jobs N, -j N             Run up to N experiments concurrently. Default: 1.
   --failed-only              Skip completed experiments.
   --dry-run                  Print commands without running them.

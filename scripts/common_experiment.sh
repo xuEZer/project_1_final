@@ -7,10 +7,55 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 LOG_DIR="${PROJECT_DIR}/logs"
 RESULT_DIR="${PROJECT_DIR}/results"
+GLOBAL_CONFIG_PATH="${PROJECT_DIR}/configs/global.ini"
 
 mkdir -p "$LOG_DIR"
 
 HF_ENDPOINT="${HF_ENDPOINT:-https://hf-mirror.com}"
+
+config_default() {
+    local section="$1"
+    local key="$2"
+    local value
+
+    if [[ ! -f "$GLOBAL_CONFIG_PATH" ]]; then
+        echo "[ERROR] Global config not found: $GLOBAL_CONFIG_PATH" >&2
+        return 1
+    fi
+
+    value="$(awk -F= -v section="$section" -v key="$key" '
+        function trim(s) {
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", s)
+            return s
+        }
+        /^[[:space:]]*($|[#;])/ { next }
+        /^[[:space:]]*\[/ {
+            current = $0
+            sub(/^[[:space:]]*\[/, "", current)
+            sub(/\][[:space:]]*$/, "", current)
+            current = trim(current)
+            next
+        }
+        current == section {
+            eq = index($0, "=")
+            if (eq == 0) next
+            name = trim(substr($0, 1, eq - 1))
+            if (name == key) {
+                value = substr($0, eq + 1)
+                sub(/[[:space:]]*[#;].*$/, "", value)
+                print trim(value)
+                found = 1
+                exit
+            }
+        }
+        END { if (!found) exit 1 }
+    ' "$GLOBAL_CONFIG_PATH")" || {
+        echo "[ERROR] Missing [$section] $key in $GLOBAL_CONFIG_PATH" >&2
+        return 1
+    }
+
+    printf '%s\n' "$value"
+}
 
 PAPER_DATASETS=(
     "Supply_Chain_Customer_D"
@@ -26,17 +71,23 @@ PAPER_IMPUTATORS=(BRITS SAITS DeepMVI TimesNet)
 PAPER_PREDICTORS=(Sundial TimesFM25)
 PAPER_MISSING_RATES=(0.1 0.2 0.3 0.4 0.5)
 
-DEFAULT_MAIN_MISSING_RATE="0.2"
-DEFAULT_LOOKBACK_LEN=512
-DEFAULT_BLOCK_SIZE=20
-DEFAULT_BATCH_SIZE=128
-DEFAULT_MAX_EPOCH=10000
-DEFAULT_PATIENCE=5
-DEFAULT_DEVICE="cuda"
-DEFAULT_SEEDS=(42)
-DEFAULT_TIP_K=20
-DEFAULT_TIP_EPSILON="1e-4"
-DEFAULT_PRETRAIN_EPOCHS=2
+DEFAULT_EXP_TYPE="$(config_default experiment exp_type)"
+DEFAULT_RANDOM_SEED="$(config_default experiment random_seed)"
+DEFAULT_DATASET="$(config_default dataset dataset)"
+DEFAULT_MAIN_MISSING_RATE="$(config_default dataset missing_rate)"
+DEFAULT_ARTIFICIAL_MISSING_RATE="$(config_default dataset artificial_missing_rate)"
+DEFAULT_LOOKBACK_LEN="$(config_default dataset lookback_len)"
+DEFAULT_BLOCK_SIZE="$(config_default dataset block_size)"
+DEFAULT_MAX_EPOCH="$(config_default training max_epoch)"
+DEFAULT_PATIENCE="$(config_default training patience)"
+DEFAULT_DEVICE="$(config_default training device)"
+DEFAULT_BATCH_SIZE="$(config_default training batch_size)"
+DEFAULT_TIP_K="$(config_default training tip_k)"
+DEFAULT_TIP_EPSILON="$(config_default training tip_epsilon)"
+DEFAULT_PRETRAIN_EPOCHS="$(config_default training tip_pretrain_epochs)"
+DEFAULT_IMPUTATOR="$(config_default imputator model_type)"
+DEFAULT_PREDICTOR="$(config_default predictor model_type)"
+DEFAULT_SEEDS=("$DEFAULT_RANDOM_SEED")
 
 declare -A PYTHON_BIN=(
     ["Sundial"]="${PROJECT_DIR}/src/models/predictors/Sundial/.venv/bin/python"
@@ -68,6 +119,17 @@ python_for_predictor() {
 eps_label() {
     local epsilon="$1"
     printf '%s' "$epsilon" | tr '+' 'p'
+}
+
+append_config_if_changed() {
+    local section="$1"
+    local key="$2"
+    local value="$3"
+    local default_value="$4"
+
+    if [[ -n "$value" && "$value" != "$default_value" ]]; then
+        cmd+=(--"${section}.${key}" "$value")
+    fi
 }
 
 experiment_name() {
@@ -145,23 +207,28 @@ run_one_experiment() {
     local cmd=(
         "$python_bin" main.py
         --experiment.exp_name "$exp_name"
-        --experiment.exp_type "$exp_type"
-        --experiment.random_seed "$seed"
-        --dataset.dataset "$dataset"
-        --dataset.missing_rate "$missing_rate"
-        --dataset.artificial_missing_rate "$missing_rate"
-        --dataset.block_size "$DEFAULT_BLOCK_SIZE"
-        --dataset.lookback_len "$lookback_len"
-        --imputator.model_type "$imputator"
-        --predictor.model_type "$predictor"
-        --training.batch_size "$batch_size"
-        --training.max_epoch "$max_epoch"
-        --training.patience "$patience"
-        --training.device "$device"
-        --training.tip_k "$tip_k"
-        --training.tip_epsilon "$tip_epsilon"
-        --training.tip_pretrain_epochs "$pretrain_epochs"
     )
+    append_config_if_changed experiment exp_type "$exp_type" "$DEFAULT_EXP_TYPE"
+    append_config_if_changed experiment random_seed "$seed" "$DEFAULT_RANDOM_SEED"
+    append_config_if_changed dataset dataset "$dataset" "$DEFAULT_DATASET"
+    append_config_if_changed dataset missing_rate "$missing_rate" "$DEFAULT_MAIN_MISSING_RATE"
+    append_config_if_changed dataset artificial_missing_rate "$missing_rate" "$DEFAULT_ARTIFICIAL_MISSING_RATE"
+    append_config_if_changed dataset lookback_len "$lookback_len" "$DEFAULT_LOOKBACK_LEN"
+    append_config_if_changed imputator model_type "$imputator" "$DEFAULT_IMPUTATOR"
+    append_config_if_changed predictor model_type "$predictor" "$DEFAULT_PREDICTOR"
+    append_config_if_changed training batch_size "$batch_size" "$DEFAULT_BATCH_SIZE"
+    append_config_if_changed training max_epoch "$max_epoch" "$DEFAULT_MAX_EPOCH"
+    append_config_if_changed training patience "$patience" "$DEFAULT_PATIENCE"
+    append_config_if_changed training device "$device" "$DEFAULT_DEVICE"
+    case "$exp_type" in
+        B2|B3|B5|B6)
+            append_config_if_changed training tip_k "$tip_k" "$DEFAULT_TIP_K"
+            append_config_if_changed training tip_epsilon "$tip_epsilon" "$DEFAULT_TIP_EPSILON"
+            ;;
+    esac
+    if [[ "$exp_type" == "B3" ]]; then
+        append_config_if_changed training tip_pretrain_epochs "$pretrain_epochs" "$DEFAULT_PRETRAIN_EPOCHS"
+    fi
 
     echo "[RUN] $exp_name"
     printf '      '

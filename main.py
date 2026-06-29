@@ -79,6 +79,24 @@ def main() -> None:
     config.set("dataset", "lookback_len", str(dataset["train"]["X_N"].shape[1]))
 
     target_batch_size = config.getint("training", "batch_size")
+    device = config.get("training", "device")
+    dataloader_num_workers = config.getint(
+        "training",
+        "dataloader_num_workers",
+        fallback=0,
+    )
+    pin_memory = (
+        config.getboolean(
+            "training",
+            "pin_memory",
+            fallback=str(device).startswith("cuda"),
+        )
+        and str(device).startswith("cuda")
+    )
+    loader_kwargs = {
+        "num_workers": dataloader_num_workers,
+        "pin_memory": pin_memory,
+    }
     auto_batch = config.has_option("training", "auto_batch_size") and config.getboolean(
         "training", "auto_batch_size"
     )
@@ -95,7 +113,9 @@ def main() -> None:
         )
     elif auto_batch and target_batch_size > 1:
         sample_loader, _, _ = get_tensor_data_loader(
-            dataset, batch_size=target_batch_size
+            dataset,
+            batch_size=target_batch_size,
+            **loader_kwargs,
         )
         sample_batch = next(iter(sample_loader["train"]))
 
@@ -121,7 +141,9 @@ def main() -> None:
     joint_model.micro_batch_size = micro_batch_size
 
     train_loader, eval_loader, no_gt = get_tensor_data_loader(
-        dataset, batch_size=micro_batch_size
+        dataset,
+        batch_size=micro_batch_size,
+        **loader_kwargs,
     )
 
     joint_model = run_experiment(
@@ -274,17 +296,15 @@ def exit_if_experiment_completed(exp_name: str, log_save_dir: Path) -> None:
     if not log_save_dir.exists():
         return None
 
-    matched_logs = sorted(log_save_dir.glob("*.log"), reverse=True)
-    for log_path in matched_logs:
-        existing_exp_name = log_path.stem
-        if exp_name != existing_exp_name:
-            continue
-        try:
-            content = log_path.read_text(encoding="utf-8", errors="ignore")
-        except OSError:
-            continue
-        if "Experiment completed successfully!" in content:
-            sys.exit(0)
+    log_path = log_save_dir / f"{exp_name}.log"
+    if not log_path.exists():
+        return None
+    try:
+        content = log_path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return None
+    if "Experiment completed successfully!" in content:
+        sys.exit(0)
 
     return None
 

@@ -38,15 +38,15 @@ Options:
   --dataset A,B            Dataset config keys. Default: all 7 paper datasets.
   --imputator A,B          Imputers. Default: BRITS,SAITS,DeepMVI,TimesNet.
   --predictor A,B          Predictors. Default: Sundial,TimesFM25.
-  --seed 42,43             Random seeds. Default: 42.
-  --missing-rate 0.2       Missing rate. Default: 0.2.
-  --lookback 512           Lookback length L. Default: 512.
-  --k 20                   TIP sampling count. Default: 20.
-  --epsilon 1e-4           TIP finite-difference step. Default: 1e-4.
-  --max-epoch N            Max training epochs. Default: 10000.
-  --patience N             Early-stopping patience. Default: 5.
-  --batch-size N           Effective batch size. Default: 128.
-  --device cuda|cpu        Torch device. Default: cuda.
+  --seed 42,43             Random seeds. Default: configs/global.ini.
+  --missing-rate 0.2       Missing rate. Default: configs/global.ini.
+  --lookback 512           Lookback length L. Default: configs/global.ini.
+  --k 20                   TIP sampling count. Default: configs/global.ini.
+  --epsilon 1e-4           TIP finite-difference step. Default: configs/global.ini.
+  --max-epoch N            Max training epochs. Default: configs/global.ini.
+  --patience N             Early-stopping patience. Default: configs/global.ini.
+  --batch-size N           Effective batch size. Default: configs/global.ini.
+  --device cuda|cpu        Torch device. Default: configs/global.ini.
   --jobs N, -j N           Run up to N experiments concurrently. Default: 1.
   --failed-only            Skip completed experiments.
   --dry-run                Print commands without running them.

@@ -24,6 +24,7 @@ Outputs:
 from __future__ import annotations
 
 import argparse
+import configparser
 import csv
 import math
 import re
@@ -36,6 +37,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_DIR = ROOT / "scripts"
 COMMON_SCRIPT = SCRIPT_DIR / "common_experiment.sh"
+GLOBAL_CONFIG = ROOT / "configs" / "global.ini"
 LOG_DIR = ROOT / "logs"
 RESULT_DIR = ROOT / "results"
 
@@ -161,6 +163,14 @@ class PlannedExperiment:
 
 
 def fallback_settings() -> CommonSettings:
+    config = configparser.ConfigParser()
+    config.read(GLOBAL_CONFIG)
+
+    def config_get(section: str, key: str, fallback: str) -> str:
+        if not config.has_section(section):
+            return fallback
+        return config.get(section, key, fallback=fallback)
+
     return CommonSettings(
         paper_datasets=[
             "Supply_Chain_Customer_D",
@@ -174,13 +184,13 @@ def fallback_settings() -> CommonSettings:
         paper_imputators=["BRITS", "SAITS", "DeepMVI", "TimesNet"],
         paper_predictors=["Sundial", "TimesFM25"],
         paper_missing_rates=["0.1", "0.2", "0.3", "0.4", "0.5"],
-        default_main_missing_rate="0.2",
-        default_lookback_len="512",
-        default_block_size="20",
-        default_seeds=["42"],
-        default_tip_k="20",
-        default_tip_epsilon="1e-4",
-        default_pretrain_epochs="2",
+        default_main_missing_rate=config_get("dataset", "missing_rate", "0.2"),
+        default_lookback_len=config_get("dataset", "lookback_len", "512"),
+        default_block_size=config_get("dataset", "block_size", "20"),
+        default_seeds=[config_get("experiment", "random_seed", "42")],
+        default_tip_k=config_get("training", "tip_k", "20"),
+        default_tip_epsilon=config_get("training", "tip_epsilon", "1e-4"),
+        default_pretrain_epochs=config_get("training", "tip_pretrain_epochs", "2"),
     )
 
 
@@ -189,6 +199,10 @@ def strip_shell_value(value: str) -> str:
     if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
         return value[1:-1]
     return value
+
+
+def is_dynamic_shell_value(value: str) -> bool:
+    return "$" in value or "`" in value
 
 
 def parse_shell_array(text: str, name: str) -> list[str] | None:
@@ -208,7 +222,17 @@ def parse_shell_scalar(text: str, name: str) -> str | None:
     match = re.search(rf"^{re.escape(name)}=(?P<value>[^\n]+)", text, re.M)
     if not match:
         return None
-    return strip_shell_value(match.group("value"))
+    value = strip_shell_value(match.group("value"))
+    if is_dynamic_shell_value(value):
+        return None
+    return value
+
+
+def static_shell_array(text: str, name: str) -> list[str] | None:
+    values = parse_shell_array(text, name)
+    if not values or any(is_dynamic_shell_value(value) for value in values):
+        return None
+    return values
 
 
 def load_common_settings() -> CommonSettings:
@@ -233,7 +257,8 @@ def load_common_settings() -> CommonSettings:
         or settings.default_lookback_len,
         default_block_size=parse_shell_scalar(text, "DEFAULT_BLOCK_SIZE")
         or settings.default_block_size,
-        default_seeds=parse_shell_array(text, "DEFAULT_SEEDS") or settings.default_seeds,
+        default_seeds=static_shell_array(text, "DEFAULT_SEEDS")
+        or settings.default_seeds,
         default_tip_k=parse_shell_scalar(text, "DEFAULT_TIP_K")
         or settings.default_tip_k,
         default_tip_epsilon=parse_shell_scalar(text, "DEFAULT_TIP_EPSILON")

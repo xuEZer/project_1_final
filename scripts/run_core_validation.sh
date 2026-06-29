@@ -23,15 +23,20 @@ MISSING_RATE="$DEFAULT_MAIN_MISSING_RATE"
 LOOKBACK_LEN=128
 TIP_K=5
 TIP_EPSILON="$DEFAULT_TIP_EPSILON"
+K_VALUES=(5 10 20)
+EPSILON_VALUES=(1e-5 1e-4 1e-3)
+EPSILON_K=""
 PRETRAIN_EPOCHS="$DEFAULT_PRETRAIN_EPOCHS"
 MAX_EPOCH=5
 PATIENCE=2
-BATCH_SIZE=64
+BATCH_SIZE="$DEFAULT_BATCH_SIZE"
 DEVICE="$DEFAULT_DEVICE"
 JOBS=1
 DRY_RUN=false
 FAILED_ONLY=false
 COLLECT=true
+RUN_CORE=true
+WITH_SENSITIVITY=false
 
 usage() {
     cat <<'EOF'
@@ -51,20 +56,29 @@ Default matrix:
   max epoch : 5
   patience  : 2
 
+Optional sensitivity phases:
+  k sweep       : B2 with k in 5,10,20 and epsilon fixed.
+  epsilon sweep : B2 with epsilon in 1e-5,1e-4,1e-3 and k fixed by --epsilon-k.
+
 Options:
   --exp B1,B2             Experiment types. Default: B1,B2.
   --dataset A,B           Dataset config keys.
   --imputator A,B         Imputers. Default: SAITS,DeepMVI.
   --predictor A,B         Predictor(s). Default: Sundial.
-  --seed 42,43            Random seeds. Default: 42.
-  --missing-rate 0.2      Missing rate. Default: 0.2.
+  --seed 42,43            Random seeds. Default: configs/global.ini.
+  --missing-rate 0.2      Missing rate. Default: configs/global.ini.
   --lookback N            Lookback length. Default: 128.
   --k N                   TIP sampling count. Default: 5.
-  --epsilon VALUE         TIP finite-difference step. Default: 1e-4.
+  --epsilon VALUE         TIP finite-difference step. Default: configs/global.ini.
+  --with-sensitivity      Also run the small B2 k/epsilon sensitivity probes.
+  --sensitivity-only      Run only the small B2 k/epsilon sensitivity probes.
+  --k-values 5,10,20      K values for sensitivity. Default: 5,10,20.
+  --epsilon-values LIST   Epsilon values for sensitivity. Default: 1e-5,1e-4,1e-3.
+  --epsilon-k N           Fixed k for epsilon sensitivity. Default: same as --k.
   --max-epoch N           Max training epochs. Default: 5.
   --patience N            Early-stopping patience. Default: 2.
-  --batch-size N          Effective batch size. Default: 64.
-  --device cuda|cpu       Torch device. Default: cuda.
+  --batch-size N          Effective batch size. Default: configs/global.ini.
+  --device cuda|cpu       Torch device. Default: configs/global.ini.
   --jobs N, -j N          Concurrent jobs. Default: 1.
   --failed-only           Skip logs already completed successfully.
   --no-collect            Do not run collect_results.py after training.
@@ -74,6 +88,8 @@ Options:
 Examples:
   bash scripts/run_core_validation.sh --dry-run
   bash scripts/run_core_validation.sh --failed-only --jobs 1
+  bash scripts/run_core_validation.sh --with-sensitivity --dry-run
+  bash scripts/run_core_validation.sh --sensitivity-only --epsilon-k 10
   bash scripts/run_core_validation.sh --predictor TimesFM25 --batch-size 32
   bash scripts/run_core_validation.sh --dataset CPHL_30T,azure2019_D_5T
 EOF
@@ -90,6 +106,11 @@ while [[ $# -gt 0 ]]; do
         --lookback) LOOKBACK_LEN="$2"; shift 2 ;;
         --k) TIP_K="$2"; shift 2 ;;
         --epsilon) TIP_EPSILON="$2"; shift 2 ;;
+        --with-sensitivity) WITH_SENSITIVITY=true; shift ;;
+        --sensitivity-only) RUN_CORE=false; WITH_SENSITIVITY=true; shift ;;
+        --k-values) csv_to_array K_VALUES "$2"; shift 2 ;;
+        --epsilon-values) csv_to_array EPSILON_VALUES "$2"; shift 2 ;;
+        --epsilon-k) EPSILON_K="$2"; shift 2 ;;
         --max-epoch) MAX_EPOCH="$2"; shift 2 ;;
         --patience) PATIENCE="$2"; shift 2 ;;
         --batch-size) BATCH_SIZE="$2"; shift 2 ;;
@@ -103,42 +124,125 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if [[ -z "$EPSILON_K" ]]; then
+    EPSILON_K="$TIP_K"
+fi
+
 cd "$PROJECT_DIR"
 
-print_common_matrix \
-    "Core validation: B1 vs B2" \
-    "${EXP_TYPES[*]}" "${DATASETS[*]}" "${IMPUTATORS[*]}" "${PREDICTORS[*]}" \
-    "${SEEDS[*]}" "$MISSING_RATE" "$LOOKBACK_LEN" "$TIP_K" "$TIP_EPSILON"
-echo "  max epoch    : $MAX_EPOCH"
-echo "  patience     : $PATIENCE"
-echo "  batch size   : $BATCH_SIZE"
-echo "  device       : $DEVICE"
-echo "  jobs         : $JOBS"
-echo "  dry run      : $DRY_RUN"
-echo "  failed only  : $FAILED_ONLY"
-echo "  collect      : $COLLECT"
-echo ""
+SUMMARY_CODE=0
 
-job_pool_init "$JOBS" "$DRY_RUN" "$FAILED_ONLY"
+print_run_settings() {
+    echo "  max epoch    : $MAX_EPOCH"
+    echo "  patience     : $PATIENCE"
+    echo "  batch size   : $BATCH_SIZE"
+    echo "  device       : $DEVICE"
+    echo "  jobs         : $JOBS"
+    echo "  dry run      : $DRY_RUN"
+    echo "  failed only  : $FAILED_ONLY"
+    echo "  collect      : $COLLECT"
+    echo ""
+}
 
-for exp_type in "${EXP_TYPES[@]}"; do
-    for dataset in "${DATASETS[@]}"; do
-        for imputator in "${IMPUTATORS[@]}"; do
-            for predictor in "${PREDICTORS[@]}"; do
-                for seed in "${SEEDS[@]}"; do
-                    job_pool_submit "$exp_type" "$dataset" "$imputator" "$predictor" \
-                        "$MISSING_RATE" "$seed" "$LOOKBACK_LEN" "$TIP_K" \
-                        "$TIP_EPSILON" "$PRETRAIN_EPOCHS" "$MAX_EPOCH" \
-                        "$PATIENCE" "$BATCH_SIZE" "$DEVICE"
+run_core_phase() {
+    print_common_matrix \
+        "Core validation: B1 vs B2" \
+        "${EXP_TYPES[*]}" "${DATASETS[*]}" "${IMPUTATORS[*]}" "${PREDICTORS[*]}" \
+        "${SEEDS[*]}" "$MISSING_RATE" "$LOOKBACK_LEN" "$TIP_K" "$TIP_EPSILON"
+    print_run_settings
+
+    job_pool_init "$JOBS" "$DRY_RUN" "$FAILED_ONLY"
+
+    for exp_type in "${EXP_TYPES[@]}"; do
+        for dataset in "${DATASETS[@]}"; do
+            for imputator in "${IMPUTATORS[@]}"; do
+                for predictor in "${PREDICTORS[@]}"; do
+                    for seed in "${SEEDS[@]}"; do
+                        job_pool_submit "$exp_type" "$dataset" "$imputator" "$predictor" \
+                            "$MISSING_RATE" "$seed" "$LOOKBACK_LEN" "$TIP_K" \
+                            "$TIP_EPSILON" "$PRETRAIN_EPOCHS" "$MAX_EPOCH" \
+                            "$PATIENCE" "$BATCH_SIZE" "$DEVICE"
+                    done
                 done
             done
         done
     done
-done
 
-job_pool_wait_all
-SUMMARY_CODE=0
-job_pool_print_summary "Core validation summary" || SUMMARY_CODE=$?
+    job_pool_wait_all
+    job_pool_print_summary "Core validation summary" || SUMMARY_CODE=$?
+}
+
+run_k_sensitivity_phase() {
+    print_common_matrix \
+        "Core sensitivity: B2 k sweep" \
+        "B2" "${DATASETS[*]}" "${IMPUTATORS[*]}" "${PREDICTORS[*]}" \
+        "${SEEDS[*]}" "$MISSING_RATE" "$LOOKBACK_LEN" "${K_VALUES[*]}" "$TIP_EPSILON"
+    print_run_settings
+
+    job_pool_init "$JOBS" "$DRY_RUN" "$FAILED_ONLY"
+
+    for k in "${K_VALUES[@]}"; do
+        for dataset in "${DATASETS[@]}"; do
+            for imputator in "${IMPUTATORS[@]}"; do
+                for predictor in "${PREDICTORS[@]}"; do
+                    for seed in "${SEEDS[@]}"; do
+                        job_pool_submit "B2" "$dataset" "$imputator" "$predictor" \
+                            "$MISSING_RATE" "$seed" "$LOOKBACK_LEN" "$k" \
+                            "$TIP_EPSILON" "$PRETRAIN_EPOCHS" "$MAX_EPOCH" \
+                            "$PATIENCE" "$BATCH_SIZE" "$DEVICE"
+                    done
+                done
+            done
+        done
+    done
+
+    job_pool_wait_all
+    job_pool_print_summary "Core sensitivity k summary" || SUMMARY_CODE=$?
+}
+
+run_epsilon_sensitivity_phase() {
+    print_common_matrix \
+        "Core sensitivity: B2 epsilon sweep" \
+        "B2" "${DATASETS[*]}" "${IMPUTATORS[*]}" "${PREDICTORS[*]}" \
+        "${SEEDS[*]}" "$MISSING_RATE" "$LOOKBACK_LEN" "$EPSILON_K" "${EPSILON_VALUES[*]}"
+    print_run_settings
+
+    job_pool_init "$JOBS" "$DRY_RUN" "$FAILED_ONLY"
+    local old_include_eps="${INCLUDE_EPS_IN_EXP_NAME:-}"
+    export INCLUDE_EPS_IN_EXP_NAME=true
+
+    for epsilon in "${EPSILON_VALUES[@]}"; do
+        for dataset in "${DATASETS[@]}"; do
+            for imputator in "${IMPUTATORS[@]}"; do
+                for predictor in "${PREDICTORS[@]}"; do
+                    for seed in "${SEEDS[@]}"; do
+                        job_pool_submit "B2" "$dataset" "$imputator" "$predictor" \
+                            "$MISSING_RATE" "$seed" "$LOOKBACK_LEN" "$EPSILON_K" \
+                            "$epsilon" "$PRETRAIN_EPOCHS" "$MAX_EPOCH" \
+                            "$PATIENCE" "$BATCH_SIZE" "$DEVICE"
+                    done
+                done
+            done
+        done
+    done
+
+    if [[ -n "$old_include_eps" ]]; then
+        export INCLUDE_EPS_IN_EXP_NAME="$old_include_eps"
+    else
+        unset INCLUDE_EPS_IN_EXP_NAME
+    fi
+    job_pool_wait_all
+    job_pool_print_summary "Core sensitivity epsilon summary" || SUMMARY_CODE=$?
+}
+
+if [[ "$RUN_CORE" == true ]]; then
+    run_core_phase
+fi
+
+if [[ "$WITH_SENSITIVITY" == true ]]; then
+    run_k_sensitivity_phase
+    run_epsilon_sensitivity_phase
+fi
 
 if [[ "$COLLECT" == true ]]; then
     if [[ "$DRY_RUN" == true ]]; then
