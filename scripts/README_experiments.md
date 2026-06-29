@@ -12,6 +12,8 @@ These scripts are generated from the experiment design in `C:\Users\29895\Deskto
 - `run_epsilon_sweep.sh`: TIP perturbation-step ablation, `epsilon in {1e-5, 1e-4, 1e-3, 1e-2, 1e-1}`.
 - `run_missing_rate_robustness.sh`: missing-rate robustness with B1/B2/B3 on Supply Chain-Customer and Azure2019-D.
 - `run_compute_cost_probe.sh`: short wall-clock probe for the compute-cost table.
+- `profile_runtime.py`: profile startup, data, model init, imputer training,
+  predictor inference, and TIP zero-order estimation for one config.
 - `run_paper_experiments.sh`: convenience wrapper that runs the full suite.
 - `auto_run_experiments.py`: budget-aware local runner that probes runtime,
   monitors logs, retries smaller batches on OOM, downgrades pending grids when
@@ -32,6 +34,21 @@ bash scripts/run_paper_experiments.sh --quick --dry-run
 python3 scripts/auto_run_experiments.py --budget-min 90 --profile auto
 python3 scripts/auto_run_experiments.py --budget-min 20 --profile smoke --device cuda
 python3 scripts/collect_results.py
+./src/models/predictors/Sundial/.venv/bin/python scripts/profile_runtime.py --batches 3 --tip-k 5 --dataset.dataset Supply_Chain_Customer_D --imputator.model_type SAITS --predictor.model_type Sundial
+```
+
+## Runtime profiling
+
+Use `profile_runtime.py` when an experiment feels slow and you need to locate
+the bottleneck before changing code or hyperparameters.  It runs only a few
+batches and reports per-stage timings plus rough B1/TIP epoch estimates.
+
+Examples:
+
+```bash
+./src/models/predictors/Sundial/.venv/bin/python scripts/profile_runtime.py --batches 3 --tip-k 5
+./src/models/predictors/TimesFM25/.venv/bin/python scripts/profile_runtime.py --batches 2 --tip-k 5 --predictor.model_type TimesFM25
+./src/models/predictors/Sundial/.venv/bin/python scripts/profile_runtime.py --skip-tip --include-auto-batch
 ```
 
 ## Adaptive local runner
