@@ -37,7 +37,7 @@ Options:
   --full                     Run all 7 datasets x 4 imputers x 2 predictors.
   --seed 42,43               Random seeds. Default: 42.
   --missing-rate 0.2         Missing rate. Default: 0.2.
-  --lookback 128             Lookback length L. Default: 128.
+  --lookback 512             Lookback length L. Default: 512.
   --k 20                     Fixed k. Default: 20.
   --max-epoch N              Max training epochs. Default: 10000.
   --patience N               Early-stopping patience. Default: 5.
@@ -71,6 +71,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 cd "$PROJECT_DIR"
+export INCLUDE_EPS_IN_EXP_NAME=true
 
 echo "=============================================="
 echo "  Epsilon sweep"

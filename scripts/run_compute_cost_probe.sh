@@ -34,7 +34,7 @@ Options:
   --imputator NAME       Imputer. Default: SAITS.
   --predictor NAME       Predictor. Default: TimesFM25.
   --missing-rate 0.2     Missing rate. Default: 0.2.
-  --lookback 128         Lookback length L. Default: 128.
+  --lookback 512         Lookback length L. Default: 512.
   --seed 42              Random seed. Default: 42.
   --epsilon 1e-4         TIP finite-difference step. Default: 1e-4.
   --max-epoch N          Short run epochs. Default: 1.

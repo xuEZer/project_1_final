@@ -27,7 +27,7 @@ PAPER_PREDICTORS=(Sundial TimesFM25)
 PAPER_MISSING_RATES=(0.1 0.2 0.3 0.4 0.5)
 
 DEFAULT_MAIN_MISSING_RATE="0.2"
-DEFAULT_LOOKBACK_LEN=128
+DEFAULT_LOOKBACK_LEN=512
 DEFAULT_BLOCK_SIZE=20
 DEFAULT_BATCH_SIZE=128
 DEFAULT_MAX_EPOCH=10000
@@ -86,15 +86,14 @@ experiment_name() {
         printf '%s_%s_%s_%s_mr%s_L%s_s%s' \
             "$exp_type" "$dataset" "$imputator" "$predictor" \
             "$missing_rate" "$lookback_len" "$seed"
-    elif [[ "$exp_type" == "B3" ]]; then
-        printf '%s_%s_%s_%s_mr%s_L%s_k%s_eps%s_pt%s_s%s' \
-            "$exp_type" "$dataset" "$imputator" "$predictor" \
-            "$missing_rate" "$lookback_len" "$tip_k" "$(eps_label "$tip_epsilon")" \
-            "$pretrain_epochs" "$seed"
-    else
+    elif [[ "${INCLUDE_EPS_IN_EXP_NAME:-false}" == true ]]; then
         printf '%s_%s_%s_%s_mr%s_L%s_k%s_eps%s_s%s' \
             "$exp_type" "$dataset" "$imputator" "$predictor" \
             "$missing_rate" "$lookback_len" "$tip_k" "$(eps_label "$tip_epsilon")" "$seed"
+    else
+        printf '%s_%s_%s_%s_mr%s_L%s_k%s_s%s' \
+            "$exp_type" "$dataset" "$imputator" "$predictor" \
+            "$missing_rate" "$lookback_len" "$tip_k" "$seed"
     fi
 }
 

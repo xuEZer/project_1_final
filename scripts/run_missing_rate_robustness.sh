@@ -42,7 +42,7 @@ Options:
   --imputator A,B          Imputers. Default: SAITS,DeepMVI.
   --predictor A,B          Predictors. Default: Sundial,TimesFM25.
   --seed 42,43             Random seeds. Default: 42.
-  --lookback 128           Lookback length L. Default: 128.
+  --lookback 512           Lookback length L. Default: 512.
   --k 20                   TIP sampling count. Default: 20.
   --epsilon 1e-4           TIP finite-difference step. Default: 1e-4.
   --pretrain-epochs 2      B3 imputation pretraining epochs. Default: 2.
