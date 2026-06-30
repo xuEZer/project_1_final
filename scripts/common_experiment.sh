@@ -89,11 +89,6 @@ DEFAULT_IMPUTATOR="$(config_default imputator model_type)"
 DEFAULT_PREDICTOR="$(config_default predictor model_type)"
 DEFAULT_SEEDS=("$DEFAULT_RANDOM_SEED")
 
-# A small set of empirically under-trained combinations from the L128/mr0.2
-# logs.  They hit best validation loss in epoch 1-2 and early-stop after only
-# a few optimizer steps per epoch with the global batch size of 256.
-TARGETED_SMALL_BATCH_SIZE="${TARGETED_SMALL_BATCH_SIZE:-64}"
-
 declare -A PYTHON_BIN=(
     ["Sundial"]="${PROJECT_DIR}/src/models/predictors/Sundial/.venv/bin/python"
     ["TimesFM25"]="${PROJECT_DIR}/src/models/predictors/TimesFM25/.venv/bin/python"
@@ -135,46 +130,6 @@ append_config_if_changed() {
     if [[ -n "$value" && "$value" != "$default_value" ]]; then
         cmd+=(--"${section}.${key}" "$value")
     fi
-}
-
-batch_size_for_combo() {
-    local exp_type="$1"
-    local dataset="$2"
-    local imputator="$3"
-    local predictor="$4"
-    local missing_rate="$5"
-    local lookback_len="$6"
-    local requested_batch_size="$7"
-
-    if [[ "$requested_batch_size" != "$DEFAULT_BATCH_SIZE" ]]; then
-        echo "$requested_batch_size"
-        return 0
-    fi
-
-    if [[ "$missing_rate" != "$DEFAULT_MAIN_MISSING_RATE" || "$lookback_len" != "$DEFAULT_LOOKBACK_LEN" ]]; then
-        echo "$requested_batch_size"
-        return 0
-    fi
-
-    case "${dataset}|${imputator}|${predictor}" in
-        Supply_Chain_Customer_D\|BRITS\|Sundial|\
-        Supply_Chain_Customer_D\|BRITS\|TimesFM25|\
-        Supply_Chain_Customer_D\|DeepMVI\|Sundial|\
-        Supply_Chain_Customer_D\|DeepMVI\|TimesFM25|\
-        current_velocity_H\|DeepMVI\|Sundial|\
-        current_velocity_H\|DeepMVI\|TimesFM25)
-            echo "$TARGETED_SMALL_BATCH_SIZE"
-            ;;
-        *)
-            echo "$requested_batch_size"
-            ;;
-    esac
-}
-
-is_targeted_batch_override() {
-    local requested_batch_size="$1"
-    local resolved_batch_size="$2"
-    [[ "$requested_batch_size" == "$DEFAULT_BATCH_SIZE" && "$resolved_batch_size" != "$requested_batch_size" ]]
 }
 
 experiment_name() {
@@ -236,10 +191,6 @@ run_one_experiment() {
     local patience="${14:-$DEFAULT_PATIENCE}"
     local batch_size="${15:-$DEFAULT_BATCH_SIZE}"
     local device="${16:-$DEFAULT_DEVICE}"
-    local requested_batch_size="$batch_size"
-
-    batch_size="$(batch_size_for_combo "$exp_type" "$dataset" "$imputator" "$predictor" \
-        "$missing_rate" "$lookback_len" "$requested_batch_size")"
 
     local exp_name
     exp_name="$(experiment_name_with_suffix "$exp_type" "$dataset" "$imputator" "$predictor" \
@@ -280,9 +231,6 @@ run_one_experiment() {
     fi
 
     echo "[RUN] $exp_name"
-    if is_targeted_batch_override "$requested_batch_size" "$batch_size"; then
-        echo "      targeted batch_size: ${requested_batch_size} -> ${batch_size}"
-    fi
     printf '      '
     printf '%q ' "${cmd[@]}"
     printf '\n'
