@@ -304,22 +304,28 @@ job_pool_cleanup() {
     done
 }
 
-job_pool_wait_oldest() {
+job_pool_reap_at() {
+    local idx="$1"
+    local already_waited="${2:-false}"
     if [[ ${#JOB_POOL_PIDS[@]} -eq 0 ]]; then
         return 0
     fi
 
-    local pid="${JOB_POOL_PIDS[0]}"
-    local name="${JOB_POOL_NAMES[0]}"
-    local runner_log="${JOB_POOL_LOGS[0]}"
-    local exit_file="${JOB_POOL_EXIT_FILES[0]}"
-    local lock_dir="${JOB_POOL_LOCKS[0]}"
+    local pid="${JOB_POOL_PIDS[$idx]}"
+    local name="${JOB_POOL_NAMES[$idx]}"
+    local runner_log="${JOB_POOL_LOGS[$idx]}"
+    local exit_file="${JOB_POOL_EXIT_FILES[$idx]}"
+    local lock_dir="${JOB_POOL_LOCKS[$idx]}"
     local code
 
-    set +e
-    wait "$pid"
-    code=$?
-    set -e
+    if [[ "$already_waited" == true ]]; then
+        code=0
+    else
+        set +e
+        wait "$pid"
+        code=$?
+        set -e
+    fi
 
     if [[ -f "$exit_file" ]]; then
         code="$(cat "$exit_file")"
@@ -338,11 +344,39 @@ job_pool_wait_oldest() {
         JOB_POOL_FAILED=$((JOB_POOL_FAILED + 1))
     fi
 
-    JOB_POOL_PIDS=("${JOB_POOL_PIDS[@]:1}")
-    JOB_POOL_NAMES=("${JOB_POOL_NAMES[@]:1}")
-    JOB_POOL_LOGS=("${JOB_POOL_LOGS[@]:1}")
-    JOB_POOL_EXIT_FILES=("${JOB_POOL_EXIT_FILES[@]:1}")
-    JOB_POOL_LOCKS=("${JOB_POOL_LOCKS[@]:1}")
+    unset 'JOB_POOL_PIDS[idx]'
+    unset 'JOB_POOL_NAMES[idx]'
+    unset 'JOB_POOL_LOGS[idx]'
+    unset 'JOB_POOL_EXIT_FILES[idx]'
+    unset 'JOB_POOL_LOCKS[idx]'
+    JOB_POOL_PIDS=("${JOB_POOL_PIDS[@]}")
+    JOB_POOL_NAMES=("${JOB_POOL_NAMES[@]}")
+    JOB_POOL_LOGS=("${JOB_POOL_LOGS[@]}")
+    JOB_POOL_EXIT_FILES=("${JOB_POOL_EXIT_FILES[@]}")
+    JOB_POOL_LOCKS=("${JOB_POOL_LOCKS[@]}")
+}
+
+job_pool_wait_any() {
+    if [[ ${#JOB_POOL_PIDS[@]} -eq 0 ]]; then
+        return 0
+    fi
+
+    local finished_pid=""
+    local idx
+
+    set +e
+    wait -n -p finished_pid "${JOB_POOL_PIDS[@]}"
+    set -e
+
+    for idx in "${!JOB_POOL_PIDS[@]}"; do
+        if [[ "${JOB_POOL_PIDS[$idx]}" == "$finished_pid" ]]; then
+            job_pool_reap_at "$idx" true
+            return 0
+        fi
+    done
+
+    # Fallback for shells that return an empty/non-matching -p value.
+    job_pool_reap_at 0
 }
 
 job_pool_submit() {
@@ -432,13 +466,13 @@ job_pool_submit() {
     JOB_POOL_LOCKS+=("$lock_dir")
 
     while [[ ${#JOB_POOL_PIDS[@]} -ge "$JOB_POOL_JOBS" ]]; do
-        job_pool_wait_oldest
+        job_pool_wait_any
     done
 }
 
 job_pool_wait_all() {
     while [[ ${#JOB_POOL_PIDS[@]} -gt 0 ]]; do
-        job_pool_wait_oldest
+        job_pool_wait_any
     done
 }
 
