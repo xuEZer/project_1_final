@@ -190,6 +190,8 @@ class JointModel(nn.Module):
         X_A_mask: torch.Tensor | None,
         Y_N: torch.Tensor,
         Y_N_mask: torch.Tensor,
+        pred_mask: torch.Tensor | None = None,
+        pred_denom: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Compute Q(θ) = prediction loss for the current imputer parameters.
 
@@ -205,10 +207,13 @@ class JointModel(nn.Module):
         if pred_data is None:
             return torch.tensor(0.0, device=self.device)
 
-        diff = (pred_data - Y_N) ** 2
-        mask = 1.0 - Y_N_mask
-        denom = mask.sum() + 1e-8
-        return (diff * mask).sum() / denom
+        if pred_mask is None:
+            pred_mask = 1.0 - Y_N_mask
+        if pred_denom is None:
+            pred_denom = pred_mask.sum() + 1e-8
+
+        diff = pred_data - Y_N
+        return (diff.square() * pred_mask).sum() / pred_denom
 
     @torch.no_grad()
     def _compute_gp_hat(
@@ -235,22 +240,47 @@ class JointModel(nn.Module):
         params = list(self.imputer.parameters())
         theta = [p.detach().clone() for p in params]
         gp_parts = [torch.zeros_like(p) for p in params]
+        directions = [torch.empty_like(p) for p in params]
+        pred_mask = 1.0 - Y_N_mask
+        pred_denom = pred_mask.sum() + 1e-8
         training_modes = self._capture_training_modes(self.imputer)
         try:
             self.imputer.eval()
 
             for _ in range(k):
-                directions = [torch.randn_like(p) for p in params]
+                for u in directions:
+                    u.normal_()
 
                 # Q(θ + ε·u)
-                for p, base, u in zip(params, theta, directions, strict=True):
-                    p.copy_(base).add_(u, alpha=epsilon)
-                Q_plus = self._compute_Q(X_NA, X_NA_mask, X_N, X_A_mask, Y_N, Y_N_mask)
+                for p, u in zip(params, directions, strict=True):
+                    p.add_(u, alpha=epsilon)
+                Q_plus = self._compute_Q(
+                    X_NA,
+                    X_NA_mask,
+                    X_N,
+                    X_A_mask,
+                    Y_N,
+                    Y_N_mask,
+                    pred_mask=pred_mask,
+                    pred_denom=pred_denom,
+                )
 
                 # Q(θ − ε·u)
-                for p, base, u in zip(params, theta, directions, strict=True):
-                    p.copy_(base).add_(u, alpha=-epsilon)
-                Q_minus = self._compute_Q(X_NA, X_NA_mask, X_N, X_A_mask, Y_N, Y_N_mask)
+                for p, u in zip(params, directions, strict=True):
+                    p.add_(u, alpha=-2.0 * epsilon)
+                Q_minus = self._compute_Q(
+                    X_NA,
+                    X_NA_mask,
+                    X_N,
+                    X_A_mask,
+                    Y_N,
+                    Y_N_mask,
+                    pred_mask=pred_mask,
+                    pred_denom=pred_denom,
+                )
+
+                for p, u in zip(params, directions, strict=True):
+                    p.add_(u, alpha=epsilon)
 
                 coeff = (Q_plus - Q_minus) / (2.0 * epsilon)
                 for gp_part, u in zip(gp_parts, directions, strict=True):
