@@ -129,12 +129,13 @@ class Model(nn.Module):
 
     def imputation(self, x_enc, x_mark_enc, x_dec, x_mark_dec, mask):
         # Normalization from Non-stationary Transformer
-        means = torch.sum(x_enc, dim=1) / torch.sum(mask == 1, dim=1)
+        observed_count = torch.sum(mask == 1, dim=1).clamp_min(1)
+        means = torch.sum(x_enc, dim=1) / observed_count
         means = means.unsqueeze(1).detach()
         x_enc = x_enc.sub(means)
         x_enc = x_enc.masked_fill(mask == 0, 0)
         stdev = torch.sqrt(torch.sum(x_enc * x_enc, dim=1) /
-                           torch.sum(mask == 1, dim=1) + 1e-5)
+                           observed_count + 1e-5)
         stdev = stdev.unsqueeze(1).detach()
         x_enc = x_enc.div(stdev)
 
