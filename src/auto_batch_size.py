@@ -59,7 +59,6 @@ def _worker(
     import configparser
     import logging
     import sys as _sys
-    from pathlib import Path
 
     # Suppress multiprocess resource tracker error in subprocess (Python ≥ 3.12).
     _original_hook = _sys.unraisablehook
@@ -80,19 +79,19 @@ def _worker(
     config.read_string(config_str)
 
     from src.models.imputators import imputator  # noqa: E402
-    from src.models.jointModel import JointModel  # noqa: E402
+    from src.models.jointModel import JointModel, NullPredictor  # noqa: E402
     from src.models.predictors import predictor  # noqa: E402
 
-    model_save_dir = Path(config.get("paths", "ckpt_save_dir")) / config.get(
-        "experiment", "exp_name"
-    )
     logger = logging.getLogger("auto_bs_worker")
     logger.addHandler(logging.NullHandler())
 
     joint_model = JointModel(
         imputer=imputator(config.get("imputator", "model_type"), config),
-        predictor=predictor(config.get("predictor", "model_type"), config),
-        model_save_dir=model_save_dir,
+        predictor=(
+            NullPredictor()
+            if config.get("experiment", "exp_type") == "B1"
+            else predictor(config.get("predictor", "model_type"), config)
+        ),
         optimizer_name=config.get("training", "optimizer"),
         lr=config.getfloat("training", "lr"),
         device=device,

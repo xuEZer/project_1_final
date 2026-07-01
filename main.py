@@ -31,7 +31,7 @@ from src.evaluator import evaluate
 from src.experiments import run_experiment
 from src.logger import log_config, log_system_info, setup_logger
 from src.models.imputators import imputator
-from src.models.jointModel import JointModel
+from src.models.jointModel import JointModel, NullPredictor
 from src.models.predictors import predictor
 
 GLOBAL_CONFIG_PATH = Path("./configs/global.ini")
@@ -156,8 +156,6 @@ def main() -> None:
     logger.info("Training completed.")
 
     evaluate(config, joint_model, eval_loader, no_gt, logger)
-    joint_model.delete_checkpoint()
-
     logger.info("Experiment completed successfully!")
 
 
@@ -344,9 +342,11 @@ def init_joint_model(
     """
     joint_model = JointModel(
         imputer=imputator(config.get("imputator", "model_type"), config),
-        predictor=predictor(config.get("predictor", "model_type"), config),
-        model_save_dir=Path(config.get("paths", "ckpt_save_dir"))
-        / config.get("experiment", "exp_name"),
+        predictor=(
+            NullPredictor()
+            if config.get("experiment", "exp_type") == "B1"
+            else predictor(config.get("predictor", "model_type"), config)
+        ),
         optimizer_name=config.get("training", "optimizer"),
         lr=config.getfloat("training", "lr"),
         device=config.get("training", "device"),

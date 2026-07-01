@@ -78,10 +78,6 @@ DEFAULT_MAIN_MISSING_RATE="$(config_default dataset missing_rate)"
 DEFAULT_ARTIFICIAL_MISSING_RATE="$(config_default dataset artificial_missing_rate)"
 DEFAULT_LOOKBACK_LEN="$(config_default dataset lookback_len)"
 DEFAULT_BLOCK_SIZE="$(config_default dataset block_size)"
-DEFAULT_MAX_EPOCH="$(config_default training max_epoch)"
-DEFAULT_PATIENCE="$(config_default training patience)"
-DEFAULT_DEVICE="$(config_default training device)"
-DEFAULT_BATCH_SIZE="$(config_default training batch_size)"
 DEFAULT_TIP_K="$(config_default training tip_k)"
 DEFAULT_TIP_EPSILON="$(config_default training tip_epsilon)"
 DEFAULT_PRETRAIN_EPOCHS="$(config_default training tip_pretrain_epochs)"
@@ -187,10 +183,7 @@ run_one_experiment() {
     local pretrain_epochs="${10:-$DEFAULT_PRETRAIN_EPOCHS}"
     local dry_run="${11:-false}"
     local failed_only="${12:-false}"
-    local max_epoch="${13:-$DEFAULT_MAX_EPOCH}"
-    local patience="${14:-$DEFAULT_PATIENCE}"
-    local batch_size="${15:-$DEFAULT_BATCH_SIZE}"
-    local device="${16:-$DEFAULT_DEVICE}"
+    local extra_config_args=("${@:13}")
 
     local exp_name
     exp_name="$(experiment_name_with_suffix "$exp_type" "$dataset" "$imputator" "$predictor" \
@@ -216,10 +209,6 @@ run_one_experiment() {
     append_config_if_changed dataset lookback_len "$lookback_len" "$DEFAULT_LOOKBACK_LEN"
     append_config_if_changed imputator model_type "$imputator" "$DEFAULT_IMPUTATOR"
     append_config_if_changed predictor model_type "$predictor" "$DEFAULT_PREDICTOR"
-    append_config_if_changed training batch_size "$batch_size" "$DEFAULT_BATCH_SIZE"
-    append_config_if_changed training max_epoch "$max_epoch" "$DEFAULT_MAX_EPOCH"
-    append_config_if_changed training patience "$patience" "$DEFAULT_PATIENCE"
-    append_config_if_changed training device "$device" "$DEFAULT_DEVICE"
     case "$exp_type" in
         B2|B3|B5|B6)
             append_config_if_changed training tip_k "$tip_k" "$DEFAULT_TIP_K"
@@ -228,6 +217,9 @@ run_one_experiment() {
     esac
     if [[ "$exp_type" == "B3" ]]; then
         append_config_if_changed training tip_pretrain_epochs "$pretrain_epochs" "$DEFAULT_PRETRAIN_EPOCHS"
+    fi
+    if [[ ${#extra_config_args[@]} -gt 0 ]]; then
+        cmd+=("${extra_config_args[@]}")
     fi
 
     echo "[RUN] $exp_name"
@@ -390,10 +382,6 @@ job_pool_submit() {
     local tip_k="$8"
     local tip_epsilon="$9"
     local pretrain_epochs="${10}"
-    local max_epoch="${11}"
-    local patience="${12}"
-    local batch_size="${13}"
-    local device="${14}"
     local exp_name lock_dir runner_log exit_file
 
     JOB_POOL_TOTAL=$((JOB_POOL_TOTAL + 1))
@@ -411,8 +399,7 @@ job_pool_submit() {
     if [[ "$JOB_POOL_DRY_RUN" == true ]]; then
         if run_one_experiment "$exp_type" "$dataset" "$imputator" "$predictor" \
             "$missing_rate" "$seed" "$lookback_len" "$tip_k" "$tip_epsilon" \
-            "$pretrain_epochs" true "$JOB_POOL_FAILED_ONLY" "$max_epoch" \
-            "$patience" "$batch_size" "$device"; then
+            "$pretrain_epochs" true "$JOB_POOL_FAILED_ONLY"; then
             JOB_POOL_PASSED=$((JOB_POOL_PASSED + 1))
         else
             JOB_POOL_FAILED=$((JOB_POOL_FAILED + 1))
@@ -432,8 +419,7 @@ job_pool_submit() {
         set +e
         run_one_experiment "$exp_type" "$dataset" "$imputator" "$predictor" \
             "$missing_rate" "$seed" "$lookback_len" "$tip_k" "$tip_epsilon" \
-            "$pretrain_epochs" false false "$max_epoch" "$patience" \
-            "$batch_size" "$device"
+            "$pretrain_epochs" false false
         local code=$?
         set -e
         rmdir "$lock_dir" 2>/dev/null || true
@@ -454,8 +440,7 @@ job_pool_submit() {
         set +e
         run_one_experiment "$exp_type" "$dataset" "$imputator" "$predictor" \
             "$missing_rate" "$seed" "$lookback_len" "$tip_k" "$tip_epsilon" \
-            "$pretrain_epochs" false false "$max_epoch" "$patience" \
-            "$batch_size" "$device"
+            "$pretrain_epochs" false false
         echo "$?" > "$exit_file"
     ) >"$runner_log" 2>&1 &
 

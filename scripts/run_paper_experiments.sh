@@ -8,10 +8,6 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 DRY_RUN=false
 FAILED_ONLY=false
-DEVICE=""
-MAX_EPOCH=""
-PATIENCE=""
-BATCH_SIZE=""
 JOBS=""
 
 usage() {
@@ -30,12 +26,8 @@ Runs:
 Options:
   --dry-run            Print commands without running training.
   --failed-only        Skip completed logs.
-  --device cuda|cpu    Override Torch device.
-  --max-epoch N        Override max training epochs.
-  --patience N         Override early-stopping patience.
-  --batch-size N       Override effective batch size.
   --jobs N, -j N       Use concurrency for all runnable experiment scripts.
-  --quick              Use representative grids for ablations and 2 max epochs.
+  --quick              Use representative grids for ablations.
   -h, --help           Show this help.
 EOF
 }
@@ -45,10 +37,6 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --dry-run) DRY_RUN=true; shift ;;
         --failed-only) FAILED_ONLY=true; shift ;;
-        --device) DEVICE="$2"; shift 2 ;;
-        --max-epoch) MAX_EPOCH="$2"; shift 2 ;;
-        --patience) PATIENCE="$2"; shift 2 ;;
-        --batch-size) BATCH_SIZE="$2"; shift 2 ;;
         --jobs|-j) JOBS="$2"; shift 2 ;;
         --quick) QUICK=true; shift ;;
         -h|--help) usage; exit 0 ;;
@@ -56,18 +44,9 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ "$QUICK" == true ]]; then
-    [[ -z "$MAX_EPOCH" ]] && MAX_EPOCH=2
-    [[ -z "$PATIENCE" ]] && PATIENCE=1
-fi
-
 COMMON_ARGS=()
 [[ "$DRY_RUN" == true ]] && COMMON_ARGS+=(--dry-run)
 [[ "$FAILED_ONLY" == true ]] && COMMON_ARGS+=(--failed-only)
-[[ -n "$DEVICE" ]] && COMMON_ARGS+=(--device "$DEVICE")
-[[ -n "$MAX_EPOCH" ]] && COMMON_ARGS+=(--max-epoch "$MAX_EPOCH")
-[[ -n "$PATIENCE" ]] && COMMON_ARGS+=(--patience "$PATIENCE")
-[[ -n "$BATCH_SIZE" ]] && COMMON_ARGS+=(--batch-size "$BATCH_SIZE")
 RUNNABLE_ARGS=("${COMMON_ARGS[@]}")
 [[ -n "$JOBS" ]] && RUNNABLE_ARGS+=(--jobs "$JOBS")
 
@@ -96,15 +75,13 @@ bash "${SCRIPT_DIR}/run_missing_rate_robustness.sh" "${RUNNABLE_ARGS[@]}" "${ROB
 
 echo "[6/7] Compute-cost probe"
 COMPUTE_ARGS=()
-[[ "$QUICK" == true ]] && COMPUTE_ARGS+=(--max-epoch 1)
+[[ "$QUICK" == true ]] && COMPUTE_ARGS+=(--num-epoch 1)
 bash "${SCRIPT_DIR}/run_compute_cost_probe.sh" "${COMMON_ARGS[@]}" "${COMPUTE_ARGS[@]}"
 
 echo "[7/7] Collect results"
 COLLECT_ARGS=()
 if [[ "$QUICK" == true ]]; then
-    COLLECT_ARGS+=(--quick --compute-max-epoch 1)
-elif [[ -n "$MAX_EPOCH" ]]; then
-    COLLECT_ARGS+=(--compute-max-epoch "$MAX_EPOCH")
+    COLLECT_ARGS+=(--quick --compute-num-epoch 1)
 fi
 
 if [[ "$DRY_RUN" == false ]]; then

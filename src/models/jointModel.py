@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import collections.abc
 import logging
-from pathlib import Path
 
 import torch
 import torch.nn as nn
@@ -19,6 +18,13 @@ from torch.utils.tensorboard import SummaryWriter
 optimizer_dict = {"Adam": torch.optim.Adam, "AdamW": torch.optim.AdamW}
 
 
+class NullPredictor(nn.Module):
+    """Placeholder predictor for imputer-only training phases."""
+
+    def forward(self, imputed_X: torch.Tensor) -> dict[str, None]:
+        return {"pred_data": None}
+
+
 class JointModel(nn.Module):
     """Wrap an imputer (trainable) and predictor (inference-only)."""
 
@@ -26,7 +32,6 @@ class JointModel(nn.Module):
         self,
         imputer: nn.Module,
         predictor: nn.Module,
-        model_save_dir: Path,
         optimizer_name: str,
         lr: float,
         device: str,
@@ -38,7 +43,6 @@ class JointModel(nn.Module):
         Args:
             imputer: Imputation module (trainable).
             predictor: Prediction module (inference-only, frozen).
-            model_save_dir: Directory to save best-model checkpoints.
             optimizer_name: Optimizer name (must be a key in
                 ``optimizer_dict``).
             lr: Learning rate.
@@ -52,9 +56,6 @@ class JointModel(nn.Module):
         self.tb_summary_writer = tb_summary_writer
         self.logger = logger
         self.device = device
-
-        model_save_dir.mkdir(parents=True, exist_ok=True)
-        self.checkpoint_path = model_save_dir / "best_model.pt"
 
         self.global_epoch = 0
         self.global_optim_step = 0
@@ -102,7 +103,7 @@ class JointModel(nn.Module):
             Y_N_mask: Binary mask for future values ``(B, P, D)``
                 (optional, 1 = missing).
             run_predictor: Whether to run the frozen predictor. Training and
-                validation can skip it when only imputation loss is needed.
+                training can skip it when only imputation loss is needed.
 
         Returns:
             Dictionary with keys:
@@ -342,11 +343,10 @@ class JointModel(nn.Module):
         self,
         data_loader: dict[str, DataLoader],
         phase_name: str,
-        max_epoch: int,
-        patience: int,
+        num_epoch: int,
         accum_steps: int | None = None,
         on_epoch_end: collections.abc.Callable[
-            [int, float, float, "JointModel"], None
+            [int, float, "JointModel"], None
         ]
         | None = None,
         grad_modifier: collections.abc.Callable[
@@ -354,42 +354,36 @@ class JointModel(nn.Module):
         ]
         | None = None,
     ) -> float:
-        """Train the imputer with gradient accumulation and early stopping.
+        """Train the imputer for a fixed number of epochs.
 
         The predictor is never trained — it runs in ``eval()`` /
         ``no_grad()`` throughout.
 
         Args:
-            data_loader: Dictionary with ``"train"`` and ``"val"``
-                DataLoaders.
+            data_loader: Dictionary with a ``"train"`` DataLoader.
             phase_name: Human-readable phase name (for logging).
-            max_epoch: Maximum epochs for this phase.
-            patience: Early-stopping patience (epochs without
-                improvement).
+            num_epoch: Number of epochs for this phase.
             accum_steps: Micro-batches to accumulate before one
                 optimizer step.  Falls back to ``self.accum_steps``,
                 then 1 (no accumulation).
-            on_epoch_end: Optional callback ``(epoch, train_loss,
-                val_loss, model)`` invoked after each validation epoch.
+            on_epoch_end: Optional callback ``(epoch, train_loss, model)``
+                invoked after each training epoch.
             grad_modifier: Optional callback ``(model, batch_dict)``
                 invoked after gradient accumulation and before gradient
                 clipping and optimizer step.  Used by TIP to read /
                 modify imputer gradients.
 
         Returns:
-            Best validation loss achieved in this phase.
+            Final training loss from the last epoch in this phase.
         """
         if accum_steps is None:
             accum_steps = getattr(self, "accum_steps", 1)
 
         train_loader = data_loader["train"]
-        val_loader = data_loader["val"]
-
-        best_val_loss = float("inf")
+        final_train_loss = float("inf")
         self.phase_epoch = 0
-        patience_counter = 0
 
-        while self.phase_epoch < max_epoch:
+        while self.phase_epoch < num_epoch:
             total_loss = 0.0
             num_batches = len(train_loader)
             num_optim_steps = 0
@@ -462,25 +456,12 @@ class JointModel(nn.Module):
                 self.global_epoch + 1,
             )
 
-            val_loss = self._validate_epoch(val_loader)
-            self.tb_summary_writer.add_scalar(
-                "loss/val",
-                val_loss,
-                self.global_epoch + 1,
-            )
-
             log_msg = (
-                f"Epoch {self.phase_epoch + 1:03d}/{max_epoch} | "
-                f"train loss: {avg_train_loss:.6f} | val loss: {val_loss:.6f}"
+                f"Epoch {self.phase_epoch + 1:03d}/{num_epoch} | "
+                f"train loss: {avg_train_loss:.6f}"
             )
 
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
-                self._save_checkpoint()
-                patience_counter = 0
-                log_msg += " | *Best Model Saved*"
-            else:
-                patience_counter += 1
+            final_train_loss = avg_train_loss
 
             self.logger.info(log_msg)
 
@@ -488,70 +469,23 @@ class JointModel(nn.Module):
                 on_epoch_end(
                     self.global_epoch + 1,
                     avg_train_loss,
-                    val_loss,
                     self,
                 )
-
-            if patience_counter >= patience:
-                self.logger.info(
-                    f"No improvement for {patience} epochs. "
-                    f"Early stopping at epoch {self.phase_epoch + 1} "
-                    f"in phase '{phase_name}'."
-                )
-                break
 
             self.phase_epoch += 1
             self.global_epoch += 1
 
         self.logger.info(
-            f"Finished Phase: {phase_name}. Best Val Loss: {best_val_loss:.6f}"
+            f"Finished Phase: {phase_name}. Final Train Loss: {final_train_loss:.6f}"
         )
 
-        self.load_state_dict(
-            torch.load(
-                self.checkpoint_path,
-                map_location=self.device,
-            )
-        )
-
-        return best_val_loss
-
-    def _validate_epoch(self, val_loader: DataLoader) -> float:
-        """Evaluate one validation epoch and return averaged imputation loss.
-
-        Args:
-            val_loader: Validation DataLoader.
-
-        Returns:
-            Mean validation loss.
-        """
-        self.imputer.eval()
-        total_loss = 0.0
-        num_batches = len(val_loader)
-
-        with torch.no_grad():
-            for batch in val_loader:
-                X_N, X_NA, X_NA_mask, X_A_mask, _Y_N, _Y_N_mask = (
-                    self._move_batch_to_device(batch)
-                )
-                output = self.forward(
-                    X_NA,
-                    X_NA_mask,
-                    X_N,
-                    X_A_mask,
-                    run_predictor=False,
-                )
-
-                total_loss += output["loss"].item()
-
-        return total_loss / max(1, num_batches)
+        return final_train_loss
 
     def fit_tip(
         self,
         data_loader: dict[str, DataLoader],
         phase_name: str,
-        max_epoch: int,
-        patience: int,
+        num_epoch: int,
         variant: str = "B2",
         k: int = 20,
         epsilon: float = 1e-4,
@@ -559,7 +493,7 @@ class JointModel(nn.Module):
         norm_scale_cap: float = 0.0,
         accum_steps: int | None = None,
         on_epoch_end: collections.abc.Callable[
-            [int, float, float, "JointModel"], None
+            [int, float, "JointModel"], None
         ]
         | None = None,
     ) -> float:
@@ -572,11 +506,9 @@ class JointModel(nn.Module):
           projection.
 
         Args:
-            data_loader: Dictionary with ``"train"`` and ``"val"``
-                DataLoaders.
+            data_loader: Dictionary with a ``"train"`` DataLoader.
             phase_name: Human-readable phase name (for logging).
-            max_epoch: Maximum epochs for this phase.
-            patience: Early-stopping patience.
+            num_epoch: Number of epochs for this phase.
             variant: One of ``"B2"``, ``"B4"``, ``"B5"``, ``"B6"``.
             k: Number of random samples for zero-order estimation
                 (ignored by B4).
@@ -588,7 +520,7 @@ class JointModel(nn.Module):
             on_epoch_end: Optional per-epoch callback.
 
         Returns:
-            Best validation loss achieved.
+            Final training loss from the last epoch in this phase.
         """
         if variant not in {"B2", "B4", "B5", "B6"}:
             raise ValueError(f"Unknown TIP variant: {variant}")
@@ -654,7 +586,6 @@ class JointModel(nn.Module):
         def _tip_epoch_end(
             epoch: int,
             train_loss: float,
-            val_loss: float,
             model: "JointModel",
         ) -> None:
             steps = int(tip_stats["steps"])
@@ -698,30 +629,13 @@ class JointModel(nn.Module):
                 tip_stats[key] = 0.0
 
             if on_epoch_end is not None:
-                on_epoch_end(epoch, train_loss, val_loss, model)
+                on_epoch_end(epoch, train_loss, model)
 
         return self.fit(
             data_loader,
             phase_name,
-            max_epoch,
-            patience,
+            num_epoch,
             accum_steps=accum_steps,
             on_epoch_end=_tip_epoch_end,
             grad_modifier=_tip_modifier,
         )
-
-    def _save_checkpoint(self) -> None:
-        """Save the current joint model state to disk.
-
-        Only imputer parameters are saved (predictor is frozen and loaded
-        separately).
-        """
-        torch.save(self.state_dict(), self.checkpoint_path)
-
-    def delete_checkpoint(self) -> None:
-        """Delete the saved checkpoint if it exists."""
-        try:
-            self.checkpoint_path.unlink()
-            self.logger.info(f"Deleted checkpoint: {self.checkpoint_path}")
-        except FileNotFoundError:
-            self.logger.info(f"Checkpoint already removed: {self.checkpoint_path}")

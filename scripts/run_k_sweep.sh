@@ -14,10 +14,6 @@ TIP_EPSILON="$DEFAULT_TIP_EPSILON"
 MISSING_RATE="$DEFAULT_MAIN_MISSING_RATE"
 LOOKBACK_LEN="$DEFAULT_LOOKBACK_LEN"
 SEEDS=("${DEFAULT_SEEDS[@]}")
-MAX_EPOCH="$DEFAULT_MAX_EPOCH"
-PATIENCE="$DEFAULT_PATIENCE"
-BATCH_SIZE="$DEFAULT_BATCH_SIZE"
-DEVICE="$DEFAULT_DEVICE"
 PRETRAIN_EPOCHS="$DEFAULT_PRETRAIN_EPOCHS"
 DRY_RUN=false
 FAILED_ONLY=false
@@ -39,10 +35,6 @@ Options:
   --missing-rate 0.2         Missing rate. Default: configs/global.ini.
   --lookback 512             Lookback length L. Default: configs/global.ini.
   --epsilon 1e-4             Fixed epsilon. Default: configs/global.ini.
-  --max-epoch N              Max training epochs. Default: configs/global.ini.
-  --patience N               Early-stopping patience. Default: configs/global.ini.
-  --batch-size N             Effective batch size. Default: configs/global.ini.
-  --device cuda|cpu          Torch device. Default: configs/global.ini.
   --jobs N, -j N             Run up to N experiments concurrently. Default: 1.
   --failed-only              Skip completed experiments.
   --dry-run                  Print commands without running them.
@@ -62,10 +54,6 @@ while [[ $# -gt 0 ]]; do
         --missing-rate) MISSING_RATE="$2"; shift 2 ;;
         --lookback) LOOKBACK_LEN="$2"; shift 2 ;;
         --epsilon) TIP_EPSILON="$2"; shift 2 ;;
-        --max-epoch) MAX_EPOCH="$2"; shift 2 ;;
-        --patience) PATIENCE="$2"; shift 2 ;;
-        --batch-size) BATCH_SIZE="$2"; shift 2 ;;
-        --device) DEVICE="$2"; shift 2 ;;
         --jobs|-j) JOBS="$2"; shift 2 ;;
         --failed-only) FAILED_ONLY=true; shift ;;
         --dry-run) DRY_RUN=true; shift ;;
@@ -110,7 +98,7 @@ run_config() {
         for seed in "${SEEDS[@]}"; do
             job_pool_submit "B2" "$dataset" "$imputator" "$predictor" \
                 "$MISSING_RATE" "$seed" "$LOOKBACK_LEN" "$k" "$TIP_EPSILON" \
-                "$PRETRAIN_EPOCHS" "$MAX_EPOCH" "$PATIENCE" "$BATCH_SIZE" "$DEVICE"
+                "$PRETRAIN_EPOCHS"
         done
     done
 }

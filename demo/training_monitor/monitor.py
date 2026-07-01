@@ -5,7 +5,7 @@
 
 用法:
     python demo_monitor.py                              # 默认参数
-    python demo_monitor.py --imputator.model_type SAITS --training.max_epoch 10
+    python demo_monitor.py --imputator.model_type SAITS --training.num_epoch 10
 """
 
 from __future__ import annotations
@@ -61,9 +61,8 @@ def _parse_args() -> ConfigParser:
     config.read(GLOBAL_CONFIG_PATH)
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--training.max_epoch", type=int)
+    parser.add_argument("--training.num_epoch", type=int)
     parser.add_argument("--training.warmup_epoch", type=int)
-    parser.add_argument("--training.patience", type=int)
     parser.add_argument("--training.batch_size", type=int)
     parser.add_argument("--imputator.model_type", type=str)
     parser.add_argument("--predictor.model_type", type=str)
@@ -376,8 +375,7 @@ def demo() -> None:
     joint_model.fit(
         data_loader=train_loader_dict,
         phase_name="demo",
-        max_epoch=config.getint("training", "max_epoch", fallback=10),
-        patience=config.getint("training", "patience", fallback=5),
+        num_epoch=config.getint("training", "num_epoch", fallback=10),
         on_epoch_end=_on_epoch_end,
     )
 

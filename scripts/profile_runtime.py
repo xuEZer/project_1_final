@@ -18,7 +18,6 @@ import time
 from configparser import ConfigParser, ExtendedInterpolation
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from typing import Any
 
 import numpy as np
@@ -205,25 +204,22 @@ def row_avg(rows: list[TimingRow], stage: str) -> float | None:
 def print_epoch_estimates(
     rows: list[TimingRow],
     train_batches: int,
-    val_batches: int,
     accum_steps: int,
 ) -> None:
     train = row_avg(rows, "imputer_train_step")
-    val = row_avg(rows, "validation_forward")
     gp_hat = row_avg(rows, "tip_gp_hat")
 
     if train is None:
         return
 
-    val_total = (val or 0.0) * val_batches
-    b1_epoch = train * train_batches + val_total
+    b1_epoch = train * train_batches
     print("")
     print("Estimated epoch cost")
     print("-" * 96)
     print(f"B1-like epoch: {summarize_seconds(b1_epoch)}")
     if gp_hat is not None:
         optim_steps = math.ceil(train_batches / max(1, accum_steps))
-        b2_epoch = train * train_batches + gp_hat * optim_steps + val_total
+        b2_epoch = train * train_batches + gp_hat * optim_steps
         print(
             f"TIP-like epoch: {summarize_seconds(b2_epoch)} "
             f"(TIP estimator on ~{optim_steps} optimizer steps)"
@@ -321,12 +317,11 @@ def profile(args: argparse.Namespace, overrides: list[tuple[str, str, str]]) -> 
             pin_memory=pin_memory,
         )
 
-    with TemporaryDirectory(prefix="tip_profile_") as tmp_dir:
+    with contextlib.ExitStack():
         with profiler.stage("model_init", notes="includes frozen TSFM load/compile"):
             joint_model = JointModel(
                 imputer=imputator(config.get("imputator", "model_type"), config),
                 predictor=predictor(config.get("predictor", "model_type"), config),
-                model_save_dir=Path(tmp_dir),
                 optimizer_name=config.get("training", "optimizer"),
                 lr=config.getfloat("training", "lr"),
                 device=device,
@@ -345,12 +340,7 @@ def profile(args: argparse.Namespace, overrides: list[tuple[str, str, str]]) -> 
             train_loader["train"],
             max(args.batches + args.warmup_batches, 1),
         )
-        val_batches = first_batches(
-            train_loader["val"],
-            max(args.batches + args.warmup_batches, 1),
-        )
         sample_batches = train_batches[args.warmup_batches :]
-        sample_val_batches = val_batches[args.warmup_batches :]
 
         if not sample_batches:
             raise RuntimeError("No training batches available for profiling.")
@@ -434,26 +424,6 @@ def profile(args: argparse.Namespace, overrides: list[tuple[str, str, str]]) -> 
                 torch.nn.utils.clip_grad_norm_(joint_model.imputer.parameters(), 10.0)
                 joint_model.optimizer.step()
 
-        if sample_val_batches:
-            moved_val_batches = [
-                joint_model._move_batch_to_device(batch) for batch in sample_val_batches
-            ]
-            with profiler.stage(
-                "validation_forward",
-                iterations=len(moved_val_batches),
-                notes="imputer only, matches early-stop validation",
-            ):
-                joint_model.imputer.eval()
-                with torch.no_grad():
-                    for X_N, X_NA, X_NA_mask, X_A_mask, _Y_N, _Y_N_mask in moved_val_batches:
-                        joint_model.forward(
-                            X_NA,
-                            X_NA_mask,
-                            X_N,
-                            X_A_mask,
-                            run_predictor=False,
-                        )
-
         first = moved_batches[0]
         X_N, X_NA, X_NA_mask, X_A_mask, Y_N, Y_N_mask = first
         with torch.no_grad():
@@ -506,12 +476,10 @@ def profile(args: argparse.Namespace, overrides: list[tuple[str, str, str]]) -> 
         print_epoch_estimates(
             profiler.rows,
             train_batches=len(train_loader["train"]),
-            val_batches=len(train_loader["val"]),
             accum_steps=accum_steps,
         )
         print("")
         print(f"train batches: {len(train_loader['train'])}")
-        print(f"val batches  : {len(train_loader['val'])}")
         print(f"test batches : {len(eval_loader)}")
         print(f"test no_gt   : {no_gt}")
 

@@ -17,10 +17,7 @@ LOOKBACK_LEN="$DEFAULT_LOOKBACK_LEN"
 SEED=42
 TIP_EPSILON="$DEFAULT_TIP_EPSILON"
 PRETRAIN_EPOCHS="$DEFAULT_PRETRAIN_EPOCHS"
-MAX_EPOCH=1
-PATIENCE=1
-BATCH_SIZE="$DEFAULT_BATCH_SIZE"
-DEVICE="$DEFAULT_DEVICE"
+NUM_EPOCH=1
 DRY_RUN=false
 FAILED_ONLY=false
 OUT_CSV="${RESULT_DIR}/compute_cost_probe.csv"
@@ -37,10 +34,7 @@ Options:
   --lookback 512         Lookback length L. Default: configs/global.ini.
   --seed 42              Random seed. Default: configs/global.ini.
   --epsilon 1e-4         TIP finite-difference step. Default: configs/global.ini.
-  --max-epoch N          Short run epochs. Default: 1.
-  --patience N           Early-stopping patience. Default: 1.
-  --batch-size N         Effective batch size. Default: configs/global.ini.
-  --device cuda|cpu      Torch device. Default: configs/global.ini.
+  --num-epoch N          Short run epochs. Default: 1.
   --failed-only          Skip completed probe logs.
   --dry-run              Print commands without running them.
   -h, --help             Show this help.
@@ -63,10 +57,7 @@ while [[ $# -gt 0 ]]; do
         --lookback) LOOKBACK_LEN="$2"; shift 2 ;;
         --seed) SEED="$2"; shift 2 ;;
         --epsilon) TIP_EPSILON="$2"; shift 2 ;;
-        --max-epoch) MAX_EPOCH="$2"; shift 2 ;;
-        --patience) PATIENCE="$2"; shift 2 ;;
-        --batch-size) BATCH_SIZE="$2"; shift 2 ;;
-        --device) DEVICE="$2"; shift 2 ;;
+        --num-epoch) NUM_EPOCH="$2"; shift 2 ;;
         --failed-only) FAILED_ONLY=true; shift ;;
         --dry-run) DRY_RUN=true; shift ;;
         -h|--help) usage; exit 0 ;;
@@ -80,7 +71,7 @@ if [[ "$DRY_RUN" == false ]]; then
     mkdir -p "$RESULT_DIR"
     echo "strategy,k,elapsed_seconds,exit_code" > "$OUT_CSV"
 fi
-export EXP_NAME_SUFFIX="costprobe_e${MAX_EPOCH}"
+export EXP_NAME_SUFFIX="costprobe_e${NUM_EPOCH}"
 
 run_timed() {
     local exp_type="$1"
@@ -90,8 +81,8 @@ run_timed() {
     set +e
     run_one_experiment "$exp_type" "$DATASET" "$IMPUTATOR" "$PREDICTOR" \
         "$MISSING_RATE" "$SEED" "$LOOKBACK_LEN" "$k" "$TIP_EPSILON" \
-        "$PRETRAIN_EPOCHS" "$DRY_RUN" "$FAILED_ONLY" "$MAX_EPOCH" \
-        "$PATIENCE" "$BATCH_SIZE" "$DEVICE"
+        "$PRETRAIN_EPOCHS" "$DRY_RUN" "$FAILED_ONLY" \
+        --training.num_epoch "$NUM_EPOCH"
     code=$?
     set -e
     elapsed=$(( $(date +%s) - start ))
@@ -105,7 +96,7 @@ echo "=============================================="
 echo "  Compute-cost probe"
 echo "=============================================="
 echo "  config       : $DATASET + $IMPUTATOR + $PREDICTOR"
-echo "  max epoch    : $MAX_EPOCH"
+echo "  num epoch    : $NUM_EPOCH"
 echo "  output       : $OUT_CSV"
 echo "=============================================="
 

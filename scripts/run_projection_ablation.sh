@@ -20,10 +20,6 @@ LOOKBACK_LEN="$DEFAULT_LOOKBACK_LEN"
 TIP_K="$DEFAULT_TIP_K"
 TIP_EPSILON="$DEFAULT_TIP_EPSILON"
 PRETRAIN_EPOCHS="$DEFAULT_PRETRAIN_EPOCHS"
-MAX_EPOCH="$DEFAULT_MAX_EPOCH"
-PATIENCE="$DEFAULT_PATIENCE"
-BATCH_SIZE="$DEFAULT_BATCH_SIZE"
-DEVICE="$DEFAULT_DEVICE"
 DRY_RUN=false
 FAILED_ONLY=false
 JOBS=1
@@ -43,10 +39,6 @@ Options:
   --lookback 512           Lookback length L. Default: configs/global.ini.
   --k 20                   TIP sampling count. Default: configs/global.ini.
   --epsilon 1e-4           TIP finite-difference step. Default: configs/global.ini.
-  --max-epoch N            Max training epochs. Default: configs/global.ini.
-  --patience N             Early-stopping patience. Default: configs/global.ini.
-  --batch-size N           Effective batch size. Default: configs/global.ini.
-  --device cuda|cpu        Torch device. Default: configs/global.ini.
   --jobs N, -j N           Run up to N experiments concurrently. Default: 1.
   --failed-only            Skip completed experiments.
   --dry-run                Print commands without running them.
@@ -71,10 +63,6 @@ while [[ $# -gt 0 ]]; do
         --lookback) LOOKBACK_LEN="$2"; shift 2 ;;
         --k) TIP_K="$2"; shift 2 ;;
         --epsilon) TIP_EPSILON="$2"; shift 2 ;;
-        --max-epoch) MAX_EPOCH="$2"; shift 2 ;;
-        --patience) PATIENCE="$2"; shift 2 ;;
-        --batch-size) BATCH_SIZE="$2"; shift 2 ;;
-        --device) DEVICE="$2"; shift 2 ;;
         --jobs|-j) JOBS="$2"; shift 2 ;;
         --failed-only) FAILED_ONLY=true; shift ;;
         --dry-run) DRY_RUN=true; shift ;;
@@ -103,8 +91,7 @@ for exp_type in "${EXP_TYPES[@]}"; do
                 for seed in "${SEEDS[@]}"; do
                     job_pool_submit "$exp_type" "$dataset" "$imputator" "$predictor" \
                         "$MISSING_RATE" "$seed" "$LOOKBACK_LEN" "$TIP_K" \
-                        "$TIP_EPSILON" "$PRETRAIN_EPOCHS" "$MAX_EPOCH" \
-                        "$PATIENCE" "$BATCH_SIZE" "$DEVICE"
+                        "$TIP_EPSILON" "$PRETRAIN_EPOCHS"
                 done
             done
         done

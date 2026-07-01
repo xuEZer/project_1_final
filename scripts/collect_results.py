@@ -317,9 +317,9 @@ def parse_args(settings: CommonSettings) -> argparse.Namespace:
         help="Comma-separated missing-rate robustness values.",
     )
     parser.add_argument(
-        "--compute-max-epoch",
+        "--compute-num-epoch",
         default="1",
-        help="Max epoch suffix used by run_compute_cost_probe.sh.",
+        help="Num epoch suffix used by run_compute_cost_probe.sh.",
     )
     return parser.parse_args()
 
@@ -536,7 +536,7 @@ def build_plans(args: argparse.Namespace, settings: CommonSettings) -> list[Plan
         tip_epsilon=settings.default_tip_epsilon,
     )
 
-    compute_suffix = f"costprobe_e{args.compute_max_epoch}"
+    compute_suffix = f"costprobe_e{args.compute_num_epoch}"
     for exp_type, tip_k in [("B1", "0"), ("B2", "20"), ("B2", "10"), ("B2", "5"), ("B6", "20")]:
         plans.append(
             PlannedExperiment(

@@ -20,17 +20,13 @@ IMPUTATORS=(SAITS DeepMVI)
 PREDICTORS=(Sundial)
 SEEDS=("${DEFAULT_SEEDS[@]}")
 MISSING_RATE="$DEFAULT_MAIN_MISSING_RATE"
-LOOKBACK_LEN=128
-TIP_K=5
+LOOKBACK_LEN="$DEFAULT_LOOKBACK_LEN"
+TIP_K="$DEFAULT_TIP_K"
 TIP_EPSILON="$DEFAULT_TIP_EPSILON"
 K_VALUES=(5 10 20)
 EPSILON_VALUES=(1e-5 1e-4 1e-3)
 EPSILON_K=""
 PRETRAIN_EPOCHS="$DEFAULT_PRETRAIN_EPOCHS"
-MAX_EPOCH=5
-PATIENCE=2
-BATCH_SIZE="$DEFAULT_BATCH_SIZE"
-DEVICE="$DEFAULT_DEVICE"
 JOBS=1
 DRY_RUN=false
 FAILED_ONLY=false
@@ -51,10 +47,8 @@ Default matrix:
   datasets  : Supply_Chain_Customer_D,current_velocity_H,azure2019_D_5T
   imputers  : SAITS,DeepMVI
   predictor : Sundial
-  lookback  : 128
-  k         : 5
-  max epoch : 5
-  patience  : 2
+  lookback  : configs/global.ini
+  k         : configs/global.ini
 
 Optional sensitivity phases:
   k sweep       : B2 with k in 5,10,20 and epsilon fixed.
@@ -67,18 +61,14 @@ Options:
   --predictor A,B         Predictor(s). Default: Sundial.
   --seed 42,43            Random seeds. Default: configs/global.ini.
   --missing-rate 0.2      Missing rate. Default: configs/global.ini.
-  --lookback N            Lookback length. Default: 128.
-  --k N                   TIP sampling count. Default: 5.
+  --lookback N            Lookback length. Default: configs/global.ini.
+  --k N                   TIP sampling count. Default: configs/global.ini.
   --epsilon VALUE         TIP finite-difference step. Default: configs/global.ini.
   --with-sensitivity      Also run the small B2 k/epsilon sensitivity probes.
   --sensitivity-only      Run only the small B2 k/epsilon sensitivity probes.
   --k-values 5,10,20      K values for sensitivity. Default: 5,10,20.
   --epsilon-values LIST   Epsilon values for sensitivity. Default: 1e-5,1e-4,1e-3.
   --epsilon-k N           Fixed k for epsilon sensitivity. Default: same as --k.
-  --max-epoch N           Max training epochs. Default: 5.
-  --patience N            Early-stopping patience. Default: 2.
-  --batch-size N          Effective batch size. Default: configs/global.ini.
-  --device cuda|cpu       Torch device. Default: configs/global.ini.
   --jobs N, -j N          Concurrent jobs. Default: 1.
   --failed-only           Skip logs already completed successfully.
   --no-collect            Do not run collect_results.py after training.
@@ -90,7 +80,7 @@ Examples:
   bash scripts/run_core_validation.sh --failed-only --jobs 1
   bash scripts/run_core_validation.sh --with-sensitivity --dry-run
   bash scripts/run_core_validation.sh --sensitivity-only --epsilon-k 10
-  bash scripts/run_core_validation.sh --predictor TimesFM25 --batch-size 32
+  bash scripts/run_core_validation.sh --predictor TimesFM25
   bash scripts/run_core_validation.sh --dataset CPHL_30T,azure2019_D_5T
 EOF
 }
@@ -111,10 +101,6 @@ while [[ $# -gt 0 ]]; do
         --k-values) csv_to_array K_VALUES "$2"; shift 2 ;;
         --epsilon-values) csv_to_array EPSILON_VALUES "$2"; shift 2 ;;
         --epsilon-k) EPSILON_K="$2"; shift 2 ;;
-        --max-epoch) MAX_EPOCH="$2"; shift 2 ;;
-        --patience) PATIENCE="$2"; shift 2 ;;
-        --batch-size) BATCH_SIZE="$2"; shift 2 ;;
-        --device) DEVICE="$2"; shift 2 ;;
         --jobs|-j) JOBS="$2"; shift 2 ;;
         --failed-only) FAILED_ONLY=true; shift ;;
         --no-collect) COLLECT=false; shift ;;
@@ -133,10 +119,6 @@ cd "$PROJECT_DIR"
 SUMMARY_CODE=0
 
 print_run_settings() {
-    echo "  max epoch    : $MAX_EPOCH"
-    echo "  patience     : $PATIENCE"
-    echo "  batch size   : $BATCH_SIZE"
-    echo "  device       : $DEVICE"
     echo "  jobs         : $JOBS"
     echo "  dry run      : $DRY_RUN"
     echo "  failed only  : $FAILED_ONLY"
@@ -160,8 +142,7 @@ run_core_phase() {
                     for seed in "${SEEDS[@]}"; do
                         job_pool_submit "$exp_type" "$dataset" "$imputator" "$predictor" \
                             "$MISSING_RATE" "$seed" "$LOOKBACK_LEN" "$TIP_K" \
-                            "$TIP_EPSILON" "$PRETRAIN_EPOCHS" "$MAX_EPOCH" \
-                            "$PATIENCE" "$BATCH_SIZE" "$DEVICE"
+                            "$TIP_EPSILON" "$PRETRAIN_EPOCHS"
                     done
                 done
             done
@@ -188,8 +169,7 @@ run_k_sensitivity_phase() {
                     for seed in "${SEEDS[@]}"; do
                         job_pool_submit "B2" "$dataset" "$imputator" "$predictor" \
                             "$MISSING_RATE" "$seed" "$LOOKBACK_LEN" "$k" \
-                            "$TIP_EPSILON" "$PRETRAIN_EPOCHS" "$MAX_EPOCH" \
-                            "$PATIENCE" "$BATCH_SIZE" "$DEVICE"
+                            "$TIP_EPSILON" "$PRETRAIN_EPOCHS"
                     done
                 done
             done
@@ -218,8 +198,7 @@ run_epsilon_sensitivity_phase() {
                     for seed in "${SEEDS[@]}"; do
                         job_pool_submit "B2" "$dataset" "$imputator" "$predictor" \
                             "$MISSING_RATE" "$seed" "$LOOKBACK_LEN" "$EPSILON_K" \
-                            "$epsilon" "$PRETRAIN_EPOCHS" "$MAX_EPOCH" \
-                            "$PATIENCE" "$BATCH_SIZE" "$DEVICE"
+                            "$epsilon" "$PRETRAIN_EPOCHS"
                     done
                 done
             done

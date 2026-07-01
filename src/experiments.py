@@ -4,7 +4,8 @@ Supported experiment types (``exp_type``):
 
 - ``B1``: Two-stage baseline — imputer only, reconstruction loss L_I.
 - ``B2``: TIP — zero-order ĝ_P + conditional orthogonal projection.
-- ``B3``: Pre-training (2 epochs L_I) then TIP fine-tuning.
+- ``B3``: Pre-training with L_I, then TIP fine-tuning within the total
+  epoch budget.
 - ``B4``: Random-direction ablation (random vector replaces ĝ_P).
 - ``B5``: Unconditional-projection ablation (always project).
 - ``B6``: Direct prediction-direction update (use ĝ_P as the optimizer
@@ -39,7 +40,7 @@ def run_experiment(
         logger: Logger instance.
 
     Returns:
-        The trained joint model (best checkpoint loaded).
+        The trained joint model after the final epoch.
 
     Raises:
         ValueError: If ``exp_type`` is not recognised.
@@ -88,15 +89,13 @@ def _run_b1(
 
     No task-aware information.  Same as E1 without mandatory warmup.
     """
-    max_epoch = config.getint("training", "max_epoch")
-    patience = config.getint("training", "patience")
+    num_epoch = config.getint("training", "num_epoch")
 
-    log_phase(logger, "B1 — Standard Imputer Training", max_epoch)
+    log_phase(logger, "B1 — Standard Imputer Training", num_epoch)
     joint_model.fit(
         data_loader=train_loader,
         phase_name="b1",
-        max_epoch=max_epoch,
-        patience=patience,
+        num_epoch=num_epoch,
     )
 
     return joint_model
@@ -112,18 +111,16 @@ def _run_b2(
     logger: logging.Logger,
 ) -> JointModel:
     """B2: Full TIP — zero-order ĝ_P estimation + conditional projection."""
-    max_epoch = config.getint("training", "max_epoch")
-    patience = config.getint("training", "patience")
+    num_epoch = config.getint("training", "num_epoch")
     k = config.getint("training", "tip_k", fallback=20)
     epsilon = config.getfloat("training", "tip_epsilon", fallback=1e-4)
 
-    log_phase(logger, "B2 — TIP Training", max_epoch)
+    log_phase(logger, "B2 — TIP Training", num_epoch)
     logger.info(f"  k={k}, epsilon={epsilon}")
     joint_model.fit_tip(
         data_loader=train_loader,
         phase_name="b2",
-        max_epoch=max_epoch,
-        patience=patience,
+        num_epoch=num_epoch,
         variant="B2",
         k=k,
         epsilon=epsilon,
@@ -142,36 +139,52 @@ def _run_b3(
     config: ConfigParser,
     logger: logging.Logger,
 ) -> JointModel:
-    """B3: Pre-training (L_I only) then TIP fine-tuning."""
-    max_epoch = config.getint("training", "max_epoch")
-    patience = config.getint("training", "patience")
+    """B3: Pre-training (L_I only) then TIP fine-tuning within num_epoch."""
+    num_epoch = config.getint("training", "num_epoch")
     k = config.getint("training", "tip_k", fallback=20)
     epsilon = config.getfloat("training", "tip_epsilon", fallback=1e-4)
     pretrain_epochs = config.getint("training", "tip_pretrain_epochs", fallback=2)
+    pretrain_epochs = max(0, pretrain_epochs)
+    if pretrain_epochs > num_epoch:
+        logger.warning(
+            "B3 tip_pretrain_epochs=%d exceeds num_epoch=%d; using %d "
+            "pre-training epochs and 0 TIP epochs.",
+            pretrain_epochs,
+            num_epoch,
+            num_epoch,
+        )
+        pretrain_epochs = num_epoch
+    tip_epochs = num_epoch - pretrain_epochs
 
-    # Phase 1: pre-training — no early stopping
+    logger.info(
+        "B3 total epoch budget: %d = %d pre-training + %d TIP fine-tuning",
+        num_epoch,
+        pretrain_epochs,
+        tip_epochs,
+    )
+
+    # Phase 1: fixed-epoch pre-training
     log_phase(logger, "B3 — Pre-training (L_I only)", pretrain_epochs)
     if pretrain_epochs > 0:
         joint_model.fit(
             data_loader=train_loader,
             phase_name="b3_pretrain",
-            max_epoch=pretrain_epochs,
-            patience=pretrain_epochs,
+            num_epoch=pretrain_epochs,
         )
 
     # Phase 2: TIP fine-tuning
-    log_phase(logger, "B3 — TIP Fine-tuning", max_epoch)
-    logger.info(f"  k={k}, epsilon={epsilon}")
-    joint_model.fit_tip(
-        data_loader=train_loader,
-        phase_name="b3_tip",
-        max_epoch=max_epoch,
-        patience=patience,
-        variant="B2",
-        k=k,
-        epsilon=epsilon,
-        **tip_projection_kwargs(config),
-    )
+    log_phase(logger, "B3 — TIP Fine-tuning", tip_epochs)
+    if tip_epochs > 0:
+        logger.info(f"  k={k}, epsilon={epsilon}")
+        joint_model.fit_tip(
+            data_loader=train_loader,
+            phase_name="b3_tip",
+            num_epoch=tip_epochs,
+            variant="B2",
+            k=k,
+            epsilon=epsilon,
+            **tip_projection_kwargs(config),
+        )
 
     return joint_model
 
@@ -186,15 +199,13 @@ def _run_b4(
     logger: logging.Logger,
 ) -> JointModel:
     """B4: Random-direction ablation — random vector replaces ĝ_P."""
-    max_epoch = config.getint("training", "max_epoch")
-    patience = config.getint("training", "patience")
+    num_epoch = config.getint("training", "num_epoch")
 
-    log_phase(logger, "B4 — Random Direction Ablation", max_epoch)
+    log_phase(logger, "B4 — Random Direction Ablation", num_epoch)
     joint_model.fit_tip(
         data_loader=train_loader,
         phase_name="b4",
-        max_epoch=max_epoch,
-        patience=patience,
+        num_epoch=num_epoch,
         variant="B4",
         **tip_projection_kwargs(config),
     )
@@ -212,18 +223,16 @@ def _run_b5(
     logger: logging.Logger,
 ) -> JointModel:
     """B5: Unconditional projection — always project, no conflict check."""
-    max_epoch = config.getint("training", "max_epoch")
-    patience = config.getint("training", "patience")
+    num_epoch = config.getint("training", "num_epoch")
     k = config.getint("training", "tip_k", fallback=20)
     epsilon = config.getfloat("training", "tip_epsilon", fallback=1e-4)
 
-    log_phase(logger, "B5 — Unconditional Projection", max_epoch)
+    log_phase(logger, "B5 — Unconditional Projection", num_epoch)
     logger.info(f"  k={k}, epsilon={epsilon}")
     joint_model.fit_tip(
         data_loader=train_loader,
         phase_name="b5",
-        max_epoch=max_epoch,
-        patience=patience,
+        num_epoch=num_epoch,
         variant="B5",
         k=k,
         epsilon=epsilon,
@@ -243,18 +252,16 @@ def _run_b6(
     logger: logging.Logger,
 ) -> JointModel:
     """B6: Directly update the imputer with the estimated prediction gradient."""
-    max_epoch = config.getint("training", "max_epoch")
-    patience = config.getint("training", "patience")
+    num_epoch = config.getint("training", "num_epoch")
     k = config.getint("training", "tip_k", fallback=20)
     epsilon = config.getfloat("training", "tip_epsilon", fallback=1e-4)
 
-    log_phase(logger, "B6 - Direct Prediction Gradient", max_epoch)
+    log_phase(logger, "B6 - Direct Prediction Gradient", num_epoch)
     logger.info(f"  k={k}, epsilon={epsilon}")
     joint_model.fit_tip(
         data_loader=train_loader,
         phase_name="b6",
-        max_epoch=max_epoch,
-        patience=patience,
+        num_epoch=num_epoch,
         variant="B6",
         k=k,
         epsilon=epsilon,
@@ -270,5 +277,5 @@ def log_phase(logger: logging.Logger, phase: str, epochs: int) -> None:
     """Log a phase boundary."""
     logger.info("")
     logger.info("=" * 60)
-    logger.info(f"  Phase: {phase} ({epochs} max epochs)")
+    logger.info(f"  Phase: {phase} ({epochs} fixed epochs)")
     logger.info("=" * 60)
