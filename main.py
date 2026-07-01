@@ -155,6 +155,11 @@ def main() -> None:
     )
     logger.info("Training completed.")
 
+    if isinstance(joint_model.predictor, NullPredictor):
+        logger.info("Loading predictor for evaluation...")
+        joint_model.set_predictor(predictor(config.get("predictor", "model_type"), config))
+        joint_model.to(config.get("training", "device"))
+
     evaluate(config, joint_model, eval_loader, no_gt, logger)
     logger.info("Experiment completed successfully!")
 

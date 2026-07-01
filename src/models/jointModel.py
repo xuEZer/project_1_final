@@ -76,6 +76,13 @@ class JointModel(nn.Module):
             p.requires_grad = False
         self.predictor.eval()
 
+    def set_predictor(self, predictor: nn.Module) -> None:
+        """Replace the frozen predictor used for forecasting/evaluation."""
+        self.predictor = predictor
+        for p in self.predictor.parameters():
+            p.requires_grad = False
+        self.predictor.eval()
+
     def forward(
         self,
         X_NA: torch.Tensor,

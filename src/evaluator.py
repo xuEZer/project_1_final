@@ -60,6 +60,11 @@ def evaluate(
 
                 outputs = best_joint_model.forward(X_N, X_N_mask)
                 pred = outputs["pred_data"]
+                if pred is None:
+                    raise RuntimeError(
+                        "Predictor returned None during evaluation. "
+                        "Ensure a real predictor is loaded before evaluate()."
+                    )
 
                 pred_mae = masked_mae_cal(pred, Y_N, 1 - Y_N_mask)
                 pred_mse = masked_mse_cal(pred, Y_N, 1 - Y_N_mask)
@@ -83,6 +88,11 @@ def evaluate(
 
                 imputed = outputs["imp_data"]
                 pred = outputs["pred_data"]
+                if pred is None:
+                    raise RuntimeError(
+                        "Predictor returned None during evaluation. "
+                        "Ensure a real predictor is loaded before evaluate()."
+                    )
 
                 imp_mae = masked_mae_cal(imputed, X, X_N_mask)
                 imp_mse = masked_mse_cal(imputed, X, X_N_mask)
