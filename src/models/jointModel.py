@@ -15,7 +15,11 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
-optimizer_dict = {"Adam": torch.optim.Adam, "AdamW": torch.optim.AdamW}
+optimizer_dict = {
+    "Adam": torch.optim.Adam,
+    "AdamW": torch.optim.AdamW,
+    "SGD": torch.optim.SGD,
+}
 
 
 class NullPredictor(nn.Module):
