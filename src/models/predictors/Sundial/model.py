@@ -1,9 +1,4 @@
-"""Sundial predictor wrapper — inference-only interface for the JointModel.
-
-Wraps ``thuml/sundial-base-128m`` (or variants) from HuggingFace so the
-JointModel can call it as a pure inference module.  No loss computation,
-no backpropagation.
-"""
+"""Sundial predictor — inference-only forecasting via HuggingFace generate()."""
 
 from __future__ import annotations
 
@@ -11,31 +6,68 @@ import logging
 
 import torch
 import torch.nn as nn
+from huggingface_hub import snapshot_download
 from transformers import AutoModelForCausalLM
 
 logger = logging.getLogger(__name__)
 
 
+def _patch_dynamic_cache() -> None:
+    """Patch older remote-code models against newer Transformers cache APIs."""
+    try:
+        from transformers import DynamicCache
+    except ImportError:
+        return
+
+    if not hasattr(DynamicCache, "seen_tokens"):
+
+        def seen_tokens(self) -> int:  # type: ignore[no-redef]
+            if hasattr(self, "get_seq_length"):
+                return int(self.get_seq_length())
+            return 0
+
+        DynamicCache.seen_tokens = property(seen_tokens)  # type: ignore[attr-defined]
+
+    if not hasattr(DynamicCache, "get_max_length") and hasattr(
+        DynamicCache, "get_max_cache_shape"
+    ):
+
+        def get_max_length(self) -> int | None:  # type: ignore[no-redef]
+            value = self.get_max_cache_shape()
+            if isinstance(value, (tuple, list)):
+                return None if not value else int(value[-1])
+            return None if value is None else int(value)
+
+        DynamicCache.get_max_length = get_max_length  # type: ignore[attr-defined]
+
+    if not hasattr(DynamicCache, "get_usable_length"):
+
+        def get_usable_length(  # type: ignore[no-redef]
+            self, new_seq_length: int, *_args, **_kwargs,
+        ) -> int:
+            prev = (
+                int(self.get_seq_length())
+                if hasattr(self, "get_seq_length")
+                else 0
+            )
+            max_len = (
+                self.get_max_length()
+                if hasattr(self, "get_max_length")
+                else None
+            )
+            if max_len is None:
+                return prev
+            return min(prev, max(0, int(max_len) - int(new_seq_length)))
+
+        DynamicCache.get_usable_length = get_usable_length  # type: ignore[attr-defined]
+
+
 class SundialPredictor(nn.Module):
-    """Sundial forecasting model — inference-only.
+    """Sundial forecasting model (e.g. ``thuml/sundial-base-128m``).
 
-    Uses HuggingFace ``AutoModelForCausalLM`` under the hood.  The
-    ``forward`` call runs ``model.generate()``, which does **not**
-    build a gradient graph.
-
-    Parameters
-    ----------
-    model_name : str
-        HuggingFace model id, e.g. ``"thuml/sundial-base-128m"``.
-    num_samples : int
-        Number of trajectories to sample per input sequence.
-    sample_aggregation : str
-        How to collapse the sample dimension.  ``"mean"`` averages
-        across samples; other values return the raw samples.
-    forecast_length : int
-        Number of future steps to generate (pred_len from dataset config).
-    device : str
-        Torch device string.
+    Uses :meth:`AutoModelForCausalLM.generate` for autoregressive sampling.
+    Operates per-feature (univariate), then stacks results back to
+    ``(B, P, D)``.
     """
 
     def __init__(
@@ -47,59 +79,47 @@ class SundialPredictor(nn.Module):
         device: str,
     ) -> None:
         super().__init__()
-        self.model_name = model_name
+        self.forecast_length = forecast_length
         self.num_samples = num_samples
         self.sample_aggregation = sample_aggregation
-        self.forecast_length = forecast_length
-        self.device = device
 
-        logger.info(f"Loading Sundial model '{model_name}' (inference-only) ...")
+        logger.info("Loading Sundial model '%s' ...", model_name)
+        _patch_dynamic_cache()
+        try:
+            model_path = snapshot_download(model_name, local_files_only=True)
+        except Exception:
+            model_path = snapshot_download(model_name)
         self.backbone = AutoModelForCausalLM.from_pretrained(
-            model_name, trust_remote_code=True
+            model_path, trust_remote_code=True,
         ).to(device)
         self.backbone.eval()
-        logger.info("Sundial model loaded.")
+        logger.info("Sundial model loaded on %s.", device)
 
-    def forward(
-        self,
-        imputed_X: torch.Tensor,
-    ) -> dict[str, torch.Tensor]:
+    @torch.inference_mode()
+    def forward(self, imputed_X: torch.Tensor) -> dict[str, torch.Tensor]:
         """Generate forecasts from imputed lookback windows.
 
-        Parameters
-        ----------
-        imputed_X : torch.Tensor
-            Imputed lookback sequence, shape ``(B, T, D)``.
+        Args:
+            imputed_X: ``(B, T, D)`` imputed time series.
 
-        Returns
-        -------
-        dict
-            ``{"pred_data": torch.Tensor}`` with shape ``(B, P, D)``
-            where ``P = forecast_length``.
+        Returns:
+            ``{"pred_data": (B, forecast_length, D)}``.
         """
-        B, T, D = imputed_X.shape
-
-        # Sundial is a univariate foundation model; for multivariate
-        # data we generate forecasts per-feature and stack.
+        B, _T, D = imputed_X.shape
         pred_list: list[torch.Tensor] = []
 
-        with torch.no_grad():
-            for feat_idx in range(D):
-                seqs = imputed_X[:, :, feat_idx]  # (B, T)
+        for feat_idx in range(D):
+            seqs = imputed_X[:, :, feat_idx]  # (B, T)
+            output = self.backbone.generate(
+                seqs,
+                max_new_tokens=self.forecast_length,
+                num_samples=self.num_samples,
+            )  # (B, num_samples, forecast_length)
 
-                output = self.backbone.generate(
-                    seqs,
-                    max_new_tokens=self.forecast_length,
-                    num_samples=self.num_samples,
-                )
-                # output shape: (B, num_samples, forecast_length)
+            if self.sample_aggregation == "mean":
+                output = output.mean(dim=1)  # (B, forecast_length)
 
-                if self.sample_aggregation == "mean":
-                    output = output.mean(dim=1, keepdim=False)  # (B, P)
+            pred_list.append(output)
 
-                pred_list.append(output)  # each (B, P)
-
-        # Stack features back: (B, P, D)
-        pred_data = torch.stack(pred_list, dim=-1)
-
+        pred_data = torch.stack(pred_list, dim=-1)  # (B, forecast_length, D)
         return {"pred_data": pred_data}

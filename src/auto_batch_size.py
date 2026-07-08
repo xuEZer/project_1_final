@@ -79,25 +79,42 @@ def _worker(
     config.read_string(config_str)
 
     from src.models.imputators import imputator  # noqa: E402
-    from src.models.jointModel import JointModel, NullPredictor  # noqa: E402
+    from src.models.jointModel import JointModel  # noqa: E402
     from src.models.predictors import predictor  # noqa: E402
+    from src.rng import torch_seed_scope  # noqa: E402
 
     logger = logging.getLogger("auto_bs_worker")
     logger.addHandler(logging.NullHandler())
 
+    base_seed = config.getint("experiment", "random_seed", fallback=0)
+    with torch_seed_scope(
+        base_seed,
+        "auto_batch_worker",
+        "imputer_init",
+        config.get("imputator", "model_type"),
+        bs,
+    ):
+        imputer_model = imputator(config.get("imputator", "model_type"), config)
+
+    with torch_seed_scope(
+        base_seed,
+        "auto_batch_worker",
+        "predictor_init",
+        config.get("predictor", "model_type"),
+        bs,
+    ):
+        predictor_model = predictor(config.get("predictor", "model_type"), config)
+
     joint_model = JointModel(
-        imputer=imputator(config.get("imputator", "model_type"), config),
-        predictor=(
-            NullPredictor()
-            if config.get("experiment", "exp_type") == "B1"
-            else predictor(config.get("predictor", "model_type"), config)
-        ),
+        imputer=imputer_model,
+        predictor=predictor_model,
         optimizer_name=config.get("training", "optimizer"),
         lr=config.getfloat("training", "lr"),
         device=device,
         tb_summary_writer=None,
         logger=logger,
     )
+    joint_model.configure_random_generators(base_seed)
     joint_model.to(device)
 
     X_N, X_NA, X_NA_mask, X_A_mask = sample_tensors[:4]

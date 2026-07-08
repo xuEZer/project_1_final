@@ -3,7 +3,7 @@
 # Missing-rate robustness and B3 pretrain+TIP experiment:
 #   datasets: Supply_Chain_Customer_D, azure2019_D_5T
 #   imputers: SAITS, DeepMVI
-#   predictors: Sundial, TimesFM25
+#   predictors: Chronos, Timer, Sundial
 #   missing rates: 0.1, 0.2, 0.3, 0.4, 0.5
 #   exp types: B1, B2, B3
 
@@ -36,7 +36,7 @@ Options:
   --missing-rates LIST     Missing rates. Default: 0.1,0.2,0.3,0.4,0.5.
   --dataset A,B            Dataset keys. Default: Supply_Chain_Customer_D,azure2019_D_5T.
   --imputator A,B          Imputers. Default: SAITS,DeepMVI.
-  --predictor A,B          Predictors. Default: Sundial,TimesFM25.
+  --predictor A,B          Predictors. Default: Chronos,Timer,Sundial.
   --seed 42,43             Random seeds. Default: configs/global.ini.
   --lookback 512           Lookback length L. Default: configs/global.ini.
   --k 20                   TIP sampling count. Default: configs/global.ini.

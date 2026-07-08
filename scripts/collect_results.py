@@ -52,6 +52,10 @@ METRIC_FIELDS = [
     "imp_rmse",
     "pred_rmse",
 ]
+EVAL_SPLITS = ["train", "test"]
+SPLIT_METRIC_FIELDS = [
+    f"{split}_{field}" for split in EVAL_SPLITS for field in METRIC_FIELDS
+]
 CONFIG_FIELDS = [
     "exp_type",
     "dataset",
@@ -76,6 +80,7 @@ RESULT_FIELDS = [
     "log_file",
     *CONFIG_FIELDS,
     *METRIC_FIELDS,
+    *SPLIT_METRIC_FIELDS,
     "elapsed_seconds",
     "exit_code",
 ]
@@ -182,7 +187,7 @@ def fallback_settings() -> CommonSettings:
             "Australia_Solar_H",
         ],
         paper_imputators=["BRITS", "SAITS", "DeepMVI", "TimesNet"],
-        paper_predictors=["Sundial", "TimesFM25"],
+        paper_predictors=["Chronos", "Timer", "Sundial"],
         paper_missing_rates=["0.1", "0.2", "0.3", "0.4", "0.5"],
         default_main_missing_rate=config_get("dataset", "missing_rate", "0.2"),
         default_lookback_len=config_get("dataset", "lookback_len", "512"),
@@ -317,6 +322,11 @@ def parse_args(settings: CommonSettings) -> argparse.Namespace:
         help="Comma-separated missing-rate robustness values.",
     )
     parser.add_argument(
+        "--main-exp-suffix",
+        default="",
+        help="Experiment-name suffix used for main/projection runs.",
+    )
+    parser.add_argument(
         "--compute-num-epoch",
         default="1",
         help="Num epoch suffix used by run_compute_cost_probe.sh.",
@@ -345,15 +355,10 @@ def experiment_name(
             f"{exp_type}_{dataset}_{imputator}_{predictor}_"
             f"mr{missing_rate}_L{lookback_len}_s{seed}"
         )
-    if include_epsilon_in_name:
-        return (
-            f"{exp_type}_{dataset}_{imputator}_{predictor}_"
-            f"mr{missing_rate}_L{lookback_len}_k{tip_k}_"
-            f"eps{eps_label(tip_epsilon)}_s{seed}"
-        )
     return (
         f"{exp_type}_{dataset}_{imputator}_{predictor}_"
-        f"mr{missing_rate}_L{lookback_len}_k{tip_k}_s{seed}"
+        f"mr{missing_rate}_L{lookback_len}_k{tip_k}_"
+        f"eps{eps_label(tip_epsilon)}_s{seed}"
     )
 
 
@@ -466,12 +471,13 @@ def build_plans(args: argparse.Namespace, settings: CommonSettings) -> list[Plan
         lookback_len=lookback_len,
         tip_k=settings.default_tip_k,
         tip_epsilon=settings.default_tip_epsilon,
+        exp_name_suffix=args.main_exp_suffix,
     )
 
     if args.quick:
         projection_datasets = ["Supply_Chain_Customer_D", "azure2019_D_5T"]
         projection_imputators = ["SAITS", "DeepMVI"]
-        projection_predictors = ["TimesFM25", "Sundial"]
+        projection_predictors = ["Chronos", "Timer", "Sundial"]
     else:
         projection_datasets = settings.paper_datasets
         projection_imputators = settings.paper_imputators
@@ -490,10 +496,12 @@ def build_plans(args: argparse.Namespace, settings: CommonSettings) -> list[Plan
         lookback_len=lookback_len,
         tip_k=settings.default_tip_k,
         tip_epsilon=settings.default_tip_epsilon,
+        exp_name_suffix=args.main_exp_suffix,
     )
 
     representative_configs = [
-        ("Supply_Chain_Customer_D", "SAITS", "TimesFM25"),
+        ("Supply_Chain_Customer_D", "SAITS", "Chronos"),
+        ("Supply_Chain_Customer_D", "SAITS", "Timer"),
         ("azure2019_D_5T", "DeepMVI", "Sundial"),
     ]
     add_paired_configs(
@@ -544,7 +552,7 @@ def build_plans(args: argparse.Namespace, settings: CommonSettings) -> list[Plan
                 exp_type=exp_type,
                 dataset="Supply_Chain_Customer_D",
                 imputator="SAITS",
-                predictor="TimesFM25",
+                predictor="Chronos",
                 missing_rate=main_missing_rate,
                 seed="42",
                 lookback_len=lookback_len,
@@ -593,6 +601,7 @@ def parse_log(path: Path) -> dict[str, Any]:
         "tip_epsilon": None,
         "tip_pretrain_epochs": None,
         **{field: None for field in METRIC_FIELDS},
+        **{field: None for field in SPLIT_METRIC_FIELDS},
     }
 
     lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
@@ -639,17 +648,35 @@ def parse_log(path: Path) -> dict[str, Any]:
                 row[key] = value
 
         if "Evaluation Results Summary:" in msg:
-            for metric_line in lines[idx + 1 : idx + 14]:
+            split = "test"
+            match_split = re.search(r"split=([A-Za-z0-9_]+)", msg)
+            if match_split:
+                split = match_split.group(1).lower()
+            for metric_line in lines[idx + 1 :]:
                 metric_msg = log_message(metric_line).strip()
+                if "Evaluation Results Summary:" in metric_msg:
+                    break
+                if metric_msg.startswith("Evaluation completed"):
+                    break
                 parts = metric_msg.split()
                 if not parts or parts[0] not in METRICS:
                     continue
                 metric = parts[0].lower()
+                imp_value = None
+                pred_value = None
                 if len(parts) >= 3:
-                    row[f"imp_{metric}"] = to_float(parts[-2])
-                    row[f"pred_{metric}"] = to_float(parts[-1])
+                    imp_value = to_float(parts[-2])
+                    pred_value = to_float(parts[-1])
                 elif len(parts) == 2:
-                    row[f"pred_{metric}"] = to_float(parts[-1])
+                    pred_value = to_float(parts[-1])
+
+                if split in EVAL_SPLITS:
+                    row[f"{split}_imp_{metric}"] = imp_value
+                    row[f"{split}_pred_{metric}"] = pred_value
+
+                if split == "test":
+                    row[f"imp_{metric}"] = imp_value
+                    row[f"pred_{metric}"] = pred_value
 
     if row["exp_type"] is None:
         row["exp_type"] = str(row["exp_name"]).split("_", 1)[0]
@@ -753,6 +780,7 @@ def planned_row(
         "tip_epsilon": plan.tip_epsilon,
         "tip_pretrain_epochs": plan.tip_pretrain_epochs,
         **{field: None for field in METRIC_FIELDS},
+        **{field: None for field in SPLIT_METRIC_FIELDS},
         "elapsed_seconds": timing.get("elapsed_seconds"),
         "exit_code": timing.get("exit_code"),
     }
@@ -780,7 +808,7 @@ def collect_planned_rows(
         row["log_file"] = parsed.get("log_file") or row["log_file"]
         row["exp_name"] = parsed.get("exp_name") or row["exp_name"]
 
-        for field in CONFIG_FIELDS + METRIC_FIELDS:
+        for field in CONFIG_FIELDS + METRIC_FIELDS + SPLIT_METRIC_FIELDS:
             value = parsed.get(field)
             if value not in {None, ""}:
                 row[field] = value

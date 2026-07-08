@@ -34,7 +34,7 @@ bash scripts/run_paper_experiments.sh --quick --dry-run
 python3 scripts/auto_run_experiments.py --budget-min 90 --profile auto
 python3 scripts/auto_run_experiments.py --budget-min 20 --profile smoke --device cuda
 python3 scripts/collect_results.py
-./src/models/predictors/Sundial/.venv/bin/python scripts/profile_runtime.py --batches 3 --tip-k 5 --dataset.dataset Supply_Chain_Customer_D --imputator.model_type SAITS --predictor.model_type Sundial
+uv run scripts/profile_runtime.py --batches 3 --tip-k 5 --dataset.dataset Supply_Chain_Customer_D --imputator.model_type SAITS --predictor.model_type Sundial
 ```
 
 ## Runtime profiling
@@ -46,9 +46,9 @@ batches and reports per-stage timings plus rough B1/TIP epoch estimates.
 Examples:
 
 ```bash
-./src/models/predictors/Sundial/.venv/bin/python scripts/profile_runtime.py --batches 3 --tip-k 5
-./src/models/predictors/TimesFM25/.venv/bin/python scripts/profile_runtime.py --batches 2 --tip-k 5 --predictor.model_type TimesFM25
-./src/models/predictors/Sundial/.venv/bin/python scripts/profile_runtime.py --skip-tip --include-auto-batch
+uv run scripts/profile_runtime.py --batches 3 --tip-k 5
+uv run scripts/profile_runtime.py --batches 2 --tip-k 5 --predictor.model_type Sundial
+uv run scripts/profile_runtime.py --skip-tip --include-auto-batch
 ```
 
 ## Adaptive local runner

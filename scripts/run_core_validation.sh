@@ -80,7 +80,7 @@ Examples:
   bash scripts/run_core_validation.sh --failed-only --jobs 1
   bash scripts/run_core_validation.sh --with-sensitivity --dry-run
   bash scripts/run_core_validation.sh --sensitivity-only --epsilon-k 10
-  bash scripts/run_core_validation.sh --predictor TimesFM25
+  bash scripts/run_core_validation.sh --predictor Sundial
   bash scripts/run_core_validation.sh --dataset CPHL_30T,azure2019_D_5T
 EOF
 }
@@ -188,8 +188,6 @@ run_epsilon_sensitivity_phase() {
     print_run_settings
 
     job_pool_init "$JOBS" "$DRY_RUN" "$FAILED_ONLY"
-    local old_include_eps="${INCLUDE_EPS_IN_EXP_NAME:-}"
-    export INCLUDE_EPS_IN_EXP_NAME=true
 
     for epsilon in "${EPSILON_VALUES[@]}"; do
         for dataset in "${DATASETS[@]}"; do
@@ -205,11 +203,6 @@ run_epsilon_sensitivity_phase() {
         done
     done
 
-    if [[ -n "$old_include_eps" ]]; then
-        export INCLUDE_EPS_IN_EXP_NAME="$old_include_eps"
-    else
-        unset INCLUDE_EPS_IN_EXP_NAME
-    fi
     job_pool_wait_all
     job_pool_print_summary "Core sensitivity epsilon summary" || SUMMARY_CODE=$?
 }

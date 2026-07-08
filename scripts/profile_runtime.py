@@ -20,7 +20,6 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 import torch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,6 +31,11 @@ from src.auto_batch_size import find_max_batch_size
 from src.models.imputators import imputator
 from src.models.jointModel import JointModel
 from src.models.predictors import predictor
+from src.rng import (
+    configure_deterministic_backend,
+    torch_generator,
+    torch_seed_scope,
+)
 
 GLOBAL_CONFIG_PATH = ROOT / "configs" / "global.ini"
 
@@ -144,15 +148,12 @@ def load_profile_config(overrides: list[tuple[str, str, str]]) -> ConfigParser:
     return config
 
 
-def set_random_seed(seed: int) -> None:
-    import random
-
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
+def configure_profile_determinism(seed: int) -> None:
+    configure_deterministic_backend()
+    logging.getLogger("profile_runtime").info(
+        "Base random seed set to %d; profiling uses independent RNG streams.",
+        seed,
+    )
 
 
 def project_path(value: str) -> Path:
@@ -252,7 +253,8 @@ def profile(args: argparse.Namespace, overrides: list[tuple[str, str, str]]) -> 
 
     device = config.get("training", "device")
     profiler.device = device
-    set_random_seed(config.getint("experiment", "random_seed"))
+    base_seed = config.getint("experiment", "random_seed")
+    configure_profile_determinism(base_seed)
 
     print("Profiling configuration")
     print("-" * 96)
@@ -315,19 +317,35 @@ def profile(args: argparse.Namespace, overrides: list[tuple[str, str, str]]) -> 
             batch_size=batch_size,
             num_workers=dataloader_num_workers,
             pin_memory=pin_memory,
+            train_generator=torch_generator(base_seed, "profile_train_loader_shuffle"),
         )
 
     with contextlib.ExitStack():
         with profiler.stage("model_init", notes="includes frozen TSFM load/compile"):
+            with torch_seed_scope(
+                base_seed,
+                "profile",
+                "imputer_init",
+                config.get("imputator", "model_type"),
+            ):
+                imputer_model = imputator(config.get("imputator", "model_type"), config)
+            with torch_seed_scope(
+                base_seed,
+                "profile",
+                "predictor_init",
+                config.get("predictor", "model_type"),
+            ):
+                predictor_model = predictor(config.get("predictor", "model_type"), config)
             joint_model = JointModel(
-                imputer=imputator(config.get("imputator", "model_type"), config),
-                predictor=predictor(config.get("predictor", "model_type"), config),
+                imputer=imputer_model,
+                predictor=predictor_model,
                 optimizer_name=config.get("training", "optimizer"),
                 lr=config.getfloat("training", "lr"),
                 device=device,
                 tb_summary_writer=NullSummaryWriter(),
                 logger=logger,
             )
+            joint_model.configure_random_generators(base_seed)
             joint_model.to(device)
 
         accum_steps = 1
@@ -500,7 +518,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         description=(
             "Profile major runtime stages for one experiment config. "
             "Pass normal config overrides after the profiling options, e.g. "
-            "--dataset.dataset azure2019_D_5T --predictor.model_type TimesFM25."
+            "--dataset.dataset azure2019_D_5T --predictor.model_type Sundial."
         )
     )
     parser.add_argument("--batches", type=int, default=3, help="Measured train batches.")

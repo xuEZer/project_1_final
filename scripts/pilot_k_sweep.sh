@@ -24,14 +24,13 @@ cd "$PROJECT_DIR"
 
 DATASET="Supply_Chain_Customer_D"
 IMPUTATOR="SAITS"
-PREDICTOR="TimesFM25"       # TSFM
+PREDICTOR="Sundial"
 EXP_TYPE="B2"               # 主 TIP 实验
 MISSING_RATE="0.1"
 SEED="${DEFAULT_SEEDS[0]}"
 
 K_VALUES=(5 10 20)
 
-# TimesFM25 环境 (有 torch + timesfm 依赖)
 PYTHON_BIN="$(python_for_predictor "$PREDICTOR")"
 
 # HuggingFace 镜像 (国内加速)

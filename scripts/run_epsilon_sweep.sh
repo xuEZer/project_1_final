@@ -22,7 +22,7 @@ JOBS=1
 
 REP_DATASETS=("Supply_Chain_Customer_D" "azure2019_D_5T")
 REP_IMPUTATORS=("SAITS" "DeepMVI")
-REP_PREDICTORS=("TimesFM25" "Sundial")
+REP_PREDICTORS=("Chronos" "Timer" "Sundial")
 
 usage() {
     cat <<'EOF'
@@ -30,7 +30,7 @@ Usage: scripts/run_epsilon_sweep.sh [options]
 
 Options:
   --epsilon-values 1e-5,1e-4,1e-3,1e-2,1e-1
-  --full                     Run all 7 datasets x 4 imputers x 2 predictors.
+  --full                     Run all 7 datasets x 4 imputers x 3 predictors.
   --seed 42,43               Random seeds. Default: configs/global.ini.
   --missing-rate 0.2         Missing rate. Default: configs/global.ini.
   --lookback 512             Lookback length L. Default: configs/global.ini.
@@ -59,7 +59,6 @@ while [[ $# -gt 0 ]]; do
 done
 
 cd "$PROJECT_DIR"
-export INCLUDE_EPS_IN_EXP_NAME=true
 
 echo "=============================================="
 echo "  Epsilon sweep"

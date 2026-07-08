@@ -30,10 +30,10 @@ Usage: scripts/run_projection_ablation.sh [options]
 
 Options:
   --exp B1,B2,B4,B5,B6     Experiment types. Default: B1,B2,B4,B5,B6.
-  --representative         Use a small 2x2x2 representative grid instead of the full matrix.
+  --representative         Use a small representative grid instead of the full matrix.
   --dataset A,B            Dataset config keys. Default: all 7 paper datasets.
   --imputator A,B          Imputers. Default: BRITS,SAITS,DeepMVI,TimesNet.
-  --predictor A,B          Predictors. Default: Sundial,TimesFM25.
+  --predictor A,B          Predictors. Default: Chronos,Timer,Sundial.
   --seed 42,43             Random seeds. Default: configs/global.ini.
   --missing-rate 0.2       Missing rate. Default: configs/global.ini.
   --lookback 512           Lookback length L. Default: configs/global.ini.
@@ -52,7 +52,7 @@ while [[ $# -gt 0 ]]; do
         --representative)
             DATASETS=("Supply_Chain_Customer_D" "azure2019_D_5T")
             IMPUTATORS=("SAITS" "DeepMVI")
-            PREDICTORS=("TimesFM25" "Sundial")
+            PREDICTORS=("Chronos" "Timer" "Sundial")
             shift
             ;;
         --dataset) csv_to_array DATASETS "$2"; shift 2 ;;

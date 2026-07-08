@@ -1,10 +1,12 @@
 """Data preprocessing and dataloader construction utilities."""
 
+import contextlib
 import hashlib
 import json
 import logging
 import time
 from pathlib import Path
+from typing import Any
 
 import h5py
 import joblib
@@ -14,6 +16,8 @@ from datasets import load_from_disk
 from huggingface_hub import snapshot_download
 from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, TensorDataset
+
+from src.rng import numpy_rng
 
 
 def preprocess_dataset(
@@ -44,7 +48,7 @@ def preprocess_dataset(
         block_size: Block size used for natural missing simulation.
         lookback_len: Input window length.
         pred_len: Forecast horizon length.
-        val_ratio: Validation split ratio.
+        val_ratio: Validation split ratio (0 to disable).
         test_ratio: Test split ratio.
         random_seed: Random seed for reproducible preprocessing.
         logger: Logger used to report preprocessing progress.
@@ -146,10 +150,8 @@ def preprocess_dataset(
         logger.info(f"Preprocessed data saved to {save_folder}")
         return save_folder
     finally:
-        try:
+        with contextlib.suppress(FileNotFoundError):
             lock_folder.rmdir()
-        except FileNotFoundError:
-            pass
 
 
 def generate_preprocess_uid(
@@ -166,8 +168,8 @@ def generate_preprocess_uid(
     """
 
     def _normalize_uid_value(
-        value: float | Path | dict | list | tuple,
-    ) -> float | str | dict | list:
+        value: float | int | str | Path | dict | list | tuple,
+    ) -> float | int | str | dict | list:
         if isinstance(value, float):
             return format(value, ".12g")
         if isinstance(value, Path):
@@ -198,8 +200,8 @@ def check_if_data_preprocessed(save_folder: Path) -> bool:
         True if both dataset and scaler files exist, otherwise False.
 
     """
-    dataset_path = Path(save_folder) / "dataset.h5"
-    scaler_path = Path(save_folder) / "scaler.pkl"
+    dataset_path = save_folder / "dataset.h5"
+    scaler_path = save_folder / "scaler.pkl"
     return dataset_path.exists() and scaler_path.exists()
 
 
@@ -226,7 +228,8 @@ def generate_missing(
         natural/artificial/combined missing masks.
 
     """
-    rng = np.random.default_rng(random_seed)
+    natural_rng = numpy_rng(random_seed, "missing_mask", "natural")
+    artificial_rng = numpy_rng(random_seed, "missing_mask", "artificial")
 
     natural_mask = np.isnan(data)
     if natural_mask.any():
@@ -239,7 +242,7 @@ def generate_missing(
     else:
         complete_data = data.copy()
         natural_mask_block = (
-            rng.random((int(np.ceil(len(data) / block_size)), data.shape[1]))
+            natural_rng.random((int(np.ceil(len(data) / block_size)), data.shape[1]))
             < missing_rate
         )
         natural_mask = np.repeat(natural_mask_block, block_size, axis=0)[: len(data)]
@@ -247,13 +250,33 @@ def generate_missing(
         natural_missing_data[natural_mask] = np.nan
 
     observed_len = np.sum(~natural_mask)
-    artificial_missing_flags = rng.random(observed_len) < artificial_missing_rate
+    artificial_missing_flags = artificial_rng.random(observed_len) < artificial_missing_rate
     artificial_mask = np.zeros(data.shape, dtype=bool)
     artificial_mask[~natural_mask] = artificial_missing_flags
 
     missing_mask = natural_mask | artificial_mask
     incomplete_data = data.copy()
     incomplete_data[missing_mask] = np.nan
+
+    # --- assertions ---
+    assert natural_missing_data.shape == data.shape
+    assert incomplete_data.shape == data.shape
+    assert natural_mask.shape == data.shape and natural_mask.dtype == bool
+    assert artificial_mask.shape == data.shape and artificial_mask.dtype == bool
+    assert missing_mask.shape == data.shape and missing_mask.dtype == bool
+    assert not (natural_mask & artificial_mask).any(), \
+        "Natural and artificial masks must be disjoint"
+    assert (missing_mask == (natural_mask | artificial_mask)).all(), \
+        "NA_mask must equal N_mask | A_mask"
+    assert np.isnan(natural_missing_data[natural_mask]).all(), \
+        "N_data must be NaN where N_mask is True"
+    assert np.isnan(incomplete_data[missing_mask]).all(), \
+        "NA_data must be NaN where NA_mask is True"
+    assert not np.isnan(natural_missing_data[~natural_mask]).any(), \
+        "N_data must be finite where N_mask is False"
+    if complete_data is not None:
+        assert complete_data.shape == data.shape
+        assert not np.isnan(complete_data).any(), "complete_data must have no NaN"
 
     return (
         complete_data,
@@ -285,9 +308,9 @@ def split_data(
 
     Each block is windowed independently by ``truncate_data`` later in the
     pipeline.  Splits are cut at the raw time-step level with compensation
-    for the fixed windowing overhead, so the window-count ratio matches the
-    configured ``val_ratio`` / ``test_ratio`` exactly. If ``val_ratio`` is
-    0, only train/test splits are created.
+    for the fixed windowing overhead, so the window-count ratio approximates
+    the configured ratios.  If ``val_ratio`` is 0, only train/test splits
+    are created.
 
     Args:
         data: Optional complete data without natural missing values.
@@ -298,32 +321,31 @@ def split_data(
         NA_mask: Combined missing mask.
         lookback_len: Input lookback length.
         pred_len: Prediction length.
-        val_ratio: Validation split ratio (applied to window counts). Use 0 to
-            disable validation.
+        val_ratio: Validation split ratio (applied to window counts).
+            Use 0 to disable validation.
         test_ratio: Test split ratio (applied to window counts).
 
     Returns:
         Tuple of train, optional validation, and test dictionaries.
 
     """
-    total_len = len(N_data)
+    len_data = len(N_data)
     if val_ratio < 0 or test_ratio <= 0 or val_ratio + test_ratio >= 1:
         raise ValueError(
-            "Expected val_ratio >= 0, test_ratio > 0, and "
-            "val_ratio + test_ratio < 1."
+            "Expected val_ratio >= 0, test_ratio > 0, "
+            "and val_ratio + test_ratio < 1."
         )
 
-    overhead = lookback_len + pred_len - 1  # fixed cost per split for windowing
-    min_len = overhead + 1  # at least 1 window per split
+    overhead = lookback_len + pred_len - 1
+    min_len = overhead + 1
     num_splits = 2 if val_ratio == 0 else 3
-    if total_len < num_splits * min_len:
+    if len_data < num_splits * min_len:
         raise ValueError(
-            f"Time series too short ({total_len}) to create non-overlapping "
+            f"Time series too short ({len_data}) to create non-overlapping "
             f"splits with lookback={lookback_len}, pred={pred_len}."
         )
 
-    # Total windows available across non-overlapping raw blocks.
-    total_windows = total_len - num_splits * overhead
+    total_windows = len_data - num_splits * overhead
 
     train_windows = int(total_windows * (1 - val_ratio - test_ratio))
     val_windows = int(total_windows * val_ratio)
@@ -331,7 +353,7 @@ def split_data(
 
     train_raw_len = train_windows + overhead
     val_raw_len = val_windows + overhead if val_ratio > 0 else 0
-    test_raw_len = total_len - train_raw_len - val_raw_len  # remainder → test
+    test_raw_len = len_data - train_raw_len - val_raw_len
 
     train_start = 0
     train_end = train_raw_len
@@ -340,7 +362,7 @@ def split_data(
     val_end = val_start + val_raw_len
 
     test_start = val_end if val_ratio > 0 else train_end
-    test_end = total_len
+    test_end = len_data
 
     def _make_split(start: int, end: int) -> dict[str, np.ndarray | None]:
         return {
@@ -352,8 +374,22 @@ def split_data(
             "data": data[start:end, :] if data is not None else None,
         }
 
+    train_split = _make_split(train_start, train_end)
     val_split = _make_split(val_start, val_end) if val_ratio > 0 else None
-    return _make_split(train_start, train_end), val_split, _make_split(test_start, test_end)
+    test_split = _make_split(test_start, test_end)
+
+    # --- assertions ---
+    _expected_keys = {"N_data", "N_mask", "NA_data", "NA_mask", "A_mask", "data"}
+    assert train_split.keys() == _expected_keys
+    assert test_split.keys() == _expected_keys
+    assert train_split["N_data"].shape[0] > 0, "Train split must be non-empty"
+    assert test_split["N_data"].shape[0] > 0, "Test split must be non-empty"
+    total_split_len = train_split["N_data"].shape[0] + test_split["N_data"].shape[0]
+    if val_split is not None:
+        total_split_len += val_split["N_data"].shape[0]
+    assert total_split_len == len_data, "Split lengths must sum to original length"
+
+    return train_split, val_split, test_split
 
 
 def standardize_data(
@@ -370,39 +406,41 @@ def standardize_data(
 
     Args:
         train_data: Training split dictionary.
-        val_data: Validation split dictionary.
+        val_data: Optional validation split dictionary.
         test_data: Test split dictionary.
 
     Returns:
-        Scaled train/validation/test dictionaries and the fitted scaler.
+        Scaled train/val/test dictionaries and the fitted scaler.
 
     """
     scaler = StandardScaler()
-
     scaler.fit(train_data["N_data"])
 
-    train_data_scaled = train_data.copy()
-    val_data_scaled = val_data.copy() if val_data is not None else None
-    test_data_scaled = test_data.copy()
-
-    train_data_scaled["N_data"] = scaler.transform(train_data["N_data"])
-    if val_data_scaled is not None and val_data is not None:
-        val_data_scaled["N_data"] = scaler.transform(val_data["N_data"])
-    test_data_scaled["N_data"] = scaler.transform(test_data["N_data"])
-    train_data_scaled["NA_data"] = scaler.transform(train_data["NA_data"])
-    if val_data_scaled is not None and val_data is not None:
-        val_data_scaled["NA_data"] = scaler.transform(val_data["NA_data"])
-    test_data_scaled["NA_data"] = scaler.transform(test_data["NA_data"])
-    train_data_scaled["data"] = (
-        scaler.transform(train_data["data"]) if train_data["data"] is not None else None
-    )
-    if val_data_scaled is not None and val_data is not None:
-        val_data_scaled["data"] = (
-            scaler.transform(val_data["data"]) if val_data["data"] is not None else None
+    def _scale(split: dict[str, np.ndarray | None]) -> dict[str, np.ndarray | None]:
+        if split is None:
+            return None
+        s = split.copy()
+        s["N_data"] = scaler.transform(split["N_data"])
+        s["NA_data"] = scaler.transform(split["NA_data"])
+        s["data"] = (
+            scaler.transform(split["data"]) if split["data"] is not None else None
         )
-    test_data_scaled["data"] = (
-        scaler.transform(test_data["data"]) if test_data["data"] is not None else None
-    )
+        return s
+
+    train_data_scaled = _scale(train_data)
+    val_data_scaled = _scale(val_data)
+    test_data_scaled = _scale(test_data)
+
+    # --- assertions ---
+    assert not np.any(np.isnan(scaler.mean_)), "Scaler mean must not be NaN"
+    assert not np.any(np.isnan(scaler.scale_)), "Scaler scale must not be NaN"
+    assert np.all(scaler.scale_ > 0), "Scaler scale must be positive"
+    assert np.array_equal(
+        np.isnan(train_data_scaled["N_data"]), np.isnan(train_data["N_data"])
+    ), "NaN positions must be unchanged after scaling"
+    assert np.all(np.isfinite(
+        train_data_scaled["N_data"][~np.isnan(train_data["N_data"])]
+    )), "Observed positions must be finite after scaling"
 
     return train_data_scaled, val_data_scaled, test_data_scaled, scaler
 
@@ -420,25 +458,37 @@ def white_nan_with_zero(
 
     Args:
         train_data: Training split dictionary.
-        val_data: Validation split dictionary.
+        val_data: Optional validation split dictionary.
         test_data: Test split dictionary.
 
     Returns:
-        Train, validation, and test dictionaries with NaNs replaced by zeros.
+        Train, optional val, and test dictionaries with NaNs → 0.
 
     """
-    train_data_filled = train_data.copy()
-    val_data_filled = val_data.copy() if val_data is not None else None
-    test_data_filled = test_data.copy()
+    def _fill(split: dict[str, np.ndarray | None]) -> dict[str, np.ndarray | None]:
+        if split is None:
+            return None
+        s = split.copy()
+        s["N_data"] = np.nan_to_num(split["N_data"], nan=0.0)
+        s["NA_data"] = np.nan_to_num(split["NA_data"], nan=0.0)
+        return s
 
-    train_data_filled["N_data"] = np.nan_to_num(train_data["N_data"], nan=0.0)
-    if val_data_filled is not None and val_data is not None:
-        val_data_filled["N_data"] = np.nan_to_num(val_data["N_data"], nan=0.0)
-    test_data_filled["N_data"] = np.nan_to_num(test_data["N_data"], nan=0.0)
-    train_data_filled["NA_data"] = np.nan_to_num(train_data["NA_data"], nan=0.0)
-    if val_data_filled is not None and val_data is not None:
-        val_data_filled["NA_data"] = np.nan_to_num(val_data["NA_data"], nan=0.0)
-    test_data_filled["NA_data"] = np.nan_to_num(test_data["NA_data"], nan=0.0)
+    train_data_filled = _fill(train_data)
+    val_data_filled = _fill(val_data)
+    test_data_filled = _fill(test_data)
+
+    # --- assertions ---
+    assert not np.isnan(train_data_filled["N_data"]).any(), \
+        "N_data must have no NaN after filling"
+    assert not np.isnan(train_data_filled["NA_data"]).any(), \
+        "NA_data must have no NaN after filling"
+    assert np.allclose(
+        train_data_filled["N_data"][~np.isnan(train_data["N_data"])],
+        train_data["N_data"][~np.isnan(train_data["N_data"])],
+    ), "Observed values must be unchanged after NaN filling"
+    assert np.all(
+        train_data_filled["N_data"][np.isnan(train_data["N_data"])] == 0.0
+    ), "NaN positions must be filled with 0"
 
     return train_data_filled, val_data_filled, test_data_filled
 
@@ -458,13 +508,13 @@ def truncate_data(
 
     Args:
         train_data: Training split dictionary.
-        val_data: Validation split dictionary.
+        val_data: Optional validation split dictionary.
         test_data: Test split dictionary.
         lookback_len: Input sequence length.
         pred_len: Prediction sequence length.
 
     Returns:
-        Truncated train, validation, and test datasets.
+        Truncated train, optional val, and test datasets.
 
     """
 
@@ -516,17 +566,44 @@ def truncate_data(
         return data_set
 
     train_set = truncate_data_(train_data, lookback_len, pred_len)
-    val_set = (
-        truncate_data_(val_data, lookback_len, pred_len)
-        if val_data is not None
-        else None
-    )
+    val_set = truncate_data_(val_data, lookback_len, pred_len) if val_data is not None else None
     test_set = truncate_data_(test_data, lookback_len, pred_len)
 
+    # --- assertions ---
     assert len(train_set["X_N"]) > 0, (
         "Lookback length is too long for the training data."
     )
     assert len(test_set["X_N"]) > 0, "Lookback length is too long for the test data."
+
+    for name, dset in [("train", train_set), ("test", test_set)]:
+        n_windows = len(dset["X_N"])
+        # X and Y must have the same number of windows
+        assert len(dset["Y_N"]) == n_windows, \
+            f"{name}: X/Y window count mismatch"
+        # All X tensors must share the first dim
+        for key in ["X_N", "X_NA", "X_N_mask", "X_NA_mask", "X_A_mask"]:
+            assert dset[key].shape[0] == n_windows, \
+                f"{name}: {key} has wrong window count"
+            assert dset[key].shape[1] == lookback_len, \
+                f"{name}: {key} has wrong lookback_len"
+        # All Y tensors
+        for key in ["Y_N", "Y_N_mask"]:
+            assert dset[key].shape[0] == n_windows, \
+                f"{name}: {key} has wrong window count"
+            assert dset[key].shape[1] == pred_len, \
+                f"{name}: {key} has wrong pred_len"
+        # Optional X and Y
+        if dset["X"] is not None:
+            assert dset["X"].shape[:2] == (n_windows, lookback_len), \
+                f"{name}: X has wrong shape"
+        if dset["Y"] is not None:
+            assert dset["Y"].shape[:2] == (n_windows, pred_len), \
+                f"{name}: Y has wrong shape"
+        # Masks must be 0/1
+        for key in ["X_N_mask", "X_NA_mask", "X_A_mask", "Y_N_mask"]:
+            vals = dset[key]
+            assert vals.min() >= 0.0 and vals.max() <= 1.0, \
+                f"{name}: {key} values out of [0,1]"
 
     return train_set, val_set, test_set
 
@@ -537,66 +614,36 @@ def save_h5(
     test_set: dict[str, np.ndarray],
     h5_path: Path,
 ) -> None:
-    """Persist train/validation/test dictionaries into an HDF5 file.
-
-    Args:
-        train_set: Truncated training dataset dictionary.
-        val_set: Truncated validation dataset dictionary.
-        test_set: Truncated test dataset dictionary.
-        h5_path: Output HDF5 file path.
-
-    Returns:
-        None.
-
-    """
+    """Persist train/val/test dictionaries into an HDF5 file."""
     with h5py.File(h5_path, "w") as h5f:
-        train_grp = h5f.create_group("train")
-        for key, value in train_set.items():
-            if value is not None:
-                train_grp.create_dataset(key, data=value)
-
-        if val_set is not None:
-            val_grp = h5f.create_group("val")
-            for key, value in val_set.items():
+        for grp_name, dset in [
+            ("train", train_set), ("val", val_set), ("test", test_set),
+        ]:
+            if dset is None:
+                continue
+            grp = h5f.create_group(grp_name)
+            for key, value in dset.items():
                 if value is not None:
-                    val_grp.create_dataset(key, data=value)
-
-        test_grp = h5f.create_group("test")
-        for key, value in test_set.items():
-            if value is not None:
-                test_grp.create_dataset(key, data=value)
+                    grp.create_dataset(key, data=value)
 
 
-def load_h5(h5_path: Path) -> dict[str, any]:
+def load_h5(h5_path: Path) -> dict[str, Any]:
     """Load dataset splits from an HDF5 file.
 
-    Args:
-        h5_path: Input HDF5 file path.
-
     Returns:
-        Dictionary with train, val, and test split mappings.
+        Dictionary with ``"train"``, ``"val"`` (if present), and
+        ``"test"`` split mappings.
 
     """
     if not Path(h5_path).exists():
         raise FileNotFoundError(f"HDF5 file not found: {h5_path}")
 
-    data = {}
-
+    data: dict[str, Any] = {}
     with h5py.File(h5_path, "r") as h5f:
-        train_set = {key: h5f["train"][key][()] for key in h5f["train"]}
-
-        val_set = (
-            {key: h5f["val"][key][()] for key in h5f["val"]}
-            if "val" in h5f
-            else None
-        )
-
-        test_set = {key: h5f["test"][key][()] for key in h5f["test"]}
-
-        data = {"train": train_set, "test": test_set}
-        if val_set is not None:
-            data["val"] = val_set
-
+        for grp_name in ("train", "val", "test"):
+            if grp_name not in h5f:
+                continue
+            data[grp_name] = {key: h5f[grp_name][key][()] for key in h5f[grp_name]}
     return data
 
 
@@ -605,7 +652,8 @@ def get_tensor_data_loader(
     batch_size: int,
     num_workers: int = 0,
     pin_memory: bool = False,
-) -> tuple[dict[str, DataLoader], dict[str, DataLoader], bool]:
+    train_generator: torch.Generator | None = None,
+) -> tuple[dict[str, DataLoader], DataLoader, bool]:
     """Build training and evaluation dataloaders from numpy datasets.
 
     Args:
@@ -613,9 +661,11 @@ def get_tensor_data_loader(
         batch_size: Batch size for all dataloaders.
         num_workers: Number of worker subprocesses for each dataloader.
         pin_memory: Whether dataloaders should allocate pinned host memory.
+        train_generator: Optional RNG for training DataLoader shuffling.
 
     Returns:
-        A tuple of train dataloaders, test dataloader, and no-ground-truth flag.
+        A tuple of train dataloaders dict, test dataloader, and
+        no-ground-truth flag.
 
     """
     train_ds = TensorDataset(
@@ -631,34 +681,43 @@ def get_tensor_data_loader(
             train_ds,
             batch_size=batch_size,
             shuffle=True,
+            generator=train_generator,
             num_workers=num_workers,
             pin_memory=pin_memory,
             persistent_workers=num_workers > 0,
         )
     }
 
-    no_gt = "X" not in dataset["test"] or dataset["test"]["X"] is None
-    if no_gt:
-        test_eval_ds = TensorDataset(
-            torch.from_numpy(dataset["test"]["X_N"]).float(),
-            torch.from_numpy(dataset["test"]["X_N_mask"]).float(),
-            torch.from_numpy(dataset["test"]["Y_N"]).float(),
-            torch.from_numpy(dataset["test"]["Y_N_mask"]).float(),
+    def build_eval_loader(split: dict[str, any]) -> tuple[DataLoader, bool]:
+        split_no_gt = "X" not in split or split["X"] is None
+        if split_no_gt:
+            eval_ds = TensorDataset(
+                torch.from_numpy(split["X_N"]).float(),
+                torch.from_numpy(split["X_N_mask"]).float(),
+                torch.from_numpy(split["Y_N"]).float(),
+                torch.from_numpy(split["Y_N_mask"]).float(),
+            )
+        else:
+            eval_ds = TensorDataset(
+                torch.from_numpy(split["X_N"]).float(),
+                torch.from_numpy(split["X_N_mask"]).float(),
+                torch.from_numpy(split["X"]).float(),
+                torch.from_numpy(split["Y"]).float(),
+            )
+        loader = DataLoader(
+            eval_ds,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+            pin_memory=pin_memory,
+            persistent_workers=num_workers > 0,
         )
-    else:
-        test_eval_ds = TensorDataset(
-            torch.from_numpy(dataset["test"]["X_N"]).float(),
-            torch.from_numpy(dataset["test"]["X_N_mask"]).float(),
-            torch.from_numpy(dataset["test"]["X"]).float(),
-            torch.from_numpy(dataset["test"]["Y"]).float(),
-        )
-    eval_loader = DataLoader(
-        test_eval_ds,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=num_workers,
-        pin_memory=pin_memory,
-        persistent_workers=num_workers > 0,
-    )
+        loader.no_gt = split_no_gt
+        return loader, split_no_gt
+
+    if "val" in dataset:
+        data_loader["val"] = build_eval_loader(dataset["val"])[0]
+
+    eval_loader, no_gt = build_eval_loader(dataset["test"])
 
     return data_loader, eval_loader, no_gt

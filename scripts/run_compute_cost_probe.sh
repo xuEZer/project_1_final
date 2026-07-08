@@ -11,7 +11,7 @@ source "${SCRIPT_DIR}/common_experiment.sh"
 
 DATASET="Supply_Chain_Customer_D"
 IMPUTATOR="SAITS"
-PREDICTOR="TimesFM25"
+PREDICTOR="Sundial"
 MISSING_RATE="$DEFAULT_MAIN_MISSING_RATE"
 LOOKBACK_LEN="$DEFAULT_LOOKBACK_LEN"
 SEED=42
@@ -29,7 +29,7 @@ Usage: scripts/run_compute_cost_probe.sh [options]
 Options:
   --dataset KEY          Dataset config key. Default: Supply_Chain_Customer_D.
   --imputator NAME       Imputer. Default: SAITS.
-  --predictor NAME       Predictor. Default: TimesFM25.
+  --predictor NAME       Predictor. Default: Sundial.
   --missing-rate 0.2     Missing rate. Default: configs/global.ini.
   --lookback 512         Lookback length L. Default: configs/global.ini.
   --seed 42              Random seed. Default: configs/global.ini.

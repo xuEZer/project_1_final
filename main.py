@@ -10,13 +10,12 @@ This script orchestrates the full pipeline:
 
 import argparse
 import logging
-import random
 import sys
 from configparser import ConfigParser, ExtendedInterpolation
 from pathlib import Path
 
-import numpy as np
 import torch
+from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 import math
@@ -31,10 +30,155 @@ from src.evaluator import evaluate
 from src.experiments import run_experiment
 from src.logger import log_config, log_system_info, setup_logger
 from src.models.imputators import imputator
-from src.models.jointModel import JointModel, NullPredictor
+from src.models.jointModel import JointModel
 from src.models.predictors import predictor
+from src.rng import (
+    configure_deterministic_backend,
+    torch_generator,
+    torch_seed_scope,
+)
 
 GLOBAL_CONFIG_PATH = Path("./configs/global.ini")
+
+
+def resolve_batch_size(
+    *,
+    config: ConfigParser,
+    seed: int,
+    effective_batch_size: int,
+    dataset: dict,
+    joint_model: JointModel,
+    loader_kwargs: dict,
+    logger: logging.Logger,
+) -> tuple[int, int]:
+    """Determine micro batch size and gradient accumulation steps.
+
+    Three strategies (in priority order):
+
+    1. **Manual** — ``micro_batch_size`` config is non-zero; explicit override.
+    2. **Auto** — ternary search over power-of-2 batch sizes for maximum
+       throughput via :func:`src.auto_batch_size.find_max_batch_size`.
+    3. **Fallback** — ``micro_batch_size = effective_batch_size``, no
+       accumulation.
+
+    Returns:
+        ``(micro_batch_size, accum_steps)``.
+
+    """
+    manual_micro_batch = config.getint(
+        "training", "micro_batch_size", fallback=0
+    )
+    if manual_micro_batch > 0:
+        micro_batch_size = manual_micro_batch
+        accum_steps = math.ceil(effective_batch_size / micro_batch_size)
+        logger.info(
+            "Using manual micro_batch_size=%d "
+            "(target=%d, accum_steps=%d)",
+            micro_batch_size,
+            effective_batch_size,
+            accum_steps,
+        )
+        return micro_batch_size, accum_steps
+
+    auto_batch = config.has_option("training", "auto_batch_size") and config.getboolean(
+        "training", "auto_batch_size"
+    )
+    if auto_batch and effective_batch_size > 1:
+        auto_probe_generator = torch_generator(
+            seed, "auto_batch_probe_loader_shuffle"
+        )
+        logger.info(
+            "Independent RNG: auto_batch_probe_loader_shuffle_seed=%d",
+            auto_probe_generator.initial_seed(),
+        )
+        sample_loader, _, _ = get_tensor_data_loader(
+            dataset,
+            batch_size=effective_batch_size,
+            train_generator=auto_probe_generator,
+            **loader_kwargs,
+        )
+        sample_batch = next(iter(sample_loader["train"]))
+
+        micro_batch_size = find_max_batch_size(
+            joint_model,
+            sample_batch,
+            effective_batch_size,
+            config.get("training", "device"),
+            logger,
+            config,
+        )
+        accum_steps = math.ceil(effective_batch_size / micro_batch_size)
+        logger.info(
+            "Effective batch_size: %d | Micro batch_size: %d | "
+            "Gradient accumulation steps: %d",
+            effective_batch_size,
+            micro_batch_size,
+            accum_steps,
+        )
+        return micro_batch_size, accum_steps
+
+    return effective_batch_size, 1
+
+
+def build_dataloaders(
+    config: ConfigParser,
+    seed: int,
+    dataset: dict,
+    joint_model: JointModel,
+    logger: logging.Logger,
+) -> tuple[dict[str, DataLoader], DataLoader, bool]:
+    """Build training and evaluation dataloaders with resolved batch size.
+
+    Reads dataloader config, determines the micro batch size via
+    :func:`resolve_batch_size`, sets ``joint_model.accum_steps`` /
+    ``joint_model.micro_batch_size``, and constructs train / train-eval /
+    test :class:`~torch.utils.data.DataLoader` instances.
+
+    Returns:
+        ``(train_loader, eval_loader, no_gt)``.
+
+    """
+    effective_batch_size = config.getint("training", "batch_size")
+    device = config.get("training", "device")
+    dataloader_num_workers = config.getint(
+        "training", "dataloader_num_workers", fallback=0,
+    )
+    pin_memory = (
+        config.getboolean(
+            "training", "pin_memory",
+            fallback=str(device).startswith("cuda"),
+        )
+        and str(device).startswith("cuda")
+    )
+    loader_kwargs = {
+        "num_workers": dataloader_num_workers,
+        "pin_memory": pin_memory,
+    }
+
+    micro_batch_size, accum_steps = resolve_batch_size(
+        config=config,
+        seed=seed,
+        effective_batch_size=effective_batch_size,
+        dataset=dataset,
+        joint_model=joint_model,
+        loader_kwargs=loader_kwargs,
+        logger=logger,
+    )
+    joint_model.accum_steps = accum_steps
+    joint_model.micro_batch_size = micro_batch_size
+
+    train_shuffle_generator = torch_generator(seed, "train_loader_shuffle")
+    logger.info(
+        "Independent RNG: train_loader_shuffle_seed=%d",
+        train_shuffle_generator.initial_seed(),
+    )
+    train_loader, eval_loader, no_gt = get_tensor_data_loader(
+        dataset,
+        batch_size=micro_batch_size,
+        train_generator=train_shuffle_generator,
+        **loader_kwargs,
+    )
+    return train_loader, eval_loader, no_gt
 
 
 def main() -> None:
@@ -53,8 +197,7 @@ def main() -> None:
     log_config(config, logger)
 
     seed = int(config.get("experiment", "random_seed"))
-    set_random_seed(seed)
-    logger.info(f"Random seed set to {seed}")
+    configure_deterministic_runtime(seed, logger)
 
     dataset_folder = preprocess_dataset(
         dataset_name=config.get("dataset", "dataset_name"),
@@ -78,72 +221,14 @@ def main() -> None:
     config.set("dataset", "d_feature", str(dataset["train"]["X_N"].shape[2]))
     config.set("dataset", "lookback_len", str(dataset["train"]["X_N"].shape[1]))
 
-    target_batch_size = config.getint("training", "batch_size")
-    device = config.get("training", "device")
-    dataloader_num_workers = config.getint(
-        "training",
-        "dataloader_num_workers",
-        fallback=0,
-    )
-    pin_memory = (
-        config.getboolean(
-            "training",
-            "pin_memory",
-            fallback=str(device).startswith("cuda"),
-        )
-        and str(device).startswith("cuda")
-    )
-    loader_kwargs = {
-        "num_workers": dataloader_num_workers,
-        "pin_memory": pin_memory,
-    }
-    auto_batch = config.has_option("training", "auto_batch_size") and config.getboolean(
-        "training", "auto_batch_size"
-    )
-    manual_micro_batch = config.getint("training", "micro_batch_size", fallback=0)
-
     joint_model = init_joint_model(config, logger, tb_summary_writer)
 
-    if manual_micro_batch > 0:
-        micro_batch_size = manual_micro_batch
-        accum_steps = math.ceil(target_batch_size / micro_batch_size)
-        logger.info(
-            f"Using manual micro_batch_size={micro_batch_size} "
-            f"(target={target_batch_size}, accum_steps={accum_steps})"
-        )
-    elif auto_batch and target_batch_size > 1:
-        sample_loader, _, _ = get_tensor_data_loader(
-            dataset,
-            batch_size=target_batch_size,
-            **loader_kwargs,
-        )
-        sample_batch = next(iter(sample_loader["train"]))
-
-        micro_batch_size = find_max_batch_size(
-            joint_model,
-            sample_batch,
-            target_batch_size,
-            config.get("training", "device"),
-            logger,
-            config,
-        )
-        accum_steps = math.ceil(target_batch_size / micro_batch_size)
-        logger.info(
-            f"Effective batch_size: {target_batch_size} | "
-            f"Micro batch_size: {micro_batch_size} | "
-            f"Gradient accumulation steps: {accum_steps}"
-        )
-    else:
-        micro_batch_size = target_batch_size
-        accum_steps = 1
-
-    joint_model.accum_steps = accum_steps
-    joint_model.micro_batch_size = micro_batch_size
-
-    train_loader, eval_loader, no_gt = get_tensor_data_loader(
-        dataset,
-        batch_size=micro_batch_size,
-        **loader_kwargs,
+    train_loader, eval_loader, no_gt = build_dataloaders(
+        config=config,
+        seed=seed,
+        dataset=dataset,
+        joint_model=joint_model,
+        logger=logger,
     )
 
     joint_model = run_experiment(
@@ -152,15 +237,23 @@ def main() -> None:
         train_loader=train_loader,
         config=config,
         logger=logger,
+        test_loader=eval_loader,
     )
     logger.info("Training completed.")
 
-    if isinstance(joint_model.predictor, NullPredictor):
-        logger.info("Loading predictor for evaluation...")
-        joint_model.set_predictor(predictor(config.get("predictor", "model_type"), config))
-        joint_model.to(config.get("training", "device"))
+    for split_name, loader, split_no_gt in [
+        ("val", train_loader.get("val"), False),
+        ("test", eval_loader, no_gt),
+    ]:
+        if loader is None:
+            continue
+        if split_name == "test":
+            split_no_gt = no_gt
+        metrics = evaluate(
+            config, joint_model, loader, split_no_gt, logger,
+            split_name=split_name,
+        )
 
-    evaluate(config, joint_model, eval_loader, no_gt, logger)
     logger.info("Experiment completed successfully!")
 
 
@@ -312,23 +405,13 @@ def exit_if_experiment_completed(exp_name: str, log_save_dir: Path) -> None:
     return None
 
 
-def set_random_seed(seed: int) -> None:
-    """Set random seeds for Python, NumPy, and PyTorch for reproducibility.
-
-    Args:
-        seed: Random seed used by Python, NumPy, and PyTorch.
-
-    Returns:
-        None.
-
-    """
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+def configure_deterministic_runtime(seed: int, logger: logging.Logger) -> None:
+    """Configure deterministic backends without sharing one global RNG stream."""
+    configure_deterministic_backend()
+    logger.info(
+        "Base random seed set to %d; stochastic processes derive independent RNGs.",
+        seed,
+    )
 
 
 def init_joint_model(
@@ -345,19 +428,33 @@ def init_joint_model(
         Initialized joint model moved to the configured device.
 
     """
+    base_seed = config.getint("experiment", "random_seed")
+    with torch_seed_scope(
+        base_seed,
+        "imputer_init",
+        config.get("imputator", "model_type"),
+    ) as imputer_seed:
+        logger.info("Independent RNG: imputer_init_seed=%d", imputer_seed)
+        imputer_model = imputator(config.get("imputator", "model_type"), config)
+
+    with torch_seed_scope(
+        base_seed,
+        "predictor_init",
+        config.get("predictor", "model_type"),
+    ) as predictor_seed:
+        logger.info("Independent RNG: predictor_init_seed=%d", predictor_seed)
+        predictor_model = predictor(config.get("predictor", "model_type"), config)
+
     joint_model = JointModel(
-        imputer=imputator(config.get("imputator", "model_type"), config),
-        predictor=(
-            NullPredictor()
-            if config.get("experiment", "exp_type") == "B1"
-            else predictor(config.get("predictor", "model_type"), config)
-        ),
+        imputer=imputer_model,
+        predictor=predictor_model,
         optimizer_name=config.get("training", "optimizer"),
         lr=config.getfloat("training", "lr"),
         device=config.get("training", "device"),
         tb_summary_writer=tb_summary_writer,
         logger=logger,
     )
+    joint_model.configure_random_generators(base_seed)
 
     device = config.get("training", "device")
     joint_model.to(device)

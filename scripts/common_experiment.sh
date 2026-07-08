@@ -67,8 +67,8 @@ PAPER_DATASETS=(
     "Australia_Solar_H"
 )
 
-PAPER_IMPUTATORS=(BRITS SAITS DeepMVI TimesNet)
-PAPER_PREDICTORS=(Sundial TimesFM25)
+PAPER_IMPUTATORS=(SAITS DeepMVI TimesNet BRITS)
+PAPER_PREDICTORS=(Chronos Timer Sundial)
 PAPER_MISSING_RATES=(0.1 0.2 0.3 0.4 0.5)
 
 DEFAULT_EXP_TYPE="$(config_default experiment exp_type)"
@@ -85,10 +85,7 @@ DEFAULT_IMPUTATOR="$(config_default imputator model_type)"
 DEFAULT_PREDICTOR="$(config_default predictor model_type)"
 DEFAULT_SEEDS=("$DEFAULT_RANDOM_SEED")
 
-declare -A PYTHON_BIN=(
-    ["Sundial"]="${PROJECT_DIR}/src/models/predictors/Sundial/.venv/bin/python"
-    ["TimesFM25"]="${PROJECT_DIR}/src/models/predictors/TimesFM25/.venv/bin/python"
-)
+PROJECT_PYTHON="${PROJECT_DIR}/.venv/bin/python"
 
 csv_to_array() {
     local target_name="$1"
@@ -105,11 +102,15 @@ die() {
 
 python_for_predictor() {
     local predictor="$1"
-    local python_bin="${PYTHON_BIN[$predictor]:-}"
-    if [[ -z "$python_bin" || ! -x "$python_bin" ]]; then
-        die "Python environment not found for predictor '${predictor}': ${python_bin:-unset}. Run uv sync for that predictor first."
+    local allow_missing="${2:-false}"
+    if [[ ! -x "$PROJECT_PYTHON" ]]; then
+        if [[ "$allow_missing" == true ]]; then
+            echo "$PROJECT_PYTHON"
+            return 0
+        fi
+        die "Project Python not found: ${PROJECT_PYTHON}"
     fi
-    echo "$python_bin"
+    echo "$PROJECT_PYTHON"
 }
 
 eps_label() {
@@ -144,14 +145,10 @@ experiment_name() {
         printf '%s_%s_%s_%s_mr%s_L%s_s%s' \
             "$exp_type" "$dataset" "$imputator" "$predictor" \
             "$missing_rate" "$lookback_len" "$seed"
-    elif [[ "${INCLUDE_EPS_IN_EXP_NAME:-false}" == true ]]; then
+    else
         printf '%s_%s_%s_%s_mr%s_L%s_k%s_eps%s_s%s' \
             "$exp_type" "$dataset" "$imputator" "$predictor" \
             "$missing_rate" "$lookback_len" "$tip_k" "$(eps_label "$tip_epsilon")" "$seed"
-    else
-        printf '%s_%s_%s_%s_mr%s_L%s_k%s_s%s' \
-            "$exp_type" "$dataset" "$imputator" "$predictor" \
-            "$missing_rate" "$lookback_len" "$tip_k" "$seed"
     fi
 }
 
@@ -195,7 +192,7 @@ run_one_experiment() {
     fi
 
     local python_bin
-    python_bin="$(python_for_predictor "$predictor")"
+    python_bin="$(python_for_predictor "$predictor" "$dry_run")"
 
     local cmd=(
         "$python_bin" main.py
