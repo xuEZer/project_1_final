@@ -62,7 +62,6 @@ class JointModel(nn.Module):
         self.accum_steps = 1
         self.micro_batch_size = 1
         self.non_blocking_transfer = str(device).startswith("cuda")
-        self.lr_scheduler = None
         self.base_seed = 0
         self.training_stochastic_seed = derive_seed(0, "training_stochastic_default")
         self.training_stochastic_seed_applied = False
@@ -113,29 +112,6 @@ class JointModel(nn.Module):
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(self.training_stochastic_seed)
         self.training_stochastic_seed_applied = True
-
-    def configure_lr_scheduler(
-        self, scheduler_name: str, num_epoch: int, min_lr: float,
-    ) -> None:
-        """Configure an optional epoch-level learning-rate scheduler."""
-        scheduler_name = scheduler_name.lower().strip()
-        if scheduler_name in {"", "none", "off"}:
-            self.lr_scheduler = None
-            return
-        if scheduler_name == "cosine":
-            self.lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-                self.optimizer, T_max=max(1, num_epoch), eta_min=min_lr,
-            )
-            self.logger.info(
-                "Cosine LR scheduler: lr=%.6g → %.6g over %d epochs",
-                self.current_lr(), min_lr, max(1, num_epoch),
-            )
-        else:
-            raise ValueError(f"Unknown lr_scheduler: {scheduler_name}")
-
-    def current_lr(self) -> float:
-        """Return the current learning rate."""
-        return float(self.optimizer.param_groups[0]["lr"])
 
     def forward(
         self,
@@ -516,14 +492,13 @@ class JointModel(nn.Module):
             )
 
             if on_epoch_end is not None:
-                on_epoch_end(
+                should_stop = on_epoch_end(
                     self.global_epoch + 1,
                     avg_train_loss,
                     self,
                 )
-
-            if self.lr_scheduler is not None:
-                self.lr_scheduler.step()
+                if should_stop:
+                    break
 
             self.phase_epoch += 1
             self.global_epoch += 1
@@ -539,7 +514,6 @@ class JointModel(nn.Module):
         data_loader: dict[str, DataLoader],
         phase_name: str,
         num_epoch: int,
-        variant: str = "B2",
         k: int = 20,
         epsilon: float = 1e-4,
         accum_steps: int | None = None,
@@ -548,31 +522,24 @@ class JointModel(nn.Module):
         ]
         | None = None,
     ) -> float:
-        """TIP training via a gradient-modifier callback.
+        """TIP training via zero-order ĝ_P estimation + conditional projection.
 
-        Delegates to :meth:`fit` with a closure that implements:
-        - ``"B2"``: zero-order ĝ_P estimation + conditional projection.
-        - ``"B4"``: random direction replaces ĝ_P + conditional projection.
-        - ``"B5"``: zero-order ĝ_P estimation + unconditional (always)
-          projection.
+        Delegates to :meth:`fit` with a gradient-modifier closure that
+        estimates the prediction gradient via symmetric differences and
+        applies conditional orthogonal projection.
 
         Args:
             data_loader: Dictionary with a ``"train"`` DataLoader.
             phase_name: Human-readable phase name (for logging).
             num_epoch: Number of epochs for this phase.
-            variant: One of ``"B2"``, ``"B4"``, ``"B5"``, ``"B6"``.
-            k: Number of random samples for zero-order estimation
-                (ignored by B4).
-            epsilon: Perturbation step size (ignored by B4).
+            k: Number of random samples for zero-order estimation.
+            epsilon: Perturbation step size.
             accum_steps: Micro-batches per optimizer step.
             on_epoch_end: Optional per-epoch callback.
 
         Returns:
             Final training loss from the last epoch in this phase.
         """
-        if variant not in {"B2", "B4", "B5", "B6"}:
-            raise ValueError(f"Unknown TIP variant: {variant}")
-
         tip_stats = {
             "steps": 0,
             "conflicts": 0,
@@ -586,43 +553,29 @@ class JointModel(nn.Module):
         ) -> None:
             g_I = model._get_flattened_grad()
 
-            if variant == "B4":
-                # Random direction — replaces gp_hat entirely
-                gp_hat = torch.randn(
-                    g_I.shape,
-                    dtype=g_I.dtype,
-                    device=g_I.device,
-                    generator=model.tip_generator,
-                )
-            else:
-                # B2 / B5: average zero-order prediction gradients over
-                # the same microbatches that produced the accumulated
-                # imputation gradient.
-                gp_hat = torch.zeros_like(g_I)
-                for microbatch_idx, batch_data in enumerate(microbatches):
-                    gp_hat.add_(
-                        model._compute_gp_hat(
-                            batch_data["X_NA"],
-                            batch_data["X_NA_mask"],
-                            batch_data["X_N"],
-                            batch_data["X_A_mask"],
-                            batch_data["Y_N"],
-                            batch_data["Y_N_mask"],
-                            k=k,
-                            epsilon=epsilon,
-                            seed_parts=("microbatch", microbatch_idx),
-                        )
+            # Average zero-order prediction gradients over the same
+            # microbatches that produced the accumulated imputation gradient.
+            gp_hat = torch.zeros_like(g_I)
+            for microbatch_idx, batch_data in enumerate(microbatches):
+                gp_hat.add_(
+                    model._compute_gp_hat(
+                        batch_data["X_NA"],
+                        batch_data["X_NA_mask"],
+                        batch_data["X_N"],
+                        batch_data["X_A_mask"],
+                        batch_data["Y_N"],
+                        batch_data["Y_N_mask"],
+                        k=k,
+                        epsilon=epsilon,
+                        seed_parts=("microbatch", microbatch_idx),
                     )
-                gp_hat.div_(max(1, len(microbatches)))
+                )
+            gp_hat.div_(max(1, len(microbatches)))
 
             dot = torch.dot(g_I, gp_hat).detach()
             gp_norm = torch.linalg.vector_norm(gp_hat).detach()
             conflict = dot.item() < 0.0
-            projection = (
-                variant != "B6"
-                and (variant == "B5" or conflict)
-                and gp_norm.item() > 1e-12
-            )
+            projection = conflict and gp_norm.item() > 1e-12
 
             tip_stats["steps"] += 1
             tip_stats["conflicts"] += int(conflict)
@@ -630,16 +583,7 @@ class JointModel(nn.Module):
             tip_stats["dot_sum"] += float(dot.item())
             tip_stats["gp_norm_sum"] += float(gp_norm.item())
 
-            if variant == "B6":
-                model._set_flattened_grad(gp_hat)
-                return
-
-            conditional = variant != "B5"
-            g_I = model._apply_projection(
-                g_I,
-                gp_hat,
-                conditional=conditional,
-            )
+            g_I = model._apply_projection(g_I, gp_hat, conditional=True)
             model._set_flattened_grad(g_I)
 
         def _tip_epoch_end(
@@ -665,7 +609,8 @@ class JointModel(nn.Module):
                 tip_stats[key] = 0
 
             if on_epoch_end is not None:
-                on_epoch_end(epoch, train_loss, model)
+                return on_epoch_end(epoch, train_loss, model)
+            return False
 
         return self.fit(
             data_loader,

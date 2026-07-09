@@ -31,7 +31,7 @@ def _config2sundial(config: ConfigParser) -> dict[str, Any]:
         "sample_aggregation": config.get(
             "predictor", "sample_aggregation", fallback="mean",
         ),
-        "forecast_length": config.getint("dataset", "pred_len"),
+        "forecast_length": config.getint("data", "pred_len"),
         "device": config.get("training", "device"),
     }
 
@@ -41,7 +41,7 @@ def _config2chronos(config: ConfigParser) -> dict[str, Any]:
         "model_name": config.get(
             "predictor", "model_name", fallback="amazon/chronos-bolt-small",
         ),
-        "forecast_length": config.getint("dataset", "pred_len"),
+        "forecast_length": config.getint("data", "pred_len"),
         "num_samples": config.getint("predictor", "num_samples", fallback=20),
         "device": config.get("training", "device"),
     }
@@ -52,7 +52,7 @@ def _config2timer(config: ConfigParser) -> dict[str, Any]:
         "model_name": config.get(
             "predictor", "model_name", fallback="thuml/timer-base-84m",
         ),
-        "forecast_length": config.getint("dataset", "pred_len"),
+        "forecast_length": config.getint("data", "pred_len"),
         "normalize_inputs": config.getboolean(
             "predictor", "normalize_inputs", fallback=True,
         ),

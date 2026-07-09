@@ -30,18 +30,18 @@ def config2param_dict4SAITS(config: ConfigParser) -> dict[str, Any]:
 
     """
     param_dict = {
-        "n_groups": int(config["imputator"]["n_groups"]),
-        "n_group_inner_layers": int(config["imputator"]["n_group_inner_layers"]),
-        "d_time": int(config["dataset"]["lookback_len"]),
-        "d_feature": int(config["dataset"]["d_feature"]),
-        "d_model": int(config["imputator"]["d_model"]),
-        "d_inner": int(config["imputator"]["d_inner"]),
-        "n_head": int(config["imputator"]["n_head"]),
-        "d_k": int(config["imputator"]["d_k"]),
-        "d_v": int(config["imputator"]["d_v"]),
-        "dropout": float(config["imputator"]["dropout"]),
-        "param_sharing_strategy": config["imputator"]["param_sharing_strategy"],
-        "diagonal_attention_mask": config["imputator"].getboolean(
+        "n_groups": int(config["imputer"]["n_groups"]),
+        "n_group_inner_layers": int(config["imputer"]["n_group_inner_layers"]),
+        "d_time": int(config["data"]["lookback"]),
+        "d_feature": int(config["data"]["d_feature"]),
+        "d_model": int(config["imputer"]["d_model"]),
+        "d_inner": int(config["imputer"]["d_inner"]),
+        "n_head": int(config["imputer"]["n_head"]),
+        "d_k": int(config["imputer"]["d_k"]),
+        "d_v": int(config["imputer"]["d_v"]),
+        "dropout": float(config["imputer"]["dropout"]),
+        "param_sharing_strategy": config["imputer"]["param_sharing_strategy"],
+        "diagonal_attention_mask": config["imputer"].getboolean(
             "diagonal_attention_mask"
         ),
         "device": config["training"]["device"],
@@ -60,8 +60,8 @@ def config2param_dict4BRITS(config: ConfigParser) -> dict[str, Any]:
 
     """
     param_dict = {
-        "d_feature": int(config["dataset"]["d_feature"]),
-        "d_model": int(config["imputator"]["d_model"]),
+        "d_feature": int(config["data"]["d_feature"]),
+        "d_model": int(config["imputer"]["d_model"]),
         "device": config["training"]["device"],
     }
     return param_dict
@@ -78,14 +78,14 @@ def config2param_dict4DeepMVI(config: ConfigParser) -> dict[str, Any]:
 
     """
     param_dict = {
-        "d_feature": int(config["dataset"]["d_feature"]),
-        "d_time": int(config["dataset"]["lookback_len"]),
+        "d_feature": int(config["data"]["d_feature"]),
+        "d_time": int(config["data"]["lookback"]),
         "device": config["training"]["device"],
-        "kernel_size": int(config["imputator"].get("kernel_size", 10)),
-        "block_size": int(config["imputator"].get("block_size", 5)),
-        "n_head": int(config["imputator"].get("n_head", 2)),
-        "use_context": config["imputator"].getboolean("use_context", fallback=True),
-        "use_local": config["imputator"].getboolean("use_local", fallback=True),
+        "kernel_size": int(config["imputer"].get("kernel_size", 10)),
+        "block_size": int(config["imputer"].get("block_size", 5)),
+        "n_head": int(config["imputer"].get("n_head", 2)),
+        "use_context": config["imputer"].getboolean("use_context", fallback=True),
+        "use_local": config["imputer"].getboolean("use_local", fallback=True),
     }
     return param_dict
 
@@ -101,16 +101,16 @@ def config2param_dict4TimesNet(config: ConfigParser) -> dict[str, Any]:
 
     """
     param_dict = {
-        "d_feature": int(config["dataset"]["d_feature"]),
-        "d_time": int(config["dataset"]["lookback_len"]),
-        "d_model": int(config["imputator"]["d_model"]),
-        "d_ff": int(config["imputator"]["d_ff"]),
-        "top_k": int(config["imputator"]["top_k"]),
-        "num_kernels": int(config["imputator"]["num_kernels"]),
-        "e_layers": int(config["imputator"]["e_layers"]),
-        "dropout": float(config["imputator"]["dropout"]),
-        "embed": config["imputator"]["embed"],
-        "freq": config["imputator"]["freq"],
+        "d_feature": int(config["data"]["d_feature"]),
+        "d_time": int(config["data"]["lookback"]),
+        "d_model": int(config["imputer"]["d_model"]),
+        "d_ff": int(config["imputer"]["d_ff"]),
+        "top_k": int(config["imputer"]["top_k"]),
+        "num_kernels": int(config["imputer"]["num_kernels"]),
+        "e_layers": int(config["imputer"]["e_layers"]),
+        "dropout": float(config["imputer"]["dropout"]),
+        "embed": config["imputer"]["embed"],
+        "freq": config["imputer"]["freq"],
         "device": config["training"]["device"],
     }
     return param_dict

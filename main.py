@@ -66,7 +66,7 @@ def resolve_batch_size(
 
     """
     manual_micro_batch = config.getint(
-        "training", "micro_batch_size", fallback=0
+        "loader", "micro_batch", fallback=0
     )
     if manual_micro_batch > 0:
         micro_batch_size = manual_micro_batch
@@ -80,8 +80,8 @@ def resolve_batch_size(
         )
         return micro_batch_size, accum_steps
 
-    auto_batch = config.has_option("training", "auto_batch_size") and config.getboolean(
-        "training", "auto_batch_size"
+    auto_batch = config.has_option("loader", "auto_batch") and config.getboolean(
+        "loader", "auto_batch"
     )
     if auto_batch and effective_batch_size > 1:
         auto_probe_generator = torch_generator(
@@ -138,22 +138,16 @@ def build_dataloaders(
         ``(train_loader, eval_loader, no_gt)``.
 
     """
-    effective_batch_size = config.getint("training", "batch_size")
+    effective_batch_size = config.getint("loader", "batch_size")
     device = config.get("training", "device")
-    dataloader_num_workers = config.getint(
-        "training", "dataloader_num_workers", fallback=0,
-    )
+    num_workers = config.getint("loader", "num_workers", fallback=0)
     pin_memory = (
-        config.getboolean(
-            "training", "pin_memory",
+        config.getboolean("loader", "pin_memory",
             fallback=str(device).startswith("cuda"),
         )
         and str(device).startswith("cuda")
     )
-    loader_kwargs = {
-        "num_workers": dataloader_num_workers,
-        "pin_memory": pin_memory,
-    }
+    loader_kwargs = {"num_workers": num_workers, "pin_memory": pin_memory}
 
     micro_batch_size, accum_steps = resolve_batch_size(
         config=config,
@@ -196,7 +190,7 @@ def main() -> None:
     log_system_info(logger)
     log_config(config, logger)
 
-    seed = int(config.get("experiment", "random_seed"))
+    seed = int(config.get("experiment", "seed"))
     configure_deterministic_runtime(seed, logger)
 
     dataset_folder = preprocess_dataset(
@@ -204,22 +198,22 @@ def main() -> None:
         frequency=config.get("dataset", "frequency"),
         item_id=config.get("dataset", "item_id"),
         column_index=config.getint("dataset", "column_index"),
-        missing_rate=config.getfloat("dataset", "missing_rate"),
-        artificial_missing_rate=config.getfloat("dataset", "artificial_missing_rate"),
-        block_size=config.getint("dataset", "block_size"),
-        lookback_len=config.getint("dataset", "lookback_len"),
-        pred_len=config.getint("dataset", "pred_len"),
-        val_ratio=config.getfloat("dataset", "val_ratio"),
-        test_ratio=config.getfloat("dataset", "test_ratio"),
-        random_seed=config.getint("experiment", "random_seed"),
+        missing_rate=config.getfloat("data", "missing_rate"),
+        artificial_missing_rate=config.getfloat("data", "artificial_missing_rate"),
+        block_size=config.getint("data", "block_size"),
+        lookback_len=config.getint("data", "lookback"),
+        pred_len=config.getint("data", "pred_len"),
+        val_ratio=config.getfloat("data", "val_ratio"),
+        test_ratio=config.getfloat("data", "test_ratio"),
+        random_seed=config.getint("experiment", "seed"),
         logger=logger,
-        save_path=Path(config.get("paths", "preprocessed_data_dir")),
+        save_path=Path(config.get("paths", "cache_dir")) / "data",
     )
 
     dataset = load_h5(dataset_folder / "dataset.h5")
 
-    config.set("dataset", "d_feature", str(dataset["train"]["X_N"].shape[2]))
-    config.set("dataset", "lookback_len", str(dataset["train"]["X_N"].shape[1]))
+    config.set("data", "d_feature", str(dataset["train"]["X_N"].shape[2]))
+    config.set("data", "lookback", str(dataset["train"]["X_N"].shape[1]))
 
     joint_model = init_joint_model(config, logger, tb_summary_writer)
 
@@ -232,23 +226,21 @@ def main() -> None:
     )
 
     joint_model = run_experiment(
-        exp_type=config["experiment"]["exp_type"],
+        exp_type=config["experiment"]["type"],
         joint_model=joint_model,
         train_loader=train_loader,
         config=config,
         logger=logger,
-        test_loader=eval_loader,
     )
     logger.info("Training completed.")
 
-    for split_name, loader, split_no_gt in [
-        ("val", train_loader.get("val"), False),
-        ("test", eval_loader, no_gt),
+    for split_name, loader in [
+        ("val", train_loader.get("val")),
+        ("test", eval_loader),
     ]:
         if loader is None:
             continue
-        if split_name == "test":
-            split_no_gt = no_gt
+        split_no_gt = getattr(loader, "no_gt", False)
         metrics = evaluate(
             config, joint_model, loader, split_no_gt, logger,
             split_name=split_name,
@@ -271,13 +263,10 @@ def init_exp() -> tuple[ConfigParser, logging.Logger, SummaryWriter]:
 
     config, init_logs = parse_config(init_logs)
 
-    exp_name = config.get("experiment", "exp_name")
-    exit_if_experiment_completed(
-        exp_name=exp_name,
-        log_save_dir=Path(config.get("paths", "log_save_dir")),
-    )
+    exp_name = config.get("experiment", "name")
+    log_save_dir = Path(config.get("paths", "log_dir"))
+    exit_if_experiment_completed(exp_name=exp_name, log_save_dir=log_save_dir)
 
-    log_save_dir = Path(config.get("paths", "log_save_dir"))
     log_save_dir.mkdir(parents=True, exist_ok=True)
     log_save_path = log_save_dir / f"{exp_name}.log"
     logger = setup_logger(log_save_path, log_name=exp_name)
@@ -344,23 +333,20 @@ def parse_config(
                     ("info", f"Overriding config: [{section}] {key} = {value}")
                 )
 
-    for section in ["imputator", "predictor"]:
-        model_type = config.get(section, "model_type")
-        template_path = Path(f"./configs/template/{section}/{model_type}.ini")
+    for section in ["imputer", "predictor"]:
+        model = config.get(section, "model")
+        template_path = Path(f"./configs/template/{section}/{model}.ini")
         if template_path.exists():
             init_logs.append(
-                (
-                    "info",
-                    f"Loading template config for {model_type} from {template_path}",
-                )
+                ("info", f"Loading template config for {model} from {template_path}")
             )
             config.read(template_path)
         else:
             raise FileNotFoundError(
-                f"Template config for '{model_type}' not found at {template_path}"
+                f"Template config for '{model}' not found at {template_path}"
             )
 
-    dataset_key = config.get("dataset", "dataset")
+    dataset_key = config.get("data", "dataset")
     template_path = Path(f"./configs/template/dataset/{dataset_key}.ini")
     if template_path.exists():
         init_logs.append(
@@ -428,22 +414,22 @@ def init_joint_model(
         Initialized joint model moved to the configured device.
 
     """
-    base_seed = config.getint("experiment", "random_seed")
+    base_seed = config.getint("experiment", "seed")
     with torch_seed_scope(
         base_seed,
         "imputer_init",
-        config.get("imputator", "model_type"),
+        config.get("imputer", "model"),
     ) as imputer_seed:
         logger.info("Independent RNG: imputer_init_seed=%d", imputer_seed)
-        imputer_model = imputator(config.get("imputator", "model_type"), config)
+        imputer_model = imputator(config.get("imputer", "model"), config)
 
     with torch_seed_scope(
         base_seed,
         "predictor_init",
-        config.get("predictor", "model_type"),
+        config.get("predictor", "model"),
     ) as predictor_seed:
         logger.info("Independent RNG: predictor_init_seed=%d", predictor_seed)
-        predictor_model = predictor(config.get("predictor", "model_type"), config)
+        predictor_model = predictor(config.get("predictor", "model"), config)
 
     joint_model = JointModel(
         imputer=imputer_model,

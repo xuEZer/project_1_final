@@ -86,24 +86,24 @@ def _worker(
     logger = logging.getLogger("auto_bs_worker")
     logger.addHandler(logging.NullHandler())
 
-    base_seed = config.getint("experiment", "random_seed", fallback=0)
+    base_seed = config.getint("experiment", "seed", fallback=0)
     with torch_seed_scope(
         base_seed,
         "auto_batch_worker",
         "imputer_init",
-        config.get("imputator", "model_type"),
+        config.get("imputer", "model"),
         bs,
     ):
-        imputer_model = imputator(config.get("imputator", "model_type"), config)
+        imputer_model = imputator(config.get("imputer", "model"), config)
 
     with torch_seed_scope(
         base_seed,
         "auto_batch_worker",
         "predictor_init",
-        config.get("predictor", "model_type"),
+        config.get("predictor", "model"),
         bs,
     ):
-        predictor_model = predictor(config.get("predictor", "model_type"), config)
+        predictor_model = predictor(config.get("predictor", "model"), config)
 
     joint_model = JointModel(
         imputer=imputer_model,

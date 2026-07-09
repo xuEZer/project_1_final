@@ -122,11 +122,12 @@ def compute_all_losses(
     imp_weight = 0.0
     pred_total = 0.0
     pred_weight = 0.0
+    no_gt = getattr(eval_loader, "no_gt", False)
     with _evaluation_state(joint_model), torch.no_grad():
         for batch in eval_loader:
             tensors = joint_model._move_batch_to_device(batch)
             if len(tensors) == 6:
-                # Training format
+                # Training format: X_N, X_NA, X_NA_mask, X_A_mask, Y_N, Y_N_mask
                 X_N, X_NA, X_NA_mask, X_A_mask, Y_N, Y_N_mask = tensors
                 outputs = joint_model.forward(
                     X_NA, X_NA_mask, X_N, X_A_mask, Y_N, Y_N_mask,
@@ -143,8 +144,19 @@ def compute_all_losses(
                     w = pred_mask.sum().item()
                     pred_total += masked_mse_cal(pred, Y_N, pred_mask).item() * w
                     pred_weight += w
+            elif no_gt:
+                # Evaluation format (no ground truth): X_N, X_N_mask, Y_N, Y_N_mask
+                X_N, X_N_mask, Y_N, Y_N_mask = tensors
+                outputs = joint_model.forward(X_N, X_N_mask)
+                pred = outputs.get("pred_data")
+
+                if pred is not None:
+                    pred_mask = 1.0 - Y_N_mask
+                    w = pred_mask.sum().item()
+                    pred_total += masked_mse_cal(pred, Y_N, pred_mask).item() * w
+                    pred_weight += w
             else:
-                # Evaluation format
+                # Evaluation format (with ground truth): X_N, X_N_mask, X, Y
                 X_N, X_N_mask, X, Y = tensors
                 outputs = joint_model.forward(
                     X_N, X_N_mask, X, X_N_mask, Y, torch.ones_like(Y),
@@ -218,10 +230,7 @@ def evaluate(
 
     logger.info("-" * 50)
     logger.info("Evaluation Results Summary: split=%s", split_name)
-    if no_gt:
-        logger.info(f"{'':<10} {'Prediction':<20}")
-    else:
-        logger.info(f"{'':<10} {'Imputation':<20} {'Prediction':<20}")
+    logger.info(f"{'':<10} {'Imputation':<20} {'Prediction':<20}")
     logger.info("-" * 50)
 
     metrics: dict[str, float | None] = {}

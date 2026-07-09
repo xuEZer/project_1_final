@@ -9,11 +9,10 @@ wheels/
 # Virtual environments
 .venv
 
-.reasonix/
 .ruff_cache/
 
-# Runtime data & checkpoints (large / regeneratable)
 cache/
 *.sqlite
 logs/*
 results/
+paper/
