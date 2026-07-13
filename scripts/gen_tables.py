@@ -17,10 +17,16 @@ import argparse
 import datetime
 import json
 import re
+import sys
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from main import resolve_experiment_name
 LOG_DIR = ROOT / "logs"
 BEST_CFG_DIR = ROOT / "configs" / "best_cfg"
 
@@ -139,74 +145,14 @@ def _load_main_exp() -> dict:
 
 
 def discover() -> tuple[list[tuple[str, str]], list[str], list[str]]:
-    """Return (datasets, imputers, predictors) from config + best_cfg + logs.
-
-    Merges canonical lists from main_exp.json with extras discovered from
-    best_cfg directory and log files, preserving config order.
-    """
+    """Return (datasets, imputers, predictors) strictly from main_exp.json."""
     cfg = _load_main_exp()
     cfg_datasets = cfg.get("datasets", [])
     cfg_imputers = cfg.get("imputers", [])
     cfg_predictors = cfg.get("predictors", [])
 
-    # Discover imputers from best_cfg filenames (best_{dataset}_{imputer}.ini)
-    best_cfg_imputers: set[str] = set()
-    for cfg_path in BEST_CFG_DIR.glob("best_*.ini"):
-        stem = cfg_path.stem[5:]  # remove "best_"
-        # Try matching against known imputers first
-        matched = False
-        for imp in cfg_imputers:
-            if stem.endswith(f"_{imp}"):
-                best_cfg_imputers.add(imp)
-                matched = True
-                break
-        if not matched:
-            # Unknown imputer — use the last segment as a guess
-            # (e.g. "Supply_Chain_Customer_D_BRITS" -> "BRITS")
-            best_cfg_imputers.add(stem.rsplit("_", 1)[-1])
-
-    # Discover extras from log file names
-    log_imputers: set[str] = set()
-    log_predictors: set[str] = set()
-    log_datasets: set[str] = set()
-    for log_path in sorted(LOG_DIR.glob("*.log")):
-        name = log_path.stem.split("__")[0]
-        for ds_key in _DATASET_LABELS:
-            if ds_key in name:
-                log_datasets.add(ds_key)
-                break
-        for p in name.split("_"):
-            if p in cfg_predictors:
-                log_predictors.add(p)
-
-    # Merge: use a combined known set for imputer discovery from logs
-    all_known_imputers = set(cfg_imputers) | best_cfg_imputers
-    for log_path in sorted(LOG_DIR.glob("*.log")):
-        name = log_path.stem.split("__")[0]
-        for p in name.split("_"):
-            if p in all_known_imputers:
-                log_imputers.add(p)
-
-    # Merge all sources
-    all_imputers = set(cfg_imputers) | best_cfg_imputers | log_imputers
-    all_predictors = set(cfg_predictors) | log_predictors
-
-    datasets = [(d, _DATASET_LABELS.get(d, d)) for d in cfg_datasets
-                if d in _DATASET_LABELS or d in log_datasets]
-    for d in sorted(log_datasets):
-        if d not in cfg_datasets:
-            datasets.append((d, _DATASET_LABELS.get(d, d)))
-
-    # Preserve config order, append extras alphabetically
-    imputers = [i for i in cfg_imputers if i in all_imputers]
-    for i in sorted(all_imputers - set(imputers)):
-        imputers.append(i)
-
-    predictors = [p for p in cfg_predictors if p in all_predictors]
-    for p in sorted(all_predictors - set(predictors)):
-        predictors.append(p)
-
-    return datasets, imputers, predictors
+    datasets = [(d, _DATASET_LABELS.get(d, d)) for d in cfg_datasets]
+    return datasets, list(cfg_imputers), list(cfg_predictors)
 
 
 # Module-level singletons (lazily resolved on first use)
@@ -246,25 +192,35 @@ def _match_log(
     bs: str,
     extra: str = "",
 ) -> EvalResult | None:
-    """Find a matching log entry, picking the most recently modified when multiple match."""
-    prefix = f"{exp_type}_{ds_key}_{imp}_{pred}_lr{lr}_bs{bs}"
-    matches: list[tuple[float, str, EvalResult]] = []  # (mtime, name, result)
-    for name, r in results.items():
-        if name.startswith(prefix):
-            if extra and extra not in name:
-                continue
-            log_path = LOG_DIR / f"{name}.log"
-            mtime = log_path.stat().st_mtime if log_path.exists() else 0.0
-            matches.append((mtime, name, r))
-    if not matches:
-        return None
-    if len(matches) > 1:
-        names = [m[1] for m in matches]
-        import sys as _sys
-        print(f"  [WARN] {prefix=} matched {len(matches)} logs, using newest: {names[-1].split('__')[0][-40:]}",
-              file=_sys.stderr)
-    # Return the most recently modified match
-    return max(matches, key=lambda x: x[0])[2]
+    """Find the exact run defined by the current global and template configs."""
+    overrides = [
+        "--experiment.type", exp_type,
+        "--data.dataset", ds_key,
+        "--imputer.model", imp,
+        "--predictor.model", pred,
+        "--training.lr", lr,
+        "--loader.batch_size", bs,
+    ]
+
+    k_match = re.search(r"(?:^|_)k([\d.]+)(?:_|$)", extra)
+    if k_match:
+        overrides.extend(["--tip.k", k_match.group(1)])
+
+    p_match = re.search(r"(?:^|_)p([\d.]+)(?:_|$)", extra)
+    if p_match:
+        missing_rate = p_match.group(1)
+        overrides.extend([
+            "--data.missing_rate", missing_rate,
+            "--data.artificial_missing_rate", missing_rate,
+        ])
+
+    return results.get(_expected_experiment_name(tuple(overrides)))
+
+
+@lru_cache(maxsize=None)
+def _expected_experiment_name(overrides: tuple[str, ...]) -> str:
+    """Generate a canonical name using the same config path as main.py."""
+    return resolve_experiment_name(list(overrides))
 
 
 def fmt_val(v: float | None, best: bool = False) -> str:
