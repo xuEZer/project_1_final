@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import collections.abc
 import logging
+import math
 
+from scipy.stats import t as student_t
 import torch
 import torch.nn as nn
-
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
@@ -183,6 +184,38 @@ class JointModel(nn.Module):
             "loss": imp_loss,
         }
 
+    @torch.no_grad()
+    def compute_val_loss(self, val_loader: DataLoader) -> float:
+        """Average imputation loss on the validation set.
+
+        Losses are weighted by batch size so the last (potentially
+        smaller) batch does not distort the validation metric used for
+        early stopping and checkpoint selection.
+        """
+        if val_loader is None:
+            return float("inf")
+        self.imputer.eval()
+        total = 0.0
+        total_samples = 0
+        no_gt = getattr(val_loader, "no_gt", False)
+        for batch in val_loader:
+            tensors = self._move_batch_to_device(batch)
+            if len(tensors) == 6:
+                X_N, X_NA, X_NA_mask, X_A_mask, _Y_N, _Y_N_mask = tensors
+            elif no_gt:
+                raise RuntimeError(
+                    "Validation imputation loss requires artificial masks; "
+                    "use the training-format validation loader."
+                )
+            else:
+                X_NA, X_NA_mask, X_N, _ = tensors
+                X_A_mask = X_NA_mask
+            bs = X_NA.size(0)
+            total += self.imputer(X_NA, X_NA_mask, X_N, X_A_mask)["imp_loss"].item() * bs
+            total_samples += bs
+        self.imputer.train()
+        return total / max(total_samples, 1)
+
     # ------------------------------------------------------------------
     # TIP helper methods
     # ------------------------------------------------------------------
@@ -270,17 +303,13 @@ class JointModel(nn.Module):
         Y_N_mask: torch.Tensor,
         k: int,
         epsilon: float,
-        seed_parts: tuple[object, ...] = (),
-    ) -> torch.Tensor:
-        """Zero-order gradient estimation via symmetric differences.
+        alignment_grads: list[torch.Tensor],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Estimate the prediction gradient and its directional alignments.
 
-        Computes::
-
-            ĝ_P = (1/k) Σᵢ [Q(θ+ε·uᵢ) − Q(θ−ε·uᵢ)] / (2ε) · uᵢ
-            where uᵢ ~ N(0, I).
-
-        Returns ĝ_P as a flat 1-D tensor.  Always restores the original
-        imputer parameters and train/eval mode before returning.
+        TSFM forward calls are batched: all *2k* imputed outputs are
+        stacked and fed to the predictor in a single call, reducing the
+        dominant cost from :math:`O(k)` to :math:`O(1)` TSFM forwards.
         """
         params = list(self.imputer.parameters())
         theta = [p.detach().clone() for p in params]
@@ -288,45 +317,90 @@ class JointModel(nn.Module):
         directions = [torch.empty_like(p) for p in params]
         pred_mask = 1.0 - Y_N_mask
         pred_denom = pred_mask.sum() + 1e-8
+
+        # ---- phase 1: perturb, run imputer forward, collect outputs ----
+        saved_dirs: list[list[torch.Tensor]] = []
+        imputed_batch: list[torch.Tensor] = []
         training_modes = self._capture_training_modes(self.imputer)
         try:
             self.imputer.eval()
-
             for _ in range(k):
                 for u in directions:
                     u.normal_(generator=self.tip_generator)
+                saved_dirs.append([u.clone() for u in directions])
 
-                # Q(θ + ε·u)
+                # +ε  perturbation
                 for p, u in zip(params, directions, strict=True):
                     p.add_(u, alpha=epsilon)
-                Q_plus = self._compute_Q(
-                    X_NA, X_NA_mask, X_N, X_A_mask,
-                    Y_N, Y_N_mask,
-                    pred_mask=pred_mask, pred_denom=pred_denom,
+                imputed_batch.append(
+                    self.imputer(X_NA, X_NA_mask, X_N, X_A_mask)["imp_data"]
                 )
 
-                # Q(θ − ε·u)
+                # −ε  perturbation  (from +ε to −ε in one step)
                 for p, u in zip(params, directions, strict=True):
                     p.add_(u, alpha=-2.0 * epsilon)
-                Q_minus = self._compute_Q(
-                    X_NA, X_NA_mask, X_N, X_A_mask,
-                    Y_N, Y_N_mask,
-                    pred_mask=pred_mask, pred_denom=pred_denom,
+                imputed_batch.append(
+                    self.imputer(X_NA, X_NA_mask, X_N, X_A_mask)["imp_data"]
                 )
 
+                # restore to θ
                 for p, u in zip(params, directions, strict=True):
                     p.add_(u, alpha=epsilon)
 
-                coeff = (Q_plus - Q_minus) / (2.0 * epsilon)
-                for gp_part, u in zip(gp_parts, directions, strict=True):
-                    gp_part.add_(u.mul_(coeff))
+            # ---- phase 2: single batched TSFM forward ----
+            batched_input = torch.cat(imputed_batch, dim=0)          # [2k·B, L, D]
+            batched_pred = self.predictor(batched_input)              # single call
+            pred_data = batched_pred.get("pred_data", None)
+            if pred_data is None:
+                return (
+                    torch.cat([gp_part.flatten() for gp_part in gp_parts]).div_(k),
+                    torch.zeros(k, device=self.device),
+                )
 
+            # ---- phase 3: slice predictions, compute losses, accumulate ----
+            B = X_NA.shape[0]
+            z_samples: list[torch.Tensor] = []
+            for i in range(k):
+                p_plus = pred_data[2 * i * B : (2 * i + 1) * B]
+                p_minus = pred_data[(2 * i + 1) * B : (2 * i + 2) * B]
+
+                Q_plus = ((p_plus - Y_N).square() * pred_mask).sum() / pred_denom
+                Q_minus = ((p_minus - Y_N).square() * pred_mask).sum() / pred_denom
+
+                coeff = (Q_plus - Q_minus) / (2.0 * epsilon)
+                dirs_i = saved_dirs[i]
+                alignment = torch.zeros((), device=self.device, dtype=coeff.dtype)
+                for g_i, u in zip(alignment_grads, dirs_i, strict=True):
+                    alignment.add_(torch.sum(g_i * u) * coeff)
+                z_samples.append(alignment)
+                for gp_part, u in zip(gp_parts, dirs_i, strict=True):
+                    gp_part.add_(u * coeff)
         finally:
             for p, base in zip(params, theta, strict=True):
                 p.copy_(base)
             self._restore_training_modes(training_modes)
 
-        return torch.cat([gp_part.flatten() for gp_part in gp_parts]).div_(k)
+        return (
+            torch.cat([gp_part.flatten() for gp_part in gp_parts]).div_(k),
+            torch.stack(z_samples),
+        )
+
+    @staticmethod
+    def _student_t_upper_confidence_bound(
+        samples: torch.Tensor,
+        delta: float,
+    ) -> torch.Tensor:
+        """Return the one-sided Student-t upper confidence bound for a mean."""
+        if samples.numel() < 2:
+            return torch.full((), float("inf"), device=samples.device)
+        if not 0.0 < delta < 1.0:
+            raise ValueError(f"confidence delta must lie in (0, 1), got {delta}")
+
+        critical = float(student_t.ppf(1.0 - delta, df=samples.numel() - 1))
+        if not math.isfinite(critical):
+            return torch.full((), float("inf"), device=samples.device)
+        standard_error = samples.std(unbiased=True) / math.sqrt(samples.numel())
+        return samples.mean() + critical * standard_error
 
     @staticmethod
     def _apply_projection(
@@ -484,13 +558,6 @@ class JointModel(nn.Module):
             avg_train_loss = total_loss / max(1, num_optim_steps)
             final_train_loss = avg_train_loss
 
-            self.logger.info(
-                "Epoch %03d/%d | imp_loss=%.6f",
-                self.phase_epoch + 1,
-                num_epoch,
-                avg_train_loss,
-            )
-
             if on_epoch_end is not None:
                 should_stop = on_epoch_end(
                     self.global_epoch + 1,
@@ -509,7 +576,7 @@ class JointModel(nn.Module):
 
         return final_train_loss
 
-    def fit_tip(
+    def _fit_tip_sign_gate_legacy(
         self,
         data_loader: dict[str, DataLoader],
         phase_name: str,
@@ -556,7 +623,7 @@ class JointModel(nn.Module):
             # Average zero-order prediction gradients over the same
             # microbatches that produced the accumulated imputation gradient.
             gp_hat = torch.zeros_like(g_I)
-            for microbatch_idx, batch_data in enumerate(microbatches):
+            for _microbatch_idx, batch_data in enumerate(microbatches):
                 gp_hat.add_(
                     model._compute_gp_hat(
                         batch_data["X_NA"],
@@ -567,7 +634,6 @@ class JointModel(nn.Module):
                         batch_data["Y_N_mask"],
                         k=k,
                         epsilon=epsilon,
-                        seed_parts=("microbatch", microbatch_idx),
                     )
                 )
             gp_hat.div_(max(1, len(microbatches)))
@@ -619,4 +685,77 @@ class JointModel(nn.Module):
             accum_steps=accum_steps,
             on_epoch_end=_tip_epoch_end,
             grad_modifier=_tip_modifier,
+        )
+
+
+    def fit_tip(
+        self, data_loader, phase_name, num_epoch, k=20, epsilon=1e-4,
+        confidence_delta=0.05, accum_steps=None, on_epoch_end=None,
+    ):
+        """TIP with Student-t confidence-gated projection."""
+        if not 0.0 < confidence_delta < 1.0:
+            raise ValueError("confidence_delta must lie in (0, 1)")
+        if accum_steps is None:
+            accum_steps = self.accum_steps
+        self.logger.info(
+            "TIP confidence gate: step_delta=%g",
+            confidence_delta,
+        )
+        stats = {"steps": 0, "raw": 0, "projected": 0, "ucb": 0.0}
+
+        def modifier(model, microbatches):
+            g_i = model._get_flattened_grad()
+            grad_parts = [
+                p.grad.detach() if p.grad is not None else torch.zeros_like(p)
+                for p in model.imputer.parameters()
+            ]
+            gp_hat = torch.zeros_like(g_i)
+            all_z = []
+            for batch in microbatches:
+                batch_gp, z = model._compute_gp_hat(
+                    batch["X_NA"], batch["X_NA_mask"], batch["X_N"],
+                    batch["X_A_mask"], batch["Y_N"], batch["Y_N_mask"],
+                    k=k, epsilon=epsilon, alignment_grads=grad_parts,
+                )
+                gp_hat.add_(batch_gp)
+                all_z.append(z)
+            gp_hat.div_(len(microbatches))
+            upper = model._student_t_upper_confidence_bound(
+                torch.cat(all_z), confidence_delta
+            )
+            raw = torch.dot(g_i, gp_hat).item() < 0.0
+            project = upper.item() < 0.0 and torch.linalg.vector_norm(gp_hat).item() > 1e-12
+            stats["steps"] += 1
+            stats["raw"] += int(raw)
+            stats["projected"] += int(project)
+            stats["ucb"] += upper.item()
+            if project:
+                model._set_flattened_grad(
+                    model._apply_projection(g_i, gp_hat, conditional=False)
+                )
+
+        def epoch_end(epoch, train_loss, model):
+            if stats["steps"]:
+                raw_rate = stats["raw"] / stats["steps"]
+                projection_rate = stats["projected"] / stats["steps"]
+                mean_ucb = stats["ucb"] / stats["steps"]
+                model.logger.info(
+                    "TIP raw_conflict_rate=%.4f | projection_rate=%.4f | mean_ucb=%.6g | steps=%d",
+                    raw_rate, projection_rate, mean_ucb, stats["steps"],
+                )
+                for name, value in (
+                    ("raw_conflict_rate", raw_rate),
+                    ("projection_rate", projection_rate),
+                    ("mean_ucb", mean_ucb),
+                ):
+                    model.tb_summary_writer.add_scalar(
+                        f"tip/{phase_name}/{name}", value, epoch
+                    )
+            for key in stats:
+                stats[key] = 0.0 if key == "ucb" else 0
+            return on_epoch_end(epoch, train_loss, model) if on_epoch_end else False
+
+        return self.fit(
+            data_loader, phase_name, num_epoch, accum_steps=accum_steps,
+            on_epoch_end=epoch_end, grad_modifier=modifier,
         )

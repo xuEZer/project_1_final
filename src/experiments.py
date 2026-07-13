@@ -4,6 +4,7 @@ Supported experiment types:
 
 - ``B1``: Two-stage baseline — imputer only, reconstruction loss L_I.
 - ``B2``: TIP — zero-order ĝ_P + conditional orthogonal projection.
+- ``B3``: B1-style pretraining followed by TIP fine-tuning.
 """
 
 from __future__ import annotations
@@ -15,7 +16,6 @@ from configparser import ConfigParser
 import torch
 from torch.utils.data import DataLoader
 
-from src.evaluator import compute_all_losses
 from src.models.jointModel import JointModel
 
 
@@ -29,27 +29,25 @@ class EpochMonitor:
     Parameters
     ----------
     joint_model : JointModel
-    train_loader : DataLoader
     val_loader : DataLoader or None
+    num_epoch : int
     patience : int
-        Early stopping patience (epochs without improvement).
     min_delta : float
-        Minimum improvement in val imp_loss to count as a new best.
     logger : logging.Logger
     """
 
     def __init__(
         self,
         joint_model: JointModel,
-        train_loader: DataLoader,
         val_loader: DataLoader | None,
+        num_epoch: int,
         patience: int,
         min_delta: float,
         logger: logging.Logger,
     ) -> None:
         self._model = joint_model
-        self._train_loader = train_loader
         self._val_loader = val_loader
+        self._num_epoch = num_epoch
         self._patience = patience
         self._min_delta = min_delta
         self._logger = logger
@@ -59,30 +57,20 @@ class EpochMonitor:
         self._no_improve = 0
 
     def on_epoch_end(
-        self, epoch: int, _train_loss: float, model: JointModel
+        self, epoch: int, train_loss: float, model: JointModel
     ) -> bool:
-        """Evaluate splits, log, checkpoint. Returns True if should stop."""
+        """Log train/val loss, checkpoint. Returns True if should stop."""
         tb = model.tb_summary_writer
 
-        parts: list[str] = []
-        val_current = float("inf")
+        tb.add_scalar("loss/train_loss", train_loss, epoch)
+        parts = [f"train_loss={train_loss:.6f}"]
 
-        for split_name, loader in [
-            ("train", self._train_loader),
-            ("val", self._val_loader),
-        ]:
-            if loader is None:
-                continue
-            losses = compute_all_losses(model, loader)
-            imp = losses["imp_loss"]
-            pred = losses["pred_loss"]
-            parts.append(f"{split_name}_imp={imp:.6f} {split_name}_pred={pred:.6f}")
-            tb.add_scalar(f"loss/{split_name}_imp", imp, epoch)
-            tb.add_scalar(f"loss/{split_name}_pred", pred, epoch)
-            if split_name == "val":
-                val_current = losses["imp_loss"]
+        val_current = model.compute_val_loss(self._val_loader)
+        if self._val_loader is not None:
+            parts.append(f"val_loss={val_current:.6f}")
+            tb.add_scalar("loss/val_loss", val_current, epoch)
 
-        self._logger.info("Epoch %03d | %s", epoch, " | ".join(parts))
+        self._logger.info("Epoch %03d/%d | %s", epoch, self._num_epoch, " | ".join(parts))
 
         # Checkpoint & early stopping (always on val imp_loss)
         if self._val_loader is not None:
@@ -104,6 +92,11 @@ class EpochMonitor:
             )
             return True
         return False
+
+    # ------------------------------------------------------------------
+    def reset_patience(self) -> None:
+        """Reset early-stopping patience while keeping the best checkpoint."""
+        self._no_improve = 0
 
     # ------------------------------------------------------------------
     def restore_best(self) -> None:
@@ -128,7 +121,7 @@ def run_experiment(
     """Run the configured experiment type.
 
     Args:
-        exp_type: Experiment type identifier (``"B1"`` or ``"B2"``).
+        exp_type: Experiment type identifier (``"B1"``, ``"B2"`` or ``"B3"``).
         joint_model: Initialised joint model (imputer + frozen predictor).
         train_loader: Dictionary with ``"train"`` DataLoader and
             optionally ``"val"``.
@@ -142,15 +135,15 @@ def run_experiment(
         ValueError: If ``exp_type`` is not recognised.
     """
     num_epoch = config.getint("training", "max_epochs")
-    patience = config.getint("training", "patience", fallback=20)
-    min_delta = config.getfloat("training", "min_delta", fallback=1e-4)
+    patience = config.getint("training", "patience")
+    min_delta = config.getfloat("training", "min_delta")
 
     logger.info("Initial imputer state hash: %s", imputer_state_hash(joint_model))
 
     epoch_monitor = EpochMonitor(
         joint_model,
-        train_loader=train_loader.get("train"),
         val_loader=train_loader.get("val"),
+        num_epoch=num_epoch,
         patience=patience,
         min_delta=min_delta,
         logger=logger,
@@ -161,9 +154,11 @@ def run_experiment(
         trained_model = _run_b1(joint_model, train_loader, config, logger, on_epoch_end)
     elif exp_type == "B2":
         trained_model = _run_b2(joint_model, train_loader, config, logger, on_epoch_end)
+    elif exp_type == "B3":
+        trained_model = _run_b3(joint_model, train_loader, config, logger, epoch_monitor)
     else:
         raise ValueError(
-            f"Unknown experiment type {exp_type}. Available types: B1, B2"
+            f"Unknown experiment type {exp_type}. Available types: B1, B2, B3"
         )
 
     epoch_monitor.restore_best()
@@ -216,11 +211,14 @@ def _run_b2(
 ) -> JointModel:
     """B2: Full TIP — zero-order ĝ_P estimation + conditional projection."""
     num_epoch = config.getint("training", "max_epochs")
-    k = config.getint("tip", "k", fallback=20)
-    epsilon = config.getfloat("tip", "epsilon", fallback=1e-4)
+    k = config.getint("tip", "k")
+    epsilon = config.getfloat("tip", "epsilon")
+    confidence_delta = config.getfloat("tip", "confidence_delta")
 
     log_phase(logger, "B2 — TIP Training", num_epoch)
-    logger.info(f"  k={k}, epsilon={epsilon}")
+    logger.info(
+        f"  k={k}, epsilon={epsilon}, confidence_delta={confidence_delta}"
+    )
     joint_model.fit_tip(
         data_loader=train_loader,
         phase_name="b2",
@@ -228,7 +226,59 @@ def _run_b2(
         on_epoch_end=on_epoch_end,
         k=k,
         epsilon=epsilon,
+        confidence_delta=confidence_delta,
     )
+
+    return joint_model
+
+
+# ------------------------------------------------------------------ B3 --
+
+
+def _run_b3(
+    joint_model: JointModel,
+    train_loader: dict[str, DataLoader],
+    config: ConfigParser,
+    logger: logging.Logger,
+    epoch_monitor: EpochMonitor,
+) -> JointModel:
+    """B3: B1-style pretraining followed by TIP fine-tuning."""
+    num_epoch = config.getint("training", "max_epochs")
+    pretrain_epochs = config.getint("tip", "pretrain_epochs")
+    pretrain_epochs = max(0, min(pretrain_epochs, num_epoch))
+    tip_epochs = max(0, num_epoch - pretrain_epochs)
+    k = config.getint("tip", "k")
+    epsilon = config.getfloat("tip", "epsilon")
+    confidence_delta = config.getfloat("tip", "confidence_delta")
+
+    if pretrain_epochs > 0:
+        log_phase(logger, "B3 — Pretraining with L_I", pretrain_epochs)
+        joint_model.fit(
+            data_loader=train_loader,
+            phase_name="b3_pretrain",
+            num_epoch=pretrain_epochs,
+            on_epoch_end=epoch_monitor.on_epoch_end,
+        )
+        epoch_monitor.reset_patience()
+        logger.info(
+            "B3 pretraining finished; reset early-stopping patience and kept best checkpoint."
+        )
+
+    if tip_epochs > 0:
+        log_phase(logger, "B3 — TIP Fine-tuning", tip_epochs)
+        logger.info(
+            f"  pretrain_epochs={pretrain_epochs}, k={k}, epsilon={epsilon}, "
+            f"confidence_delta={confidence_delta}"
+        )
+        joint_model.fit_tip(
+            data_loader=train_loader,
+            phase_name="b3",
+            num_epoch=tip_epochs,
+            on_epoch_end=epoch_monitor.on_epoch_end,
+            k=k,
+            epsilon=epsilon,
+            confidence_delta=confidence_delta,
+        )
 
     return joint_model
 

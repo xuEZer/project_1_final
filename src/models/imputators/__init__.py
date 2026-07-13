@@ -8,14 +8,20 @@ import torch.nn as nn
 
 from .BRITS import BRITS
 from .DeepMVI import DeepMVI
+from .FITS import FITS
+from .ModernTCN import ModernTCN
 from .SAITS import SAITS
+from .TSLANet import TSLANet
 from .TimesNet import TimesNet
 
 IMPUTATOR_REGISTRY: dict[str, type] = {
     "SAITS": SAITS,
     "BRITS": BRITS,
     "DeepMVI": DeepMVI,
+    "FITS": FITS,
+    "ModernTCN": ModernTCN,
     "TimesNet": TimesNet,
+    "TSLANet": TSLANet,
 }
 
 
@@ -84,8 +90,8 @@ def config2param_dict4DeepMVI(config: ConfigParser) -> dict[str, Any]:
         "kernel_size": int(config["imputer"].get("kernel_size", 10)),
         "block_size": int(config["imputer"].get("block_size", 5)),
         "n_head": int(config["imputer"].get("n_head", 2)),
-        "use_context": config["imputer"].getboolean("use_context", fallback=True),
-        "use_local": config["imputer"].getboolean("use_local", fallback=True),
+        "use_context": config["imputer"].getboolean("use_context"),
+        "use_local": config["imputer"].getboolean("use_local"),
     }
     return param_dict
 
@@ -116,11 +122,60 @@ def config2param_dict4TimesNet(config: ConfigParser) -> dict[str, Any]:
     return param_dict
 
 
+def config2param_dict4FITS(config: ConfigParser) -> dict[str, Any]:
+    """Convert FITS configuration values to constructor parameters."""
+    return {
+        "d_feature": int(config["data"]["d_feature"]),
+        "d_time": int(config["data"]["lookback"]),
+        "cut_freq": int(config["imputer"]["cut_freq"]),
+        "individual": config["imputer"].getboolean("individual"),
+        "device": config["training"]["device"],
+    }
+
+
+def config2param_dict4ModernTCN(config: ConfigParser) -> dict[str, Any]:
+    """Convert ModernTCN configuration values to constructor parameters."""
+    return {
+        "d_feature": int(config["data"]["d_feature"]),
+        "d_time": int(config["data"]["lookback"]),
+        "d_model": int(config["imputer"]["d_model"]),
+        "ffn_ratio": int(config["imputer"]["ffn_ratio"]),
+        "num_blocks": int(config["imputer"]["num_blocks"]),
+        "large_size": int(config["imputer"]["large_size"]),
+        "small_size": int(config["imputer"]["small_size"]),
+        "patch_size": int(config["imputer"]["patch_size"]),
+        "patch_stride": int(config["imputer"]["patch_stride"]),
+        "dropout": float(config["imputer"]["dropout"]),
+        "head_dropout": float(config["imputer"]["head_dropout"]),
+        "individual": config["imputer"].getboolean("individual"),
+        "device": config["training"]["device"],
+    }
+
+
+def config2param_dict4TSLANet(config: ConfigParser) -> dict[str, Any]:
+    """Convert TSLANet configuration values to constructor parameters."""
+    return {
+        "d_feature": int(config["data"]["d_feature"]),
+        "d_time": int(config["data"]["lookback"]),
+        "n_layers": int(config["imputer"]["n_layers"]),
+        "patch_size": int(config["imputer"]["patch_size"]),
+        "d_embedding": int(config["imputer"]["d_embedding"]),
+        "dropout": float(config["imputer"]["dropout"]),
+        "adaptive_filter": config["imputer"].getboolean("adaptive_filter"),
+        "apply_icb": config["imputer"].getboolean("apply_icb"),
+        "apply_asb": config["imputer"].getboolean("apply_asb"),
+        "device": config["training"]["device"],
+    }
+
+
 CONFIG_CONVERTER_REGISTRY: dict[str, Callable] = {
     "SAITS": config2param_dict4SAITS,
     "BRITS": config2param_dict4BRITS,
     "DeepMVI": config2param_dict4DeepMVI,
+    "FITS": config2param_dict4FITS,
+    "ModernTCN": config2param_dict4ModernTCN,
     "TimesNet": config2param_dict4TimesNet,
+    "TSLANet": config2param_dict4TSLANet,
 }
 
 

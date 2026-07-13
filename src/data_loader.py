@@ -349,11 +349,9 @@ def split_data(
 
     train_windows = int(total_windows * (1 - val_ratio - test_ratio))
     val_windows = int(total_windows * val_ratio)
-    test_windows = total_windows - train_windows - val_windows
 
     train_raw_len = train_windows + overhead
     val_raw_len = val_windows + overhead if val_ratio > 0 else 0
-    test_raw_len = len_data - train_raw_len - val_raw_len
 
     train_start = 0
     train_end = train_raw_len
@@ -668,23 +666,35 @@ def get_tensor_data_loader(
         no-ground-truth flag.
 
     """
-    train_ds = TensorDataset(
-        torch.from_numpy(dataset["train"]["X_N"]).float(),
-        torch.from_numpy(dataset["train"]["X_NA"]).float(),
-        torch.from_numpy(dataset["train"]["X_NA_mask"]).float(),
-        torch.from_numpy(dataset["train"]["X_A_mask"]).float(),
-        torch.from_numpy(dataset["train"]["Y_N"]).float(),
-        torch.from_numpy(dataset["train"]["Y_N_mask"]).float(),
-    )
-    data_loader = {
-        "train": DataLoader(
-            train_ds,
+    def build_train_loader(
+        split: dict[str, any],
+        *,
+        shuffle: bool,
+        generator: torch.Generator | None = None,
+    ) -> DataLoader:
+        ds = TensorDataset(
+            torch.from_numpy(split["X_N"]).float(),
+            torch.from_numpy(split["X_NA"]).float(),
+            torch.from_numpy(split["X_NA_mask"]).float(),
+            torch.from_numpy(split["X_A_mask"]).float(),
+            torch.from_numpy(split["Y_N"]).float(),
+            torch.from_numpy(split["Y_N_mask"]).float(),
+        )
+        return DataLoader(
+            ds,
             batch_size=batch_size,
-            shuffle=True,
-            generator=train_generator,
+            shuffle=shuffle,
+            generator=generator,
             num_workers=num_workers,
             pin_memory=pin_memory,
             persistent_workers=num_workers > 0,
+        )
+
+    data_loader = {
+        "train": build_train_loader(
+            dataset["train"],
+            shuffle=True,
+            generator=train_generator,
         )
     }
 
@@ -716,7 +726,10 @@ def get_tensor_data_loader(
         return loader, split_no_gt
 
     if "val" in dataset:
-        data_loader["val"] = build_eval_loader(dataset["val"])[0]
+        # Validation for early stopping must keep artificial masks and the
+        # corresponding observed ground truth, even when the public eval split
+        # has no complete natural-missing ground truth.
+        data_loader["val"] = build_train_loader(dataset["val"], shuffle=False)
 
     eval_loader, no_gt = build_eval_loader(dataset["test"])
 

@@ -30,7 +30,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from src.models.extern.SAITS.layers import EncoderLayer, PositionalEncoding
-from src.models.extern.SAITS.utils import masked_mae_cal
+from src.models.extern.SAITS.utils import masked_mse_cal
 
 
 class SAITS(nn.Module):
@@ -201,16 +201,16 @@ class SAITS(nn.Module):
         reconstruction_loss = 0
         imputed_data, [X_tilde_1, X_tilde_2, X_tilde_3] = self.impute(X, masks)
 
-        reconstruction_loss += masked_mae_cal(X_tilde_1, X, masks)
-        reconstruction_loss += masked_mae_cal(X_tilde_2, X, masks)
-        final_reconstruction_MAE = masked_mae_cal(X_tilde_3, X, masks)
-        reconstruction_loss += final_reconstruction_MAE
+        reconstruction_loss += masked_mse_cal(X_tilde_1, X, masks)
+        reconstruction_loss += masked_mse_cal(X_tilde_2, X, masks)
+        final_reconstruction_MSE = masked_mse_cal(X_tilde_3, X, masks)
+        reconstruction_loss += final_reconstruction_MSE
         reconstruction_loss /= 3
 
         loss = reconstruction_loss
         if X_N is not None and X_A_mask is not None:
-            imputation_MAE = masked_mae_cal(X_tilde_3, X_N, X_A_mask)
-            loss += imputation_MAE
+            imputation_MSE = masked_mse_cal(X_tilde_3, X_N, X_A_mask)
+            loss += imputation_MSE
 
         return {
             "imp_loss": loss,

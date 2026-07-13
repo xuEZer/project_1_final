@@ -86,7 +86,7 @@ def _worker(
     logger = logging.getLogger("auto_bs_worker")
     logger.addHandler(logging.NullHandler())
 
-    base_seed = config.getint("experiment", "seed", fallback=0)
+    base_seed = config.getint("experiment", "seed")
     with torch_seed_scope(
         base_seed,
         "auto_batch_worker",
@@ -150,7 +150,7 @@ def _worker(
             result_queue.put((bs, -1.0))
         else:
             result_queue.put((bs, -2.0))
-    except Exception as e:
+    except Exception:
         result_queue.put((bs, -2.0))
 
 

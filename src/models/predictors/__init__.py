@@ -24,13 +24,9 @@ PREDICTOR_REGISTRY: dict[str, type] = {
 
 def _config2sundial(config: ConfigParser) -> dict[str, Any]:
     return {
-        "model_name": config.get(
-            "predictor", "model_name", fallback="thuml/sundial-base-128m",
-        ),
-        "num_samples": config.getint("predictor", "num_samples", fallback=100),
-        "sample_aggregation": config.get(
-            "predictor", "sample_aggregation", fallback="mean",
-        ),
+        "model_name": config.get("predictor", "model_name"),
+        "num_samples": config.getint("predictor", "num_samples"),
+        "sample_aggregation": config.get("predictor", "sample_aggregation"),
         "forecast_length": config.getint("data", "pred_len"),
         "device": config.get("training", "device"),
     }
@@ -38,24 +34,18 @@ def _config2sundial(config: ConfigParser) -> dict[str, Any]:
 
 def _config2chronos(config: ConfigParser) -> dict[str, Any]:
     return {
-        "model_name": config.get(
-            "predictor", "model_name", fallback="amazon/chronos-bolt-small",
-        ),
+        "model_name": config.get("predictor", "model_name"),
         "forecast_length": config.getint("data", "pred_len"),
-        "num_samples": config.getint("predictor", "num_samples", fallback=20),
+        "num_samples": config.getint("predictor", "num_samples"),
         "device": config.get("training", "device"),
     }
 
 
 def _config2timer(config: ConfigParser) -> dict[str, Any]:
     return {
-        "model_name": config.get(
-            "predictor", "model_name", fallback="thuml/timer-base-84m",
-        ),
+        "model_name": config.get("predictor", "model_name"),
         "forecast_length": config.getint("data", "pred_len"),
-        "normalize_inputs": config.getboolean(
-            "predictor", "normalize_inputs", fallback=True,
-        ),
+        "normalize_inputs": config.getboolean("predictor", "normalize_inputs"),
         "device": config.get("training", "device"),
         "inference_device": config.get(
             "predictor", "inference_device", fallback=None,

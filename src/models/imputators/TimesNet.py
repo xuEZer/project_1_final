@@ -10,7 +10,7 @@ from argparse import Namespace
 import torch
 import torch.nn as nn
 
-from src.models.extern.SAITS.utils import masked_mae_cal
+from src.models.extern.SAITS.utils import masked_mse_cal
 from src.models.extern.TimesNet.TimesNet import Model
 
 
@@ -96,13 +96,13 @@ class TimesNet(nn.Module):
         dec_out = self.backbone(X_NA, None, None, None, mask=observed_mask)
 
         # Compute reconstruction loss on raw model output at observed positions
-        reconstruction_loss = masked_mae_cal(dec_out, X_NA, observed_mask)
+        reconstruction_loss = masked_mse_cal(dec_out, X_NA, observed_mask)
 
         # Preserve observed positions, replace missing positions with model output
         imputed_data = observed_mask * X_NA + (1 - observed_mask) * dec_out
         loss = reconstruction_loss
         if X_N is not None and X_A_mask is not None:
-            loss = loss + masked_mae_cal(imputed_data, X_N, X_A_mask)
+            loss = loss + masked_mse_cal(imputed_data, X_N, X_A_mask)
 
         return {
             "imp_loss": loss,

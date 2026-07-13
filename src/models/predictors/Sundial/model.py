@@ -63,7 +63,7 @@ def _patch_dynamic_cache() -> None:
 
 
 class SundialPredictor(nn.Module):
-    """Sundial forecasting model (e.g. ``thuml/sundial-base-128m``).
+    """Sundial forecasting model (e.g. ``thuml/sundial-small-32m``).
 
     Uses :meth:`AutoModelForCausalLM.generate` for autoregressive sampling.
     Operates per-feature (univariate), then stacks results back to

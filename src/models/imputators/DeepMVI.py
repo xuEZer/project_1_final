@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 
 from src.models.extern.DeepMVI.model import OurModel
-from src.models.extern.SAITS.utils import masked_mae_cal
+from src.models.extern.SAITS.utils import masked_mse_cal
 
 
 class DeepMVI(nn.Module):
@@ -112,10 +112,10 @@ class DeepMVI(nn.Module):
             0, 2, 1
         )
 
-        reconstruction_loss = masked_mae_cal(imputed_data, X_NA, masks)
+        reconstruction_loss = masked_mse_cal(imputed_data, X_NA, masks)
         loss = reconstruction_loss
         if X_N is not None and X_A_mask is not None:
-            loss = loss + masked_mae_cal(imputed_data, X_N, X_A_mask)
+            loss = loss + masked_mse_cal(imputed_data, X_N, X_A_mask)
 
         return {
             "imp_loss": loss,

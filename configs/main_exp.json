@@ -1,0 +1,23 @@
+{
+  "exp_types": [
+    "B1",
+    "B2"
+  ],
+  "datasets": [
+    "Supply_Chain_Customer_D",
+    "current_velocity_H"
+  ],
+  "imputers": [
+    "SAITS",
+    "DeepMVI",
+    "TimesNet",
+    "ModernTCN",
+    "FITS",
+    "TSLANet"
+  ],
+  "predictors": [
+    "Chronos",
+    "Sundial",
+    "Timer"
+  ]
+}

@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 
-from src.models.extern.SAITS.utils import masked_mae_cal
+from src.models.extern.SAITS.utils import masked_mse_cal
 
 
 class FeatureRegression(nn.Module):
@@ -199,7 +199,7 @@ class BRITS(nn.Module):
         loss = loss_f + loss_b + 0.1 * const_loss
 
         if X_N is not None and X_A_mask is not None:
-            imp_loss = masked_mae_cal(imputations, X_N, X_A_mask)
+            imp_loss = masked_mse_cal(imputations, X_N, X_A_mask)
             loss += imp_loss
 
         return {"imp_loss": loss, "imp_data": imputations}

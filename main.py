@@ -8,8 +8,11 @@ This script orchestrates the full pipeline:
 5. Evaluate and log final metrics.
 """
 
-import argparse
+import hashlib
+import json
 import logging
+import math
+import re
 import sys
 from configparser import ConfigParser, ExtendedInterpolation
 from pathlib import Path
@@ -17,8 +20,6 @@ from pathlib import Path
 import torch
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-
-import math
 
 from src.auto_batch_size import find_max_batch_size
 from src.data_loader import (
@@ -38,7 +39,131 @@ from src.rng import (
     torch_seed_scope,
 )
 
-GLOBAL_CONFIG_PATH = Path("./configs/global.ini")
+ROOT_PATH = Path(__file__).resolve().parent
+GLOBAL_CONFIG_PATH = ROOT_PATH / "configs" / "global.ini"
+
+_NUMERIC_RE = re.compile(
+    r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$"
+)
+
+
+def normalize_config_value(value: str) -> str:
+    """Normalize config values so equivalent CLI spellings hash identically."""
+    stripped = str(value).strip()
+    lower = stripped.lower()
+    if lower in {"true", "false"}:
+        return lower
+    if _NUMERIC_RE.fullmatch(stripped):
+        return format(float(stripped), ".12g")
+    return stripped
+
+
+def safe_name_part(value: str) -> str:
+    """Convert a config value into a filesystem-friendly name component."""
+    normalized = normalize_config_value(value)
+    safe = re.sub(r"[^A-Za-z0-9_.=-]+", "-", normalized).strip("-")
+    return safe or "none"
+
+
+def selected_config_payload(config: ConfigParser) -> dict[str, str]:
+    """Return the final semantic config fields that define a run."""
+    exp_type = config.get("experiment", "type")
+    payload: dict[str, str] = {}
+
+    def add(section: str, key: str) -> None:
+        if config.has_option(section, key):
+            payload[f"{section}.{key}"] = normalize_config_value(config.get(section, key))
+
+    add("experiment", "type")
+    add("experiment", "seed")
+
+    for section in ("data", "dataset", "imputer", "predictor"):
+        if not config.has_section(section):
+            continue
+        for key in sorted(config.options(section)):
+            if section == "data" and key == "d_feature":
+                continue
+            add(section, key)
+
+    for key in ("optimizer", "lr", "max_epochs", "patience", "min_delta"):
+        add("training", key)
+
+    for key in ("batch_size", "auto_batch", "micro_batch"):
+        add("loader", key)
+
+    if exp_type == "B2":
+        for key in ("k", "epsilon", "confidence_delta"):
+            add("tip", key)
+    elif exp_type == "B3":
+        for key in ("k", "epsilon", "confidence_delta", "pretrain_epochs"):
+            add("tip", key)
+
+    return payload
+
+
+def generate_experiment_name(config: ConfigParser) -> str:
+    """Generate a canonical experiment name from the final run config."""
+    exp_type = config.get("experiment", "type")
+    lr = normalize_config_value(config.get("training", "lr"))
+    batch_size = normalize_config_value(config.get("loader", "batch_size"))
+    parts = [
+        exp_type,
+        config.get("data", "dataset"),
+        config.get("imputer", "model"),
+        config.get("predictor", "model"),
+        f"lr{lr}",
+        f"bs{batch_size}",
+    ]
+    if exp_type == "B2":
+        k = normalize_config_value(config.get("tip", "k"))
+        epsilon = normalize_config_value(config.get("tip", "epsilon"))
+        confidence_delta = normalize_config_value(config.get("tip", "confidence_delta"))
+        parts.extend([f"k{k}", f"eps{epsilon}", f"delta{confidence_delta}"])
+    elif exp_type == "B3":
+        pretrain_epochs = normalize_config_value(config.get("tip", "pretrain_epochs"))
+        k = normalize_config_value(config.get("tip", "k"))
+        epsilon = normalize_config_value(config.get("tip", "epsilon"))
+        confidence_delta = normalize_config_value(config.get("tip", "confidence_delta"))
+        parts.extend([f"pre{pretrain_epochs}", f"k{k}", f"eps{epsilon}", f"delta{confidence_delta}"])
+
+    prefix = "_".join(safe_name_part(part) for part in parts)
+    payload = selected_config_payload(config)
+    digest = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()[:10]
+    return f"{prefix}__{digest}"
+
+
+def set_generated_experiment_name(
+    config: ConfigParser, init_logs: list[tuple[str, str]]
+) -> None:
+    """Set ``experiment.name`` to the canonical name for the final config."""
+    configured = (
+        config.get("experiment", "name").strip()
+        if config.has_option("experiment", "name")
+        else ""
+    )
+    generated = generate_experiment_name(config)
+    if configured and configured != "default" and configured != generated:
+        init_logs.append(
+            (
+                "warning",
+                f"Ignoring configured experiment.name={configured}; using generated name.",
+            )
+        )
+    config.set("experiment", "name", generated)
+    init_logs.append(("info", f"Generated experiment name: {generated}"))
+
+
+def config_from_overrides(overrides: list[str]) -> ConfigParser:
+    """Build the same final config that ``main.py`` would run."""
+    config, _ = parse_config([], cli_args=overrides)
+    return config
+
+
+def resolve_experiment_name(overrides: list[str]) -> str:
+    """Resolve the canonical name for a list of ``--section.key value`` overrides."""
+    return config_from_overrides(overrides).get("experiment", "name")
 
 
 def resolve_batch_size(
@@ -65,9 +190,7 @@ def resolve_batch_size(
         ``(micro_batch_size, accum_steps)``.
 
     """
-    manual_micro_batch = config.getint(
-        "loader", "micro_batch", fallback=0
-    )
+    manual_micro_batch = config.getint("loader", "micro_batch")
     if manual_micro_batch > 0:
         micro_batch_size = manual_micro_batch
         accum_steps = math.ceil(effective_batch_size / micro_batch_size)
@@ -140,11 +263,9 @@ def build_dataloaders(
     """
     effective_batch_size = config.getint("loader", "batch_size")
     device = config.get("training", "device")
-    num_workers = config.getint("loader", "num_workers", fallback=0)
+    num_workers = config.getint("loader", "num_workers")
     pin_memory = (
-        config.getboolean("loader", "pin_memory",
-            fallback=str(device).startswith("cuda"),
-        )
+        config.getboolean("loader", "pin_memory")
         and str(device).startswith("cuda")
     )
     loader_kwargs = {"num_workers": num_workers, "pin_memory": pin_memory}
@@ -225,26 +346,28 @@ def main() -> None:
         logger=logger,
     )
 
-    joint_model = run_experiment(
-        exp_type=config["experiment"]["type"],
-        joint_model=joint_model,
-        train_loader=train_loader,
-        config=config,
-        logger=logger,
-    )
+    load_ckpt = config.get("experiment", "load_ckpt")
+    if load_ckpt:
+        logger.info("Loading imputer checkpoint from %s", load_ckpt)
+        joint_model.imputer.load_state_dict(torch.load(load_ckpt, map_location=config.get("training", "device")))
+    else:
+        joint_model = run_experiment(
+            exp_type=config["experiment"]["type"],
+            joint_model=joint_model,
+            train_loader=train_loader,
+            config=config,
+            logger=logger,
+        )
     logger.info("Training completed.")
 
-    for split_name, loader in [
-        ("val", train_loader.get("val")),
-        ("test", eval_loader),
-    ]:
-        if loader is None:
-            continue
-        split_no_gt = getattr(loader, "no_gt", False)
-        metrics = evaluate(
-            config, joint_model, loader, split_no_gt, logger,
-            split_name=split_name,
-        )
+    split_no_gt = getattr(eval_loader, "no_gt", False)
+    evaluate(config, joint_model, eval_loader, split_no_gt, logger, split_name="test")
+
+    exp_name = config.get("experiment", "name")
+    ckpt_path = Path(config.get("paths", "cache_dir")) / "ckpt" / f"{exp_name}.pt"
+    ckpt_path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(joint_model.imputer.state_dict(), ckpt_path)
+    logger.info("Saved checkpoint to %s", ckpt_path)
 
     logger.info("Experiment completed successfully!")
 
@@ -289,11 +412,14 @@ def init_exp() -> tuple[ConfigParser, logging.Logger, SummaryWriter]:
 
 def parse_config(
     init_logs: list[tuple[str, str]],
+    cli_args: list[str] | None = None,
 ) -> tuple[ConfigParser, list[tuple[str, str]]]:
     """Load global and template configs, then apply CLI overrides.
 
     Args:
         init_logs: Mutable list that collects startup log messages.
+        cli_args: Optional ``--section.key value`` override list. Defaults to
+            the current process argv when omitted.
 
     Returns:
         Parsed configuration and the updated startup logs.
@@ -305,8 +431,7 @@ def parse_config(
         raise FileNotFoundError(f"Global config file not found: {GLOBAL_CONFIG_PATH}")
     config.read(GLOBAL_CONFIG_PATH)
 
-    argparser = argparse.ArgumentParser()
-    _, unknown_args = argparser.parse_known_args()
+    unknown_args = sys.argv[1:] if cli_args is None else list(cli_args)
     for i in range(len(unknown_args)):
         if i % 2 == 0:
             if not unknown_args[i].startswith("--"):
@@ -321,13 +446,21 @@ def parse_config(
                         f"Argument {unknown_args[i]} does not follow 'section.key' format."
                     )
                 section, key = section_key.split(".", 1)
-                if not config.has_section(section):
-                    raise ValueError(f"Section '{section}' not found")
-                if not config.has_option(section, key):
-                    raise ValueError(f"Key '{key}' not found in section '{section}'")
                 if i + 1 >= len(unknown_args) or unknown_args[i + 1].startswith("--"):
                     raise ValueError(f"Missing value for argument {unknown_args[i]}")
                 value = unknown_args[i + 1]
+                if section == "experiment" and key == "name":
+                    init_logs.append(
+                        (
+                            "warning",
+                            "Ignoring --experiment.name; experiment names are generated from config.",
+                        )
+                    )
+                    continue
+                if not config.has_section(section):
+                    raise ValueError(f"Section {section} not found")
+                if not config.has_option(section, key):
+                    raise ValueError(f"Key {key} not found in section {section}")
                 config.set(section, key, value)
                 init_logs.append(
                     ("info", f"Overriding config: [{section}] {key} = {value}")
@@ -335,7 +468,7 @@ def parse_config(
 
     for section in ["imputer", "predictor"]:
         model = config.get(section, "model")
-        template_path = Path(f"./configs/template/{section}/{model}.ini")
+        template_path = ROOT_PATH / "configs" / "template" / section / f"{model}.ini"
         if template_path.exists():
             init_logs.append(
                 ("info", f"Loading template config for {model} from {template_path}")
@@ -347,7 +480,7 @@ def parse_config(
             )
 
     dataset_key = config.get("data", "dataset")
-    template_path = Path(f"./configs/template/dataset/{dataset_key}.ini")
+    template_path = ROOT_PATH / "configs" / "template" / "dataset" / f"{dataset_key}.ini"
     if template_path.exists():
         init_logs.append(
             (
@@ -361,6 +494,7 @@ def parse_config(
             f"Template config for dataset '{dataset_key}' not found at {template_path}"
         )
 
+    set_generated_experiment_name(config, init_logs)
     return config, init_logs
 
 
