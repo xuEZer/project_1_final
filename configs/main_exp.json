@@ -4,20 +4,14 @@
     "B2"
   ],
   "datasets": [
-    "Supply_Chain_Customer_D",
-    "current_velocity_H"
+    "Supply_Chain_Customer_D"
   ],
   "imputers": [
-    "SAITS",
-    "DeepMVI",
-    "TimesNet",
-    "ModernTCN",
-    "FITS",
-    "TSLANet"
+    "SAITS"
   ],
   "predictors": [
     "Chronos",
     "Sundial",
-    "Timer"
+    "Toto2"
   ]
 }

@@ -24,5 +24,4 @@ export HF_ENDPOINT=https://hf-mirror.com
 ./scripts/run_experiments.sh --dataset CPHL_30T --exp B2
 ./scripts/run_k_sweep.sh                      # TIP k 消融
 ./scripts/run_epsilon_sweep.sh                # TIP epsilon 消融
-./scripts/run_missing_rate_robustness.sh      # B3 缺失率鲁棒性
 ```

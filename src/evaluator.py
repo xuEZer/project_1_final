@@ -51,14 +51,17 @@ def _iter_eval_batches(
         torch.Tensor,
     ]
 ]:
-    """Yield normalized eval batches for both public and complete test splits."""
-    if no_gt:
-        for batch in eval_loader:
-            X_N, X_N_mask, Y_N, Y_N_mask = joint_model._move_batch_to_device(batch)
+    """Yield normalized batches for training-format validation and test loaders."""
+    for batch in eval_loader:
+        tensors = joint_model._move_batch_to_device(batch)
+        if len(tensors) == 6:
+            X_N, X_NA, X_NA_mask, X_A_mask, Y_N, Y_N_mask = tensors
+            yield X_NA, X_NA_mask, X_N, X_A_mask, Y_N, 1 - Y_N_mask
+        elif no_gt:
+            X_N, X_N_mask, Y_N, Y_N_mask = tensors
             yield X_N, X_N_mask, None, None, Y_N, 1 - Y_N_mask
-    else:
-        for batch in eval_loader:
-            X_N, X_N_mask, X, Y = joint_model._move_batch_to_device(batch)
+        else:
+            X_N, X_N_mask, X, Y = tensors
             yield X_N, X_N_mask, X, X_N_mask, Y, torch.ones_like(Y)
 
 

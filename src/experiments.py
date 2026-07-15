@@ -4,7 +4,6 @@ Supported experiment types:
 
 - ``B1``: Two-stage baseline — imputer only, reconstruction loss L_I.
 - ``B2``: TIP — zero-order ĝ_P + conditional orthogonal projection.
-- ``B3``: B1-style pretraining followed by TIP fine-tuning.
 """
 
 from __future__ import annotations
@@ -94,11 +93,6 @@ class EpochMonitor:
         return False
 
     # ------------------------------------------------------------------
-    def reset_patience(self) -> None:
-        """Reset early-stopping patience while keeping the best checkpoint."""
-        self._no_improve = 0
-
-    # ------------------------------------------------------------------
     def restore_best(self) -> None:
         """Load the best imputer state back into the model."""
         if self._best_state is None:
@@ -121,7 +115,7 @@ def run_experiment(
     """Run the configured experiment type.
 
     Args:
-        exp_type: Experiment type identifier (``"B1"``, ``"B2"`` or ``"B3"``).
+        exp_type: Experiment type identifier (``"B1"`` or ``"B2"``).
         joint_model: Initialised joint model (imputer + frozen predictor).
         train_loader: Dictionary with ``"train"`` DataLoader and
             optionally ``"val"``.
@@ -154,11 +148,9 @@ def run_experiment(
         trained_model = _run_b1(joint_model, train_loader, config, logger, on_epoch_end)
     elif exp_type == "B2":
         trained_model = _run_b2(joint_model, train_loader, config, logger, on_epoch_end)
-    elif exp_type == "B3":
-        trained_model = _run_b3(joint_model, train_loader, config, logger, epoch_monitor)
     else:
         raise ValueError(
-            f"Unknown experiment type {exp_type}. Available types: B1, B2, B3"
+            f"Unknown experiment type {exp_type}. Available types: B1, B2"
         )
 
     epoch_monitor.restore_best()
@@ -228,57 +220,6 @@ def _run_b2(
         epsilon=epsilon,
         confidence_delta=confidence_delta,
     )
-
-    return joint_model
-
-
-# ------------------------------------------------------------------ B3 --
-
-
-def _run_b3(
-    joint_model: JointModel,
-    train_loader: dict[str, DataLoader],
-    config: ConfigParser,
-    logger: logging.Logger,
-    epoch_monitor: EpochMonitor,
-) -> JointModel:
-    """B3: B1-style pretraining followed by TIP fine-tuning."""
-    num_epoch = config.getint("training", "max_epochs")
-    pretrain_epochs = config.getint("tip", "pretrain_epochs")
-    pretrain_epochs = max(0, min(pretrain_epochs, num_epoch))
-    tip_epochs = max(0, num_epoch - pretrain_epochs)
-    k = config.getint("tip", "k")
-    epsilon = config.getfloat("tip", "epsilon")
-    confidence_delta = config.getfloat("tip", "confidence_delta")
-
-    if pretrain_epochs > 0:
-        log_phase(logger, "B3 — Pretraining with L_I", pretrain_epochs)
-        joint_model.fit(
-            data_loader=train_loader,
-            phase_name="b3_pretrain",
-            num_epoch=pretrain_epochs,
-            on_epoch_end=epoch_monitor.on_epoch_end,
-        )
-        epoch_monitor.reset_patience()
-        logger.info(
-            "B3 pretraining finished; reset early-stopping patience and kept best checkpoint."
-        )
-
-    if tip_epochs > 0:
-        log_phase(logger, "B3 — TIP Fine-tuning", tip_epochs)
-        logger.info(
-            f"  pretrain_epochs={pretrain_epochs}, k={k}, epsilon={epsilon}, "
-            f"confidence_delta={confidence_delta}"
-        )
-        joint_model.fit_tip(
-            data_loader=train_loader,
-            phase_name="b3",
-            num_epoch=tip_epochs,
-            on_epoch_end=epoch_monitor.on_epoch_end,
-            k=k,
-            epsilon=epsilon,
-            confidence_delta=confidence_delta,
-        )
 
     return joint_model
 

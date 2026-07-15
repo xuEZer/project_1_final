@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
-"""Run configured B1/B2/B3 experiments.
+"""Run configured B1/B2 experiments.
 
 - B1: loads the selected imputer checkpoint and evaluates each predictor
   directly (no retraining).
 - B2: reads the selected lr/batch_size only; TIP starts from random
   initialization and trains independently for each predictor.
-- B3: reads the selected lr/batch_size only; starts from random initialization,
-  pretrains with imputation loss, then runs TIP fine-tuning.
 
 Usage:
   python scripts/run_main.py           # serial (default)

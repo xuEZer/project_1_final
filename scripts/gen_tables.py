@@ -42,6 +42,7 @@ class EvalResult:
     pred_mae: float = 0.0
     pred_mse: float = 0.0
     best_val_loss: float | None = None
+    val_imp_mse: float | None = None
     completed: bool = False
 
 
@@ -66,6 +67,20 @@ def parse_log(path: Path) -> EvalResult:
         val_losses.append(float(m.group(3)))
     if val_losses:
         r.best_val_loss = min(val_losses)
+
+    val_summary = re.search(
+        r"Evaluation Results Summary: split=val(?P<body>.*?)"
+        r"Evaluation completed on val split\.",
+        text,
+        flags=re.DOTALL,
+    )
+    if val_summary:
+        val_mse = re.search(
+            r"\bMSE\b\s+([-+\d.eE]+)\s+[-+\d.eE]+",
+            val_summary.group("body"),
+        )
+        if val_mse:
+            r.val_imp_mse = float(val_mse.group(1))
 
     for line in text.splitlines():
         m = re.search(r"\b(MAE|MSE)\b\s+([\d.]+)\s+([\d.]+)", line)
@@ -256,7 +271,7 @@ def gen_grid_search_table(results: dict[str, EvalResult],
                         if r:
                             break
                 is_best = (lr == best_lr and bs == best_bs)
-                cells.append(fmt_val(r.best_val_loss if r else None, is_best))
+                cells.append(fmt_val(r.val_imp_mse if r else None, is_best))
         return f"  {ds_label:<22s} & {' & '.join(cells)} \\\\"
 
     tables = []
@@ -346,10 +361,10 @@ def gen_main_results_table(results: dict[str, EvalResult],
 \end{{tabular}}
 \end{{minipage}}"""
 
-    # --- (b) Timer, (c) Chronos: compact tables ---
+    # --- (b) Toto2, (c) Chronos: compact tables ---
     compact_tables = []
-    for pred_idx, pred in enumerate(["Timer", "Chronos"]):
-        label = ["(b) Timer", "(c) Chronos"][pred_idx]
+    for pred_idx, pred in enumerate(["Toto2", "Chronos"]):
+        label = ["(b) Toto2", "(c) Chronos"][pred_idx]
         rows = []
         for ds_key, _ in DATASETS():
             for imp in IMPUTERS():
@@ -378,9 +393,9 @@ MSE & MAE & MSE & MAE \\
 \end{{minipage}}""")
 
     return f"""{sundial_table}
-\hfill
+\\hfill
 {compact_tables[0]}
-\hfill
+\\hfill
 {compact_tables[1]}"""
 
 
@@ -388,11 +403,11 @@ def gen_ablation_table(results: dict[str, EvalResult],
                        best_cfgs: dict[str, BestConfig]) -> str:
     """Generate the projection ablation table (tab:projection_ablation)."""
 
-    # Only Supply Chain and Current Velocity, SAITS + DeepMVI, Timer + Chronos
+    # Only Supply Chain and Current Velocity, SAITS + DeepMVI, Toto2 + Chronos
     ds_list = [("Supply_Chain_Customer_D", "Supply Chain"),
                ("current_velocity_H", "Current Vel.")]
     imp_list = ["SAITS", "DeepMVI"]
-    pred_list = ["Timer", "Chronos"]
+    pred_list = ["Toto2", "Chronos"]
     strategies = ["B1", "B2", "B4", "B5", "B6"]
 
     rows = []
@@ -448,14 +463,14 @@ def gen_robustness_table(results: dict[str, EvalResult],
     rows = []
     for p in ps:
         cells = []
-        for st in ["B1", "B2", "B3"]:
+        for st in ["B1", "B2"]:
             r = _match_log(results, st, ds_key, imp, pred, lr, bs, extra=f"p{p}")
             cells.append(fmt_val(r.pred_mse if r else None))
         rows.append(f"${p}$ & {' & '.join(cells)} \\\\")
 
-    return rf"""\begin{{tabular}}{{cccc}}
+    return rf"""\begin{{tabular}}{{ccc}}
 \toprule
-$p$ & B1 & B2 & B3 \\
+$p$ & B1 & B2 \\
 \midrule
 {chr(10).join(rows)}
 \bottomrule
@@ -544,7 +559,7 @@ TABLE_GENERATORS = {
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate LaTeX tables from experiment logs")
-    parser.add_argument("--table", choices=["all", "grid", "main", "ablation", "robustness", "cost"],
+    parser.add_argument("--table", choices=["all", *TABLE_GENERATORS],
                         default="all", help="Which table to generate (default: all)")
     parser.add_argument("--output", "-o", type=Path,
                         help="Write output to file instead of stdout")

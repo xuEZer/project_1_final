@@ -94,9 +94,6 @@ def selected_config_payload(config: ConfigParser) -> dict[str, str]:
     if exp_type == "B2":
         for key in ("k", "epsilon", "confidence_delta"):
             add("tip", key)
-    elif exp_type == "B3":
-        for key in ("k", "epsilon", "confidence_delta", "pretrain_epochs"):
-            add("tip", key)
 
     return payload
 
@@ -119,12 +116,6 @@ def generate_experiment_name(config: ConfigParser) -> str:
         epsilon = normalize_config_value(config.get("tip", "epsilon"))
         confidence_delta = normalize_config_value(config.get("tip", "confidence_delta"))
         parts.extend([f"k{k}", f"eps{epsilon}", f"delta{confidence_delta}"])
-    elif exp_type == "B3":
-        pretrain_epochs = normalize_config_value(config.get("tip", "pretrain_epochs"))
-        k = normalize_config_value(config.get("tip", "k"))
-        epsilon = normalize_config_value(config.get("tip", "epsilon"))
-        confidence_delta = normalize_config_value(config.get("tip", "confidence_delta"))
-        parts.extend([f"pre{pretrain_epochs}", f"k{k}", f"eps{epsilon}", f"delta{confidence_delta}"])
 
     prefix = "_".join(safe_name_part(part) for part in parts)
     payload = selected_config_payload(config)
@@ -360,14 +351,20 @@ def main() -> None:
         )
     logger.info("Training completed.")
 
-    split_no_gt = getattr(eval_loader, "no_gt", False)
-    evaluate(config, joint_model, eval_loader, split_no_gt, logger, split_name="test")
-
     exp_name = config.get("experiment", "name")
     ckpt_path = Path(config.get("paths", "cache_dir")) / "ckpt" / f"{exp_name}.pt"
     ckpt_path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(joint_model.imputer.state_dict(), ckpt_path)
     logger.info("Saved checkpoint to %s", ckpt_path)
+
+    val_loader = train_loader.get("val")
+    if val_loader is not None:
+        with torch_seed_scope(seed, "validation_evaluation"):
+            val_no_gt = getattr(val_loader, "no_gt", False)
+            evaluate(config, joint_model, val_loader, val_no_gt, logger, split_name="val")
+
+    split_no_gt = getattr(eval_loader, "no_gt", False)
+    evaluate(config, joint_model, eval_loader, split_no_gt, logger, split_name="test")
 
     logger.info("Experiment completed successfully!")
 

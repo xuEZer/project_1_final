@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Hyperparameter search for B1 imputer training.
 
-Grid search over lr × batch_size, selecting the best configuration
-by validation ``imp_loss``.  Experiment names describe the training
+Grid search over lr × batch_size, selecting the best configuration by
+imputation MSE on the validation split after restoring the early-stopping
+checkpoint. Experiment names describe the training
 configuration itself, so the same run can be reused across analyses.
 
 Usage:
@@ -58,22 +59,43 @@ def is_completed(name: str) -> bool:
 
 
 def parse_result(name: str, lr: float, batch_size: int) -> dict:
-    """Parse the result from a completed experiment log."""
+    """Parse validation imputation MSE from a completed experiment log."""
+    result = {
+        "name": name,
+        "lr": lr,
+        "batch_size": batch_size,
+        "epoch": None,
+        "val_imp_loss": None,
+        "val_imp_mse": float("inf"),
+        "training_completed": False,
+    }
     log_path = LOG_DIR / f"{name}.log"
     if not log_path.exists():
-        return {"name": name, "lr": lr, "batch_size": batch_size, "val_imp_loss": float("inf")}
+        return result
 
     text = log_path.read_text()
-    m = re.search(r"Restored best val checkpoint: epoch=(\d+), imp_loss=([\d.]+)", text)
-    if m:
-        return {
-            "name": name,
-            "lr": lr,
-            "batch_size": batch_size,
-            "epoch": int(m.group(1)),
-            "val_imp_loss": float(m.group(2)),
-        }
-    return {"name": name, "lr": lr, "batch_size": batch_size, "val_imp_loss": float("inf")}
+    result["training_completed"] = "Experiment completed successfully!" in text
+    checkpoint = re.search(
+        r"Restored best val checkpoint: epoch=(\d+), imp_loss=([\d.eE+-]+)", text
+    )
+    if checkpoint:
+        result["epoch"] = int(checkpoint.group(1))
+        result["val_imp_loss"] = float(checkpoint.group(2))
+
+    val_summary = re.search(
+        r"Evaluation Results Summary: split=val(?P<body>.*?)"
+        r"Evaluation completed on val split\.",
+        text,
+        flags=re.DOTALL,
+    )
+    if val_summary:
+        mse = re.search(
+            r"\bMSE\b\s+([-+\d.eE]+)\s+[-+\d.eE]+",
+            val_summary.group("body"),
+        )
+        if mse:
+            result["val_imp_mse"] = float(mse.group(1))
+    return result
 
 
 def run_one(dataset: str, imputer: str, lr: float, batch_size: int) -> dict:
@@ -88,16 +110,35 @@ def run_one(dataset: str, imputer: str, lr: float, batch_size: int) -> dict:
     ]
     name = resolve_experiment_name(overrides)
 
-    # Skip if already completed
-    if is_completed(name):
-        return parse_result(name, lr, batch_size)
+    existing = parse_result(name, lr, batch_size)
+    if existing["val_imp_mse"] != float("inf"):
+        return existing
+
+    log_path = LOG_DIR / f"{name}.log"
+    backup_path: Path | None = None
+    if existing["training_completed"]:
+        backup_path = LOG_DIR / f"{name}.pre_val_eval.log"
+        suffix = 1
+        while backup_path.exists():
+            backup_path = LOG_DIR / f"{name}.pre_val_eval.{suffix}.log"
+            suffix += 1
+        log_path.replace(backup_path)
+        ckpt_path = CKPT_DIR / f"{name}.pt"
+        if ckpt_path.exists():
+            overrides.extend(["--experiment.load_ckpt", str(ckpt_path)])
 
     cmd = [sys.executable, str(ROOT / "main.py"), *overrides]
-    ret = subprocess.run(cmd, cwd=str(ROOT), capture_output=True)
-    if ret.returncode != 0:
-        return {"name": name, "lr": lr, "batch_size": batch_size, "val_imp_loss": float("inf")}
-
-    return parse_result(name, lr, batch_size)
+    ret = subprocess.run(cmd, cwd=str(ROOT),
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    result = parse_result(name, lr, batch_size)
+    if existing["training_completed"]:
+        result["epoch"] = existing["epoch"]
+        result["val_imp_loss"] = existing["val_imp_loss"]
+    if ret.returncode != 0 and backup_path is not None:
+        if log_path.exists():
+            log_path.unlink()
+        backup_path.replace(log_path)
+    return result
 
 
 def run_serial(groups: dict[tuple[str, str], list[dict]]) -> dict[tuple[str, str], list[dict]]:
@@ -113,8 +154,8 @@ def run_serial(groups: dict[tuple[str, str], list[dict]]) -> dict[tuple[str, str
             log(f"  lr={task['lr']}  batch_size={task['batch_size']} ...", end=" ")
             r = run_one(dataset, imputer, task["lr"], task["batch_size"])
             results[key].append(r)
-            if r["val_imp_loss"] != float("inf"):
-                log(f"val_imp_loss={r['val_imp_loss']:.6f}")
+            if r["val_imp_mse"] != float("inf"):
+                log(f"val_imp_mse={r['val_imp_mse']:.6f}")
             else:
                 log("FAILED")
     return results
@@ -127,8 +168,8 @@ def run_parallel(tasks: list[dict], workers: int) -> dict[tuple[str, str], list[
     def worker(task: dict) -> dict:
         log(f"  {task['dataset']}/{task['imputer']}  lr={task['lr']}  bs={task['batch_size']}  ...", end=" ")
         r = run_one(task["dataset"], task["imputer"], task["lr"], task["batch_size"])
-        if r["val_imp_loss"] != float("inf"):
-            log(f"val_imp_loss={r['val_imp_loss']:.6f}")
+        if r["val_imp_mse"] != float("inf"):
+            log(f"val_imp_mse={r['val_imp_mse']:.6f}")
         else:
             log("FAILED")
         return r
@@ -214,16 +255,16 @@ def main() -> None:
     total_ok = 0
     total_fail = 0
     for (dataset, imputer), runs in sorted(results.items()):
-        valid = [r for r in runs if r["val_imp_loss"] != float("inf")]
+        valid = [r for r in runs if r["val_imp_mse"] != float("inf")]
         n_fail = len(runs) - len(valid)
         total_ok += len(valid)
         total_fail += n_fail
 
         if valid:
-            best = min(valid, key=lambda r: r["val_imp_loss"])
+            best = min(valid, key=lambda r: r["val_imp_mse"])
             best_cfg = save_best_config(dataset, imputer, best)
             log(f"  {dataset}/{imputer}: best lr={best['lr']} bs={best['batch_size']} "
-                f"val_imp_loss={best['val_imp_loss']:.6f}  →  {best_cfg}")
+                f"val_imp_mse={best['val_imp_mse']:.6f}  →  {best_cfg}")
         else:
             log(f"  {dataset}/{imputer}: ALL {len(runs)} RUNS FAILED")
 

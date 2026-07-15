@@ -24,5 +24,4 @@ export HF_ENDPOINT=https://hf-mirror.com
 ./scripts/run_experiments.sh --dataset CPHL_30T --exp B2
 ./scripts/run_k_sweep.sh                      # TIP k ablation
 ./scripts/run_epsilon_sweep.sh                # TIP epsilon ablation
-./scripts/run_missing_rate_robustness.sh      # B3 missing-rate robustness
 ```

@@ -14,11 +14,13 @@ os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
 from .Chronos.model import ChronosPredictor
 from .Sundial.model import SundialPredictor
 from .Timer.model import TimerPredictor
+from .Toto2.model import Toto2Predictor
 
 PREDICTOR_REGISTRY: dict[str, type] = {
     "Sundial": SundialPredictor,
     "Chronos": ChronosPredictor,
     "Timer": TimerPredictor,
+    "Toto2": Toto2Predictor,
 }
 
 
@@ -53,10 +55,19 @@ def _config2timer(config: ConfigParser) -> dict[str, Any]:
     }
 
 
+def _config2toto2(config: ConfigParser) -> dict[str, Any]:
+    return {
+        "model_name": config.get("predictor", "model_name"),
+        "forecast_length": config.getint("data", "pred_len"),
+        "device": config.get("training", "device"),
+    }
+
+
 CONFIG_CONVERTER_REGISTRY: dict[str, Callable] = {
     "Sundial": _config2sundial,
     "Chronos": _config2chronos,
     "Timer": _config2timer,
+    "Toto2": _config2toto2,
 }
 
 
@@ -64,7 +75,7 @@ def predictor(predictor_name: str, config: ConfigParser) -> nn.Module:
     """Instantiate a predictor by name using configuration-driven arguments.
 
     Args:
-        predictor_name: ``"Sundial"``, ``"Chronos"`` or ``"Timer"``.
+        predictor_name: ``"Sundial"``, ``"Chronos"``, ``"Timer"``, or ``"Toto2"``.
         config: Parsed experiment configuration.
 
     Returns:
