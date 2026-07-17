@@ -12,7 +12,7 @@ import h5py
 import joblib
 import numpy as np
 import torch
-from datasets import load_from_disk
+from datasets import load_dataset, load_from_disk
 from huggingface_hub import snapshot_download
 from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, TensorDataset
@@ -21,10 +21,12 @@ from src.rng import numpy_rng
 
 
 def preprocess_dataset(
+    source: str,
+    repo_name: str,
     dataset_name: str,
     frequency: str,
     item_id: str,
-    column_index: int,
+    column_index: int | str,
     missing_rate: float,
     artificial_missing_rate: float,
     block_size: int,
@@ -39,10 +41,13 @@ def preprocess_dataset(
     """Preprocess raw data and persist reusable artifacts on disk.
 
     Args:
-        dataset_name: Dataset name on the TIME benchmark repository.
+        source: Dataset storage format (``huggingface`` or
+            ``huggingface_table``).
+        repo_name: Hugging Face dataset repository name.
+        dataset_name: Dataset name or configuration in the repository.
         frequency: Sampling frequency subfolder under the dataset.
         item_id: Item index within the dataset.
-        column_index: Target column index for multivariate inputs.
+        column_index: Target column index, or ``"all"`` for all variables.
         missing_rate: Rate used to inject natural missing blocks when needed.
         artificial_missing_rate: Rate used to inject artificial missing values.
         block_size: Block size used for natural missing simulation.
@@ -58,8 +63,12 @@ def preprocess_dataset(
         Folder path containing the serialized dataset and scaler.
 
     """
+    ett_boundaries = get_ett_split_boundaries(dataset_name)
+    split_protocol = "ett_fixed_12_4_4" if ett_boundaries is not None else "ratio"
     uid = generate_preprocess_uid(
         {
+            "source": source,
+            "repo_name": repo_name,
             "dataset_name": dataset_name,
             "frequency": frequency,
             "item_id": item_id,
@@ -71,6 +80,7 @@ def preprocess_dataset(
             "pred_len": pred_len,
             "val_ratio": val_ratio,
             "test_ratio": test_ratio,
+            "split_protocol": split_protocol,
             "random_seed": random_seed,
         }
     )
@@ -101,19 +111,14 @@ def preprocess_dataset(
 
         save_folder.mkdir(parents=True, exist_ok=True)
 
-        snapshot_dir = snapshot_download(
-            repo_id="Real-TSF/TIME",
-            repo_type="dataset",
-            revision="main",
-            allow_patterns=f"{dataset_name}/{frequency}/*",
+        data = load_raw_series(
+            source=source,
+            repo_name=repo_name,
+            dataset_name=dataset_name,
+            frequency=frequency,
+            item_id=item_id,
+            column_index=column_index,
         )
-        dataset = load_from_disk(f"{snapshot_dir}/{dataset_name}/{frequency}")
-        filtered = dataset.filter(lambda x: x["item_id"] == item_id)
-        if len(filtered) == 0:
-            raise ValueError(f"item_id '{item_id}' not found in dataset")
-        dataset = np.array(filtered[0]["target"])
-        data = dataset[column_index, :] if dataset.ndim > 1 else dataset
-        data = data.reshape(-1, 1)
 
         data, N_data, NA_data, N_mask, A_mask, NA_mask = generate_missing(
             data, missing_rate, artificial_missing_rate, block_size, random_seed, logger
@@ -130,6 +135,7 @@ def preprocess_dataset(
             pred_len,
             val_ratio,
             test_ratio,
+            fixed_boundaries=ett_boundaries,
         )
 
         train_data, val_data, test_data, scaler = standardize_data(
@@ -152,6 +158,77 @@ def preprocess_dataset(
     finally:
         with contextlib.suppress(FileNotFoundError):
             lock_folder.rmdir()
+
+
+def load_raw_series(
+    *,
+    source: str,
+    repo_name: str,
+    dataset_name: str,
+    frequency: str,
+    item_id: str,
+    column_index: int | str,
+) -> np.ndarray:
+    """Load one univariate series from a supported Hugging Face layout."""
+    if source == "huggingface":
+        snapshot_dir = snapshot_download(
+            repo_id=repo_name,
+            repo_type="dataset",
+            revision="main",
+            allow_patterns=f"{dataset_name}/{frequency}/*",
+        )
+        dataset = load_from_disk(f"{snapshot_dir}/{dataset_name}/{frequency}")
+        filtered = dataset.filter(lambda x: x["item_id"] == item_id)
+        if len(filtered) == 0:
+            raise ValueError(f"item_id '{item_id}' not found in dataset")
+        target = np.asarray(filtered[0]["target"])
+        if column_index == "all":
+            series = target.T if target.ndim > 1 else target.reshape(-1, 1)
+            return np.asarray(series, dtype=np.float64)
+        series = target[column_index, :] if target.ndim > 1 else target
+        return np.asarray(series, dtype=np.float64).reshape(-1, 1)
+
+    if source == "huggingface_table":
+        dataset = load_dataset(repo_name, dataset_name, split="train")
+        numeric_columns = [
+            name for name, feature in dataset.features.items()
+            if name != "date" and feature.dtype in {
+                "float16", "float32", "float64",
+                "int8", "int16", "int32", "int64",
+                "uint8", "uint16", "uint32", "uint64",
+            }
+        ]
+        if column_index == "all":
+            return np.column_stack(
+                [np.asarray(dataset[column], dtype=np.float64) for column in numeric_columns]
+            )
+        if not 0 <= column_index < len(numeric_columns):
+            raise IndexError(
+                f"column_index={column_index} is out of range for numeric "
+                f"columns {numeric_columns}"
+            )
+        column = numeric_columns[column_index]
+        return np.asarray(dataset[column], dtype=np.float64).reshape(-1, 1)
+
+    raise ValueError(
+        f"Unsupported dataset source '{source}'. Expected 'huggingface' or "
+        "'huggingface_table'."
+    )
+
+
+def get_ett_split_boundaries(dataset_name: str) -> tuple[int, int, int] | None:
+    """Return the conventional 12/4/4-month boundaries for ETT datasets."""
+    if dataset_name in {"ETTh1", "ETTh2"}:
+        points_per_month = 30 * 24
+    elif dataset_name in {"ETTm1", "ETTm2"}:
+        points_per_month = 30 * 24 * 4
+    else:
+        return None
+    return (
+        12 * points_per_month,
+        16 * points_per_month,
+        20 * points_per_month,
+    )
 
 
 def generate_preprocess_uid(
@@ -299,18 +376,18 @@ def split_data(
     pred_len: int,
     val_ratio: float,
     test_ratio: float,
+    fixed_boundaries: tuple[int, int, int] | None = None,
 ) -> tuple[
     dict[str, np.ndarray | None],
     dict[str, np.ndarray | None] | None,
     dict[str, np.ndarray | None],
 ]:
-    """Split raw time series into contiguous, non-overlapping blocks.
+    """Split raw time series into train, validation, and test blocks.
 
-    Each block is windowed independently by ``truncate_data`` later in the
-    pipeline.  Splits are cut at the raw time-step level with compensation
-    for the fixed windowing overhead, so the window-count ratio approximates
-    the configured ratios.  If ``val_ratio`` is 0, only train/test splits
-    are created.
+    ETT datasets use their conventional fixed 12/4/4-month target ranges.
+    Their validation and test blocks include the preceding lookback context.
+    Other datasets use contiguous, non-overlapping ratio-based blocks with
+    compensation for windowing overhead.
 
     Args:
         data: Optional complete data without natural missing values.
@@ -324,43 +401,53 @@ def split_data(
         val_ratio: Validation split ratio (applied to window counts).
             Use 0 to disable validation.
         test_ratio: Test split ratio (applied to window counts).
+        fixed_boundaries: Optional train/validation/test target end indices.
 
     Returns:
         Tuple of train, optional validation, and test dictionaries.
 
     """
     len_data = len(N_data)
-    if val_ratio < 0 or test_ratio <= 0 or val_ratio + test_ratio >= 1:
+    if fixed_boundaries is not None:
+        train_end, val_end, test_end = fixed_boundaries
+        if not (0 < train_end < val_end < test_end <= len_data):
+            raise ValueError(
+                f"Invalid fixed split boundaries {fixed_boundaries} for "
+                f"series length {len_data}."
+            )
+        train_start = 0
+        val_start = train_end - lookback_len
+        test_start = val_end - lookback_len
+        if val_start < 0 or test_start < 0:
+            raise ValueError("Lookback is too long for the fixed split boundaries.")
+    elif val_ratio < 0 or test_ratio <= 0 or val_ratio + test_ratio >= 1:
         raise ValueError(
             "Expected val_ratio >= 0, test_ratio > 0, "
             "and val_ratio + test_ratio < 1."
         )
 
-    overhead = lookback_len + pred_len - 1
-    min_len = overhead + 1
-    num_splits = 2 if val_ratio == 0 else 3
-    if len_data < num_splits * min_len:
-        raise ValueError(
-            f"Time series too short ({len_data}) to create non-overlapping "
-            f"splits with lookback={lookback_len}, pred={pred_len}."
-        )
+    if fixed_boundaries is None:
+        overhead = lookback_len + pred_len - 1
+        min_len = overhead + 1
+        num_splits = 2 if val_ratio == 0 else 3
+        if len_data < num_splits * min_len:
+            raise ValueError(
+                f"Time series too short ({len_data}) to create non-overlapping "
+                f"splits with lookback={lookback_len}, pred={pred_len}."
+            )
 
-    total_windows = len_data - num_splits * overhead
+        total_windows = len_data - num_splits * overhead
+        train_windows = int(total_windows * (1 - val_ratio - test_ratio))
+        val_windows = int(total_windows * val_ratio)
+        train_raw_len = train_windows + overhead
+        val_raw_len = val_windows + overhead if val_ratio > 0 else 0
 
-    train_windows = int(total_windows * (1 - val_ratio - test_ratio))
-    val_windows = int(total_windows * val_ratio)
-
-    train_raw_len = train_windows + overhead
-    val_raw_len = val_windows + overhead if val_ratio > 0 else 0
-
-    train_start = 0
-    train_end = train_raw_len
-
-    val_start = train_end
-    val_end = val_start + val_raw_len
-
-    test_start = val_end if val_ratio > 0 else train_end
-    test_end = len_data
+        train_start = 0
+        train_end = train_raw_len
+        val_start = train_end
+        val_end = val_start + val_raw_len
+        test_start = val_end if val_ratio > 0 else train_end
+        test_end = len_data
 
     def _make_split(start: int, end: int) -> dict[str, np.ndarray | None]:
         return {
@@ -373,7 +460,7 @@ def split_data(
         }
 
     train_split = _make_split(train_start, train_end)
-    val_split = _make_split(val_start, val_end) if val_ratio > 0 else None
+    val_split = _make_split(val_start, val_end) if fixed_boundaries or val_ratio > 0 else None
     test_split = _make_split(test_start, test_end)
 
     # --- assertions ---
@@ -382,10 +469,11 @@ def split_data(
     assert test_split.keys() == _expected_keys
     assert train_split["N_data"].shape[0] > 0, "Train split must be non-empty"
     assert test_split["N_data"].shape[0] > 0, "Test split must be non-empty"
-    total_split_len = train_split["N_data"].shape[0] + test_split["N_data"].shape[0]
-    if val_split is not None:
-        total_split_len += val_split["N_data"].shape[0]
-    assert total_split_len == len_data, "Split lengths must sum to original length"
+    if fixed_boundaries is None:
+        total_split_len = train_split["N_data"].shape[0] + test_split["N_data"].shape[0]
+        if val_split is not None:
+            total_split_len += val_split["N_data"].shape[0]
+        assert total_split_len == len_data, "Split lengths must sum to original length"
 
     return train_split, val_split, test_split
 

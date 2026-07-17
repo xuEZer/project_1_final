@@ -23,7 +23,7 @@ import torch
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from main import config_from_overrides  # noqa: E402
+from main import config_from_overrides, parse_column_index  # noqa: E402
 from src.data_loader import get_tensor_data_loader, load_h5, preprocess_dataset  # noqa: E402
 from src.models.imputators import imputator  # noqa: E402
 from src.models.predictors import predictor  # noqa: E402
@@ -241,10 +241,12 @@ def main() -> None:
     config = config_from_overrides(overrides_for(args.predictors[0]))
 
     dataset_folder = preprocess_dataset(
+        source=config.get("dataset", "source"),
+        repo_name=config.get("dataset", "repo_name"),
         dataset_name=config.get("dataset", "dataset_name"),
         frequency=config.get("dataset", "frequency"),
         item_id=config.get("dataset", "item_id"),
-        column_index=config.getint("dataset", "column_index"),
+        column_index=parse_column_index(config.get("dataset", "column_index")),
         missing_rate=config.getfloat("data", "missing_rate"),
         artificial_missing_rate=config.getfloat("data", "artificial_missing_rate"),
         block_size=config.getint("data", "block_size"),

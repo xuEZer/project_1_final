@@ -190,7 +190,7 @@ def evaluate(
     if no_gt:
         logger.info(
             "No ground truth for natural missing positions. "
-            "Skipping imputation evaluation."
+            "Imputation metrics will use artificial-mask ground truth when available."
         )
 
     device = config.get("training", "device")
@@ -220,13 +220,13 @@ def evaluate(
 
     metrics: dict[str, float | None] = {}
     for name in ("mae", "mse", "mre", "rmse"):
-        imp_w = max(1.0, totals[name]["imp_weight"])
+        imp_w = totals[name]["imp_weight"]
         pred_w = max(1.0, totals[name]["pred_weight"])
-        avg_imp = None if no_gt else totals[name]["imp"] / imp_w
+        avg_imp = totals[name]["imp"] / imp_w if imp_w > 0 else None
         avg_pred = totals[name]["pred"] / pred_w
         metrics[f"imp_{name}"] = avg_imp
         metrics[f"pred_{name}"] = avg_pred
-        if no_gt:
+        if avg_imp is None:
             logger.info(f"{name.upper():<10} {'N/A':<20} {avg_pred:<20.6f}")
         else:
             logger.info(f"{name.upper():<10} {avg_imp:<20.6f} {avg_pred:<20.6f}")

@@ -304,7 +304,7 @@ class JointModel(nn.Module):
         k: int,
         epsilon: float,
         alignment_grads: list[torch.Tensor],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, dict[str, torch.Tensor]]:
         """Estimate the prediction gradient and its directional alignments.
 
         TSFM forward calls are batched: all *2k* imputed outputs are
@@ -355,11 +355,19 @@ class JointModel(nn.Module):
                 return (
                     torch.cat([gp_part.flatten() for gp_part in gp_parts]).div_(k),
                     torch.zeros(k, device=self.device),
+                    {},
                 )
 
             # ---- phase 3: slice predictions, compute losses, accumulate ----
             B = X_NA.shape[0]
             z_samples: list[torch.Tensor] = []
+            q_plus_samples: list[torch.Tensor] = []
+            q_minus_samples: list[torch.Tensor] = []
+            coeff_samples: list[torch.Tensor] = []
+            feature_coeff_samples: list[torch.Tensor] = []
+            horizon_coeff_samples: list[torch.Tensor] = []
+            feature_denom = pred_mask.sum(dim=(0, 1))
+            horizon_denom = pred_mask.sum(dim=(0, 2))
             for i in range(k):
                 p_plus = pred_data[2 * i * B : (2 * i + 1) * B]
                 p_minus = pred_data[(2 * i + 1) * B : (2 * i + 2) * B]
@@ -368,6 +376,29 @@ class JointModel(nn.Module):
                 Q_minus = ((p_minus - Y_N).square() * pred_mask).sum() / pred_denom
 
                 coeff = (Q_plus - Q_minus) / (2.0 * epsilon)
+                q_plus_samples.append(Q_plus)
+                q_minus_samples.append(Q_minus)
+                coeff_samples.append(coeff)
+
+                feature_q_plus = (
+                    (p_plus - Y_N).square() * pred_mask
+                ).sum(dim=(0, 1)) / feature_denom.clamp_min(1.0)
+                feature_q_minus = (
+                    (p_minus - Y_N).square() * pred_mask
+                ).sum(dim=(0, 1)) / feature_denom.clamp_min(1.0)
+                feature_coeff_samples.append(
+                    (feature_q_plus - feature_q_minus) / (2.0 * epsilon)
+                )
+
+                horizon_q_plus = (
+                    (p_plus - Y_N).square() * pred_mask
+                ).sum(dim=(0, 2)) / horizon_denom.clamp_min(1.0)
+                horizon_q_minus = (
+                    (p_minus - Y_N).square() * pred_mask
+                ).sum(dim=(0, 2)) / horizon_denom.clamp_min(1.0)
+                horizon_coeff_samples.append(
+                    (horizon_q_plus - horizon_q_minus) / (2.0 * epsilon)
+                )
                 dirs_i = saved_dirs[i]
                 alignment = torch.zeros((), device=self.device, dtype=coeff.dtype)
                 for g_i, u in zip(alignment_grads, dirs_i, strict=True):
@@ -380,9 +411,33 @@ class JointModel(nn.Module):
                 p.copy_(base)
             self._restore_training_modes(training_modes)
 
+        coeff_tensor = torch.stack(coeff_samples)
+        feature_coeff = torch.stack(feature_coeff_samples)
+        horizon_coeff = torch.stack(horizon_coeff_samples)
+
+        def cancellation_ratio(
+            component_coeff: torch.Tensor, component_weight: torch.Tensor
+        ) -> torch.Tensor:
+            weights = component_weight / component_weight.sum().clamp_min(1.0)
+            weighted_abs = (component_coeff.abs() * weights).sum(dim=1)
+            ratio = (
+                1.0 - coeff_tensor.abs() / weighted_abs.clamp_min(1e-12)
+            ).clamp(0.0, 1.0)
+            return torch.where(weighted_abs > 1e-12, ratio, torch.zeros_like(ratio))
+
+        diagnostics = {
+            "q_plus": torch.stack(q_plus_samples),
+            "q_minus": torch.stack(q_minus_samples),
+            "coeff": coeff_tensor,
+            "feature_coeff": feature_coeff,
+            "horizon_coeff": horizon_coeff,
+            "feature_cancellation": cancellation_ratio(feature_coeff, feature_denom),
+            "horizon_cancellation": cancellation_ratio(horizon_coeff, horizon_denom),
+        }
         return (
             torch.cat([gp_part.flatten() for gp_part in gp_parts]).div_(k),
             torch.stack(z_samples),
+            diagnostics,
         )
 
     @staticmethod
@@ -634,7 +689,11 @@ class JointModel(nn.Module):
                         batch_data["Y_N_mask"],
                         k=k,
                         epsilon=epsilon,
-                    )
+                        alignment_grads=[
+                            p.grad.detach() if p.grad is not None else torch.zeros_like(p)
+                            for p in model.imputer.parameters()
+                        ],
+                    )[0]
                 )
             gp_hat.div_(max(1, len(microbatches)))
 
@@ -701,7 +760,26 @@ class JointModel(nn.Module):
             "TIP confidence gate: step_delta=%g",
             confidence_delta,
         )
-        stats = {"steps": 0, "raw": 0, "projected": 0, "ucb": 0.0}
+        scalar_keys = (
+            "ucb", "gate_margin", "z_mean", "z_std", "z_sem",
+            "z_negative_fraction", "alignment_estimation_gap",
+            "q_center", "q_pair_gap_abs", "coeff_abs", "coeff_rms",
+            "gi_norm", "gp_norm", "dot", "cosine",
+            "candidate_correction_ratio", "candidate_retained_ratio",
+            "candidate_post_dot_abs", "applied_correction_ratio",
+            "feature_cancellation", "horizon_cancellation",
+        )
+        stats = {
+            "steps": 0,
+            "raw": 0,
+            "projected": 0,
+            "uncertain_conflict": 0,
+            **{key: 0.0 for key in scalar_keys},
+            "feature_abs": None,
+            "feature_signed": None,
+            "horizon_abs": None,
+            "horizon_signed": None,
+        }
 
         def modifier(model, microbatches):
             g_i = model._get_flattened_grad()
@@ -711,27 +789,95 @@ class JointModel(nn.Module):
             ]
             gp_hat = torch.zeros_like(g_i)
             all_z = []
+            all_diagnostics: list[dict[str, torch.Tensor]] = []
             for batch in microbatches:
-                batch_gp, z = model._compute_gp_hat(
+                batch_gp, z, diagnostics = model._compute_gp_hat(
                     batch["X_NA"], batch["X_NA_mask"], batch["X_N"],
                     batch["X_A_mask"], batch["Y_N"], batch["Y_N_mask"],
                     k=k, epsilon=epsilon, alignment_grads=grad_parts,
                 )
                 gp_hat.add_(batch_gp)
                 all_z.append(z)
+                if diagnostics:
+                    all_diagnostics.append(diagnostics)
             gp_hat.div_(len(microbatches))
+            z_samples = torch.cat(all_z)
             upper = model._student_t_upper_confidence_bound(
-                torch.cat(all_z), confidence_delta
+                z_samples, confidence_delta
             )
-            raw = torch.dot(g_i, gp_hat).item() < 0.0
-            project = upper.item() < 0.0 and torch.linalg.vector_norm(gp_hat).item() > 1e-12
+            dot = torch.dot(g_i, gp_hat)
+            gi_norm = torch.linalg.vector_norm(g_i)
+            gp_norm = torch.linalg.vector_norm(gp_hat)
+            cosine = dot / (gi_norm * gp_norm).clamp_min(1e-12)
+            raw = dot.item() < 0.0
+            project = upper.item() < 0.0 and gp_norm.item() > 1e-12
+
+            candidate = model._apply_projection(g_i, gp_hat, conditional=False)
+            correction = g_i - candidate
+            correction_ratio = (
+                torch.linalg.vector_norm(correction) / gi_norm.clamp_min(1e-12)
+            )
+            retained_ratio = (
+                torch.linalg.vector_norm(candidate) / gi_norm.clamp_min(1e-12)
+            )
+            candidate_post_dot_abs = torch.dot(candidate, gp_hat).abs()
+
             stats["steps"] += 1
             stats["raw"] += int(raw)
             stats["projected"] += int(project)
+            stats["uncertain_conflict"] += int(raw and not project)
             stats["ucb"] += upper.item()
+            z_mean = z_samples.mean()
+            z_std = z_samples.std(unbiased=z_samples.numel() > 1)
+            stats["gate_margin"] += -upper.item()
+            stats["z_mean"] += z_mean.item()
+            stats["z_std"] += z_std.item()
+            stats["z_sem"] += (z_std / math.sqrt(z_samples.numel())).item()
+            stats["z_negative_fraction"] += (z_samples < 0).float().mean().item()
+            stats["alignment_estimation_gap"] += (dot - z_mean).item()
+            stats["gi_norm"] += gi_norm.item()
+            stats["gp_norm"] += gp_norm.item()
+            stats["dot"] += dot.item()
+            stats["cosine"] += cosine.item()
+            stats["candidate_correction_ratio"] += correction_ratio.item()
+            stats["candidate_retained_ratio"] += retained_ratio.item()
+            stats["candidate_post_dot_abs"] += candidate_post_dot_abs.item()
+            stats["applied_correction_ratio"] += (
+                correction_ratio.item() if project else 0.0
+            )
+
+            if all_diagnostics:
+                q_plus = torch.cat([d["q_plus"] for d in all_diagnostics])
+                q_minus = torch.cat([d["q_minus"] for d in all_diagnostics])
+                coeff = torch.cat([d["coeff"] for d in all_diagnostics])
+                feature_coeff = torch.cat(
+                    [d["feature_coeff"] for d in all_diagnostics]
+                )
+                horizon_coeff = torch.cat(
+                    [d["horizon_coeff"] for d in all_diagnostics]
+                )
+                stats["q_center"] += ((q_plus + q_minus) * 0.5).mean().item()
+                stats["q_pair_gap_abs"] += (q_plus - q_minus).abs().mean().item()
+                stats["coeff_abs"] += coeff.abs().mean().item()
+                stats["coeff_rms"] += coeff.square().mean().sqrt().item()
+                stats["feature_cancellation"] += torch.cat(
+                    [d["feature_cancellation"] for d in all_diagnostics]
+                ).mean().item()
+                stats["horizon_cancellation"] += torch.cat(
+                    [d["horizon_cancellation"] for d in all_diagnostics]
+                ).mean().item()
+
+                for key, value in (
+                    ("feature_abs", feature_coeff.abs().mean(dim=0)),
+                    ("feature_signed", feature_coeff.mean(dim=0)),
+                    ("horizon_abs", horizon_coeff.abs().mean(dim=0)),
+                    ("horizon_signed", horizon_coeff.mean(dim=0)),
+                ):
+                    value = value.detach().float().cpu()
+                    stats[key] = value if stats[key] is None else stats[key] + value
             if project:
                 model._set_flattened_grad(
-                    model._apply_projection(g_i, gp_hat, conditional=False)
+                    candidate
                 )
 
         def epoch_end(epoch, train_loss, model):
@@ -739,20 +885,87 @@ class JointModel(nn.Module):
                 raw_rate = stats["raw"] / stats["steps"]
                 projection_rate = stats["projected"] / stats["steps"]
                 mean_ucb = stats["ucb"] / stats["steps"]
+                uncertain_rate = stats["uncertain_conflict"] / stats["steps"]
                 model.logger.info(
-                    "TIP raw_conflict_rate=%.4f | projection_rate=%.4f | mean_ucb=%.6g | steps=%d",
+                    "TIP raw_conflict_rate=%.4f | projection_rate=%.4f | "
+                    "mean_ucb=%.6g | steps=%d | uncertain_conflict_rate=%.4f",
                     raw_rate, projection_rate, mean_ucb, stats["steps"],
+                    uncertain_rate,
                 )
-                for name, value in (
-                    ("raw_conflict_rate", raw_rate),
-                    ("projection_rate", projection_rate),
-                    ("mean_ucb", mean_ucb),
-                ):
+                averages = {
+                    key: stats[key] / stats["steps"] for key in scalar_keys
+                }
+                model.logger.info(
+                    "TIP estimator: z_mean=%.6g | z_std=%.6g | z_sem=%.6g | "
+                    "z_negative_fraction=%.4f | coeff_abs=%.6g | "
+                    "coeff_rms=%.6g | q_center=%.6g | q_pair_gap_abs=%.6g | "
+                    "gate_margin=%.6g | alignment_gap=%.6g",
+                    averages["z_mean"], averages["z_std"], averages["z_sem"],
+                    averages["z_negative_fraction"], averages["coeff_abs"],
+                    averages["coeff_rms"], averages["q_center"],
+                    averages["q_pair_gap_abs"], averages["gate_margin"],
+                    averages["alignment_estimation_gap"],
+                )
+                model.logger.info(
+                    "TIP geometry: gi_norm=%.6g | gp_norm=%.6g | dot=%.6g | "
+                    "cosine=%.6g | candidate_correction_ratio=%.6g | "
+                    "candidate_retained_ratio=%.6g | applied_correction_ratio=%.6g | "
+                    "post_dot_abs=%.6g",
+                    averages["gi_norm"], averages["gp_norm"], averages["dot"],
+                    averages["cosine"], averages["candidate_correction_ratio"],
+                    averages["candidate_retained_ratio"],
+                    averages["applied_correction_ratio"],
+                    averages["candidate_post_dot_abs"],
+                )
+                model.logger.info(
+                    "TIP decomposition: feature_cancellation=%.4f | "
+                    "horizon_cancellation=%.4f",
+                    averages["feature_cancellation"],
+                    averages["horizon_cancellation"],
+                )
+
+                tb_values = {
+                    "raw_conflict_rate": raw_rate,
+                    "projection_rate": projection_rate,
+                    "uncertain_conflict_rate": uncertain_rate,
+                    "mean_ucb": mean_ucb,
+                    **averages,
+                }
+                for name, value in tb_values.items():
                     model.tb_summary_writer.add_scalar(
                         f"tip/{phase_name}/{name}", value, epoch
                     )
+
+                for axis in ("feature", "horizon"):
+                    abs_values = stats[f"{axis}_abs"]
+                    signed_values = stats[f"{axis}_signed"]
+                    if abs_values is None or signed_values is None:
+                        continue
+                    abs_values = abs_values / stats["steps"]
+                    signed_values = signed_values / stats["steps"]
+                    for idx in range(min(64, abs_values.numel())):
+                        model.tb_summary_writer.add_scalar(
+                            f"tip/{phase_name}/{axis}_{idx:03d}_abs_coeff",
+                            abs_values[idx].item(), epoch,
+                        )
+                        model.tb_summary_writer.add_scalar(
+                            f"tip/{phase_name}/{axis}_{idx:03d}_signed_coeff",
+                            signed_values[idx].item(), epoch,
+                        )
+                    top_count = min(5, abs_values.numel())
+                    top = torch.topk(abs_values, k=top_count)
+                    top_summary = ", ".join(
+                        f"{int(idx)}:{float(value):.4g}"
+                        for value, idx in zip(top.values, top.indices, strict=True)
+                    )
+                    model.logger.info(
+                        "TIP %s sensitivity top-%d (index:mean_abs_coeff): %s",
+                        axis, top_count, top_summary,
+                    )
             for key in stats:
-                stats[key] = 0.0 if key == "ucb" else 0
+                stats[key] = None if key in {
+                    "feature_abs", "feature_signed", "horizon_abs", "horizon_signed"
+                } else (0.0 if key in scalar_keys else 0)
             return on_epoch_end(epoch, train_loss, model) if on_epoch_end else False
 
         return self.fit(

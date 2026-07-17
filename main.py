@@ -157,6 +157,19 @@ def resolve_experiment_name(overrides: list[str]) -> str:
     return config_from_overrides(overrides).get("experiment", "name")
 
 
+def parse_column_index(value: str) -> int | str:
+    """Parse a dataset column selector as an integer index or ``"all"``."""
+    normalized = value.strip().lower()
+    if normalized == "all":
+        return normalized
+    try:
+        return int(normalized)
+    except ValueError as exc:
+        raise ValueError(
+            f"dataset.column_index must be an integer or 'all', got {value!r}"
+        ) from exc
+
+
 def resolve_batch_size(
     *,
     config: ConfigParser,
@@ -306,10 +319,12 @@ def main() -> None:
     configure_deterministic_runtime(seed, logger)
 
     dataset_folder = preprocess_dataset(
+        source=config.get("dataset", "source"),
+        repo_name=config.get("dataset", "repo_name"),
         dataset_name=config.get("dataset", "dataset_name"),
         frequency=config.get("dataset", "frequency"),
         item_id=config.get("dataset", "item_id"),
-        column_index=config.getint("dataset", "column_index"),
+        column_index=parse_column_index(config.get("dataset", "column_index")),
         missing_rate=config.getfloat("data", "missing_rate"),
         artificial_missing_rate=config.getfloat("data", "artificial_missing_rate"),
         block_size=config.getint("data", "block_size"),
@@ -364,7 +379,15 @@ def main() -> None:
             evaluate(config, joint_model, val_loader, val_no_gt, logger, split_name="val")
 
     split_no_gt = getattr(eval_loader, "no_gt", False)
-    evaluate(config, joint_model, eval_loader, split_no_gt, logger, split_name="test")
+    with torch_seed_scope(seed, "test_evaluation"):
+        evaluate(
+            config,
+            joint_model,
+            eval_loader,
+            split_no_gt,
+            logger,
+            split_name="test",
+        )
 
     logger.info("Experiment completed successfully!")
 

@@ -23,7 +23,11 @@ from torch.utils.data import DataLoader, TensorDataset
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from main import config_from_overrides, resolve_experiment_name  # noqa: E402
+from main import (  # noqa: E402
+    config_from_overrides,
+    parse_column_index,
+    resolve_experiment_name,
+)
 from src.data_loader import load_h5, preprocess_dataset  # noqa: E402
 from src.models.imputators import imputator  # noqa: E402
 from src.models.predictors import predictor  # noqa: E402
@@ -188,10 +192,12 @@ def main() -> None:
     if not cache_dir.is_absolute():
         cache_dir = ROOT / cache_dir
     dataset_folder = preprocess_dataset(
+        source=config.get("dataset", "source"),
+        repo_name=config.get("dataset", "repo_name"),
         dataset_name=config.get("dataset", "dataset_name"),
         frequency=config.get("dataset", "frequency"),
         item_id=config.get("dataset", "item_id"),
-        column_index=config.getint("dataset", "column_index"),
+        column_index=parse_column_index(config.get("dataset", "column_index")),
         missing_rate=config.getfloat("data", "missing_rate"),
         artificial_missing_rate=config.getfloat("data", "artificial_missing_rate"),
         block_size=config.getint("data", "block_size"),

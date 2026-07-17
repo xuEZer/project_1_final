@@ -22,7 +22,6 @@
   ],
   "predictors": [
     "Chronos",
-    "Sundial",
-    "Timer"
+    "Sundial"
   ]
 }

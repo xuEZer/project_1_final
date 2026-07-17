@@ -68,6 +68,7 @@ def parse_result(name: str, lr: float, batch_size: int) -> dict:
         "val_imp_loss": None,
         "val_imp_mse": float("inf"),
         "training_completed": False,
+        "error": None,
     }
     log_path = LOG_DIR / f"{name}.log"
     if not log_path.exists():
@@ -128,9 +129,19 @@ def run_one(dataset: str, imputer: str, lr: float, batch_size: int) -> dict:
             overrides.extend(["--experiment.load_ckpt", str(ckpt_path)])
 
     cmd = [sys.executable, str(ROOT / "main.py"), *overrides]
-    ret = subprocess.run(cmd, cwd=str(ROOT),
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    ret = subprocess.run(
+        cmd,
+        cwd=str(ROOT),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
     result = parse_result(name, lr, batch_size)
+    if ret.returncode != 0:
+        stderr_lines = [line.strip() for line in ret.stderr.splitlines() if line.strip()]
+        result["error"] = " | ".join(stderr_lines[-3:]) or (
+            f"main.py exited with status {ret.returncode}"
+        )
     if existing["training_completed"]:
         result["epoch"] = existing["epoch"]
         result["val_imp_loss"] = existing["val_imp_loss"]
@@ -157,7 +168,8 @@ def run_serial(groups: dict[tuple[str, str], list[dict]]) -> dict[tuple[str, str
             if r["val_imp_mse"] != float("inf"):
                 log(f"val_imp_mse={r['val_imp_mse']:.6f}")
             else:
-                log("FAILED")
+                detail = f": {r['error']}" if r.get("error") else ""
+                log(f"FAILED{detail}")
     return results
 
 
@@ -171,7 +183,8 @@ def run_parallel(tasks: list[dict], workers: int) -> dict[tuple[str, str], list[
         if r["val_imp_mse"] != float("inf"):
             log(f"val_imp_mse={r['val_imp_mse']:.6f}")
         else:
-            log("FAILED")
+            detail = f": {r['error']}" if r.get("error") else ""
+            log(f"FAILED{detail}")
         return r
 
     try:

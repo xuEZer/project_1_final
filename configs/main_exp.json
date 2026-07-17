@@ -4,14 +4,14 @@
     "B2"
   ],
   "datasets": [
-    "Supply_Chain_Customer_D"
+    "ETTh1_H"
   ],
   "imputers": [
-    "SAITS"
+    "SAITS",
+    "DeepMVI"
   ],
   "predictors": [
     "Chronos",
-    "Sundial",
     "Toto2"
   ]
 }
