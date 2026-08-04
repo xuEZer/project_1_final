@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from types import MethodType
 
 import torch
 import torch.nn as nn
@@ -62,6 +63,49 @@ def _patch_dynamic_cache() -> None:
         DynamicCache.get_usable_length = get_usable_length  # type: ignore[attr-defined]
 
 
+def _patch_sundial_generation(model: nn.Module) -> None:
+    """Route the Transformers 4.41 generation entry point to Sundial's search.
+
+    Sundial's remote code overrides ``_greedy_search``.  Transformers 4.41
+    merged greedy search into ``_sample``, bypassing that override and
+    returning a standard 2-D causal-LM sequence.  Adapt the new signature to
+    the remote implementation without modifying the HuggingFace cache.
+    """
+    sundial_search = getattr(model, "_greedy_search", None)
+    if sundial_search is None:
+        return
+
+    def _sample_compat(
+        self,
+        input_ids,
+        logits_processor,
+        stopping_criteria,
+        generation_config,
+        synced_gpus,
+        streamer,
+        logits_warper=None,
+        **model_kwargs,
+    ):
+        del self, logits_warper
+        return sundial_search(
+            input_ids,
+            logits_processor=logits_processor,
+            stopping_criteria=stopping_criteria,
+            pad_token_id=generation_config.pad_token_id,
+            eos_token_id=generation_config.eos_token_id,
+            output_attentions=generation_config.output_attentions,
+            output_hidden_states=generation_config.output_hidden_states,
+            output_scores=generation_config.output_scores,
+            output_logits=getattr(generation_config, "output_logits", None),
+            return_dict_in_generate=generation_config.return_dict_in_generate,
+            synced_gpus=synced_gpus,
+            streamer=streamer,
+            **model_kwargs,
+        )
+
+    model._sample = MethodType(_sample_compat, model)  # type: ignore[attr-defined]
+
+
 class SundialPredictor(nn.Module):
     """Sundial forecasting model (e.g. ``thuml/sundial-small-32m``).
 
@@ -92,6 +136,7 @@ class SundialPredictor(nn.Module):
         self.backbone = AutoModelForCausalLM.from_pretrained(
             model_path, trust_remote_code=True,
         ).to(device)
+        _patch_sundial_generation(self.backbone)
         self.backbone.eval()
         logger.info("Sundial model loaded on %s.", device)
 
@@ -110,11 +155,50 @@ class SundialPredictor(nn.Module):
 
         for feat_idx in range(D):
             seqs = imputed_X[:, :, feat_idx]  # (B, T)
+            input_token_len = int(self.backbone.config.input_token_len)
+            if seqs.shape[1] % input_token_len != 0:
+                raise ValueError(
+                    "Sundial context length must be divisible by "
+                    f"input_token_len={input_token_len}, got {seqs.shape[1]}."
+                )
+            # Newer Transformers versions otherwise infer a timestep-level
+            # mask of length T, while Sundial attention operates on T / patch
+            # tokens.  Supplying the token-level mask keeps remote model code
+            # compatible with the Chronos-2 dependency floor.
+            attention_mask = torch.ones(
+                (B, seqs.shape[1] // input_token_len),
+                dtype=torch.long,
+                device=seqs.device,
+            )
+            # Sundial's remote TSGenerationMixin assumes that Transformers
+            # returns samples as (B, S, P).  Recent Transformers releases call
+            # the model's custom search routine, which returns (S, B, P)
+            # instead.  The remote mixin therefore fails while broadcasting
+            # its ReVIN statistics whenever B != S.  Disable remote ReVIN and
+            # perform the same normalization locally after canonicalizing the
+            # generated tensor layout.
+            means = seqs.mean(dim=-1, keepdim=True)
+            stdev = seqs.std(dim=-1, keepdim=True, unbiased=False) + 1e-5
+            normalized_seqs = (seqs - means) / stdev
             output = self.backbone.generate(
-                seqs,
+                normalized_seqs,
                 max_new_tokens=self.forecast_length,
                 num_samples=self.num_samples,
-            )  # (B, num_samples, forecast_length)
+                attention_mask=attention_mask,
+                revin=False,
+            )
+
+            output = _canonicalize_samples(
+                output,
+                batch_size=B,
+                num_samples=self.num_samples,
+            )
+            output = output * stdev.unsqueeze(1) + means.unsqueeze(1)
+
+            # Some Transformers versions return context + continuation for
+            # this remote-code model, while older versions returned only the
+            # continuation.  Normalize both forms explicitly.
+            output = output[..., -self.forecast_length:]
 
             if self.sample_aggregation == "mean":
                 output = output.mean(dim=1)  # (B, forecast_length)
@@ -123,3 +207,32 @@ class SundialPredictor(nn.Module):
 
         pred_data = torch.stack(pred_list, dim=-1)  # (B, forecast_length, D)
         return {"pred_data": pred_data}
+
+
+def _canonicalize_samples(
+    output: torch.Tensor,
+    *,
+    batch_size: int,
+    num_samples: int,
+) -> torch.Tensor:
+    """Return Sundial samples in the stable ``(B, S, P)`` layout."""
+    if output.ndim == 2:
+        if output.shape[0] != batch_size:
+            raise RuntimeError(
+                "Unexpected 2-D Sundial output shape "
+                f"{tuple(output.shape)} for B={batch_size}, S={num_samples}."
+            )
+        return output.unsqueeze(1)
+
+    if output.ndim != 3:
+        raise RuntimeError(
+            f"Expected a 2-D or 3-D Sundial output, got {tuple(output.shape)}."
+        )
+    if output.shape[:2] == (batch_size, num_samples):
+        return output
+    if output.shape[:2] == (num_samples, batch_size):
+        return output.permute(1, 0, 2).contiguous()
+    raise RuntimeError(
+        "Unexpected Sundial sample layout "
+        f"{tuple(output.shape)} for B={batch_size}, S={num_samples}."
+    )

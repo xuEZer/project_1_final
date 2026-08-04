@@ -52,7 +52,9 @@ def read_best_lr_bs() -> tuple[str, str]:
     return values["training.lr"], values["loader.batch_size"]
 
 
-def overrides_for(k: int, epsilon: float, delta: float, lr: str, bs: str) -> list[str]:
+def overrides_for(
+    subspace_rank: int, epsilon: float, delta: float, lr: str, bs: str
+) -> list[str]:
     return [
         "--experiment.type", "B2",
         "--data.dataset", DATASET,
@@ -60,7 +62,7 @@ def overrides_for(k: int, epsilon: float, delta: float, lr: str, bs: str) -> lis
         "--predictor.model", PREDICTOR,
         "--training.lr", lr,
         "--loader.batch_size", bs,
-        "--tip.k", str(k),
+        "--tip.subspace_rank", str(subspace_rank),
         "--tip.epsilon", str(epsilon),
         "--tip.confidence_delta", str(delta),
     ]
@@ -147,12 +149,12 @@ def main() -> None:
     grid = json.loads(GRID_PATH.read_text())
     lr, bs = read_best_lr_bs()
     tasks = []
-    for k, epsilon, delta in product(
-        grid["k"], grid["epsilon"], grid["confidence_delta"]
+    for subspace_rank, epsilon, delta in product(
+        grid["subspace_rank"], grid["epsilon"], grid["confidence_delta"]
     ):
-        overrides = overrides_for(k, epsilon, delta, lr, bs)
+        overrides = overrides_for(subspace_rank, epsilon, delta, lr, bs)
         tasks.append({
-            "k": k,
+            "subspace_rank": subspace_rank,
             "epsilon": epsilon,
             "confidence_delta": delta,
             "lr": lr,
@@ -169,7 +171,7 @@ def main() -> None:
     if args.run and args.workers == 1:
         results = []
         for index, task in enumerate(tasks, 1):
-            print(f"[{index:02d}/{len(tasks)}] k={task['k']} eps={task['epsilon']} "
+            print(f"[{index:02d}/{len(tasks)}] rank={task['subspace_rank']} eps={task['epsilon']} "
                   f"delta={task['confidence_delta']}", flush=True)
             results.append(run_task(task))
     elif args.run:
@@ -179,7 +181,7 @@ def main() -> None:
             for future in as_completed(futures):
                 result = future.result()
                 results.append(result)
-                print(f"done k={result['k']} eps={result['epsilon']} "
+                print(f"done rank={result['subspace_rank']} eps={result['epsilon']} "
                       f"delta={result['confidence_delta']} "
                       f"val_pred_mse={result['val_pred_mse']}", flush=True)
     else:
@@ -199,13 +201,13 @@ def main() -> None:
     print(f"\nCompleted results: {len(valid)}/{len(tasks)}")
     for rank, item in enumerate(valid[:10], 1):
         print(f"{rank:2d}. val_pred_mse={item['val_pred_mse']:.6f} "
-              f"val_imp_loss={item['val_imp_loss']} k={item['k']} "
+              f"val_imp_loss={item['val_imp_loss']} rank={item['subspace_rank']} "
               f"eps={item['epsilon']} delta={item['confidence_delta']} "
               f"epoch={item['best_epoch']}")
     if valid:
         best = valid[0]
         print("\nBEST: "
-              f"k={best['k']}, epsilon={best['epsilon']}, "
+              f"subspace_rank={best['subspace_rank']}, epsilon={best['epsilon']}, "
               f"confidence_delta={best['confidence_delta']}, "
               f"val_pred_mse={best['val_pred_mse']:.6f}, "
               f"val_imp_loss={best['val_imp_loss']}")

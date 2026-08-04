@@ -1,0 +1,2 @@
+dataset,frequency,series_scanned,median_score,p90_score,ranking_score,representative_item_id,representative_variate_index,representative_variate_name,representative_length,representative_score
+Supply_Chain_Customer,D,4,0.547698544765751,0.5968184453053031,0.8461077674184025,item0,23,Shein_TotalRevenue,2007,0.525219374870886

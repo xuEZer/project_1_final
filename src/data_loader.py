@@ -783,7 +783,11 @@ def get_tensor_data_loader(
             dataset["train"],
             shuffle=True,
             generator=train_generator,
-        )
+        ),
+        # Keep evaluation independent of the shuffled optimization iterator.
+        # Its six-tensor layout deliberately matches validation so train/val
+        # metrics use identical artificial-mask and target semantics.
+        "train_eval": build_train_loader(dataset["train"], shuffle=False),
     }
 
     def build_eval_loader(split: dict[str, any]) -> tuple[DataLoader, bool]:

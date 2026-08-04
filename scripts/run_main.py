@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""Run configured B1/B2 experiments.
+"""Run the fixed-protocol real-task experiment batch.
 
-- B1: loads the selected imputer checkpoint and evaluates each predictor
-  directly (no retraining).
-- B2: reads the selected lr/batch_size only; TIP starts from random
-  initialization and trains independently for each predictor.
+The experiment matrix and every shared hyperparameter are defined in
+``configs/main_exp.json``. Completed runs are detected from their log files and
+skipped, so an interrupted batch can be resumed with the same command.
 
-Usage:
-  python scripts/run_main.py           # serial (default)
-  python scripts/run_main.py -j 4      # 4 parallel workers
+Examples:
+  uv run python scripts/run_main.py --dry-run
+  uv run python scripts/run_main.py
+  uv run python scripts/run_main.py --workers 2
+  uv run python scripts/run_main.py --stage B2 --dataset CPHL_30T
 """
 
 from __future__ import annotations
@@ -25,203 +26,243 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from main import resolve_experiment_name
+from main import config_from_overrides, normalize_config_value, selected_config_payload
 
-MAIN_EXP = ROOT / "configs" / "main_exp.json"
+DEFAULT_CONFIG_PATH = ROOT / "configs" / "main_exp.json"
 LOG_DIR = ROOT / "logs"
-BEST_CFG_DIR = ROOT / "configs" / "best_cfg"
-
-_print_lock = threading.Lock()
+_PRINT_LOCK = threading.Lock()
 
 
-def log(msg: str = "", end: str = "\n") -> None:
-    with _print_lock:
-        print(msg, end=end, flush=True)
+def emit(message: str = "") -> None:
+    with _PRINT_LOCK:
+        print(message, flush=True)
 
 
-def load_json(path: Path) -> dict:
-    with open(path) as f:
-        return json.load(f)
+def load_config(config_path: Path) -> dict:
+    with config_path.open(encoding="utf-8") as handle:
+        config = json.load(handle)
+    required = {"exp_types", "datasets", "imputers", "predictors", "fixed"}
+    missing = required.difference(config)
+    if missing:
+        raise ValueError(f"Missing keys in {config_path}: {sorted(missing)}")
+    if any(name.startswith("ETT") for name in config["datasets"]):
+        raise ValueError("ETT datasets are excluded from the real-task batch.")
+    return config
 
 
-def read_best_config(dataset: str, imputer: str) -> dict[str, str]:
-    """Parse best_{dataset}_{imputer}.ini into a dict."""
-    cfg_path = BEST_CFG_DIR / f"best_{dataset}_{imputer}.ini"
-    if not cfg_path.exists():
-        log(f"  [WARN] Best config not found: {cfg_path}")
-        return {}
-    cfg: dict[str, str] = {}
-    section = ""
-    for line in cfg_path.read_text().splitlines():
-        line = line.strip()
-        if line.startswith("[") and line.endswith("]"):
-            section = line[1:-1]
-        elif "=" in line and section:
-            k, v = line.split("=", 1)
-            cfg[f"{section}.{k.strip()}"] = v.strip()
-    return cfg
+def fixed_overrides(fixed: dict) -> list[str]:
+    mapping = (
+        ("experiment.seed", "seed"),
+        ("training.lr", "learning_rate"),
+        ("loader.batch_size", "batch_size"),
+        ("training.max_epochs", "max_epochs"),
+        ("training.patience", "patience"),
+        ("data.missing_rate", "missing_rate"),
+        ("data.artificial_missing_rate", "artificial_missing_rate"),
+        ("data.block_size", "block_size"),
+        ("data.lookback", "lookback"),
+        ("data.pred_len", "prediction_length"),
+        ("tip.subspace_rank", "subspace_rank"),
+        ("tip.epsilon", "epsilon"),
+        ("tip.confidence_delta", "confidence_delta"),
+    )
+    overrides: list[str] = []
+    for option, key in mapping:
+        if key not in fixed:
+            raise ValueError(f"Missing fixed hyperparameter: {key}")
+        overrides.extend((f"--{option}", str(fixed[key])))
+    return overrides
 
 
-def is_completed(name: str) -> bool:
-    log_path = LOG_DIR / f"{name}.log"
-    if not log_path.exists():
-        return False
-    return "Experiment completed successfully!" in log_path.read_text()
-
-
-def run_one(exp_type: str, dataset: str, imputer: str,
-            predictor: str, lr: str, batch_size: str,
-            ckpt: str = "") -> tuple[str, bool, bool]:
-    """Run one experiment; return (name, ok, was_cached)."""
-    overrides = [
-        "--experiment.type", exp_type,
-        "--data.dataset", dataset,
-        "--imputer.model", imputer,
-        "--predictor.model", predictor,
-        "--training.lr", lr,
-        "--loader.batch_size", batch_size,
+def task_overrides(
+    exp_type: str,
+    dataset: str,
+    imputer: str,
+    predictor: str,
+    fixed: dict,
+) -> list[str]:
+    return [
+        "--experiment.type",
+        exp_type,
+        "--data.dataset",
+        dataset,
+        "--imputer.model",
+        imputer,
+        "--predictor.model",
+        predictor,
+        *fixed_overrides(fixed),
     ]
-    if ckpt:
-        overrides += ["--experiment.load_ckpt", ckpt]
-
-    name = resolve_experiment_name(overrides)
-    if is_completed(name):
-        return name, True, True
-
-    cmd = [sys.executable, str(ROOT / "main.py"), *overrides]
-    subprocess.run(cmd, cwd=str(ROOT), capture_output=True)
-    return name, is_completed(name), False
 
 
-def build_tasks(main_exp: dict, best_cfgs: dict) -> tuple[list[dict], int]:
-    """Build flat task list; return (tasks, skip_count)."""
-    tasks: list[dict] = []
-    skip_count = 0
-
-    for exp_type in main_exp["exp_types"]:
-        for (dataset, imputer), cfg in best_cfgs.items():
-            lr = cfg.get("training.lr", "1e-3")
-            bs = cfg.get("loader.batch_size", "32")
-            ckpt = cfg.get("paths.ckpt", "")
-
-            for predictor in main_exp["predictors"]:
-                if exp_type == "B1" and not ckpt:
-                    log(f"  B1 {dataset}/{imputer}/{predictor} SKIP (no ckpt)")
-                    skip_count += 1
-                    continue
-                tasks.append({
-                    "exp_type": exp_type, "dataset": dataset,
-                    "imputer": imputer, "predictor": predictor,
-                    "lr": lr, "bs": bs,
-                    "ckpt": ckpt if exp_type == "B1" else "",
-                    "label": f"{exp_type} {dataset}/{imputer}/{predictor}",
-                })
-    return tasks, skip_count
+def logged_config(path: Path) -> dict[str, str]:
+    """Recover normalized ``section.key`` values from one experiment log."""
+    values: dict[str, str] = {}
+    section: str | None = None
+    for line in path.read_text(errors="replace").splitlines():
+        message = line.split(" - INFO - ", 1)[-1]
+        if message.startswith("[") and message.endswith("]"):
+            section = message[1:-1]
+            continue
+        if section is None or not message.startswith("  ") or " = " not in message:
+            continue
+        key, value = message.strip().split("=", 1)
+        values[f"{section}.{key.strip()}"] = normalize_config_value(value)
+    return values
 
 
-def run_serial(tasks: list[dict]) -> tuple[int, int, int]:
-    ok = fail = cached = 0
-    label_width = max(len(t["label"]) for t in tasks) if tasks else 40
+def completed(task: dict) -> bool:
+    """Check exact or legacy logs for the same scientific configuration."""
+    exact_path = LOG_DIR / f"{task['name']}.log"
+    candidates = [exact_path]
+    if "__" in task["name"]:
+        prefix = task["name"].rsplit("__", 1)[0]
+        candidates.extend(
+            path for path in LOG_DIR.glob(f"{prefix}__*.log") if path != exact_path
+        )
+    for path in candidates:
+        if not path.exists():
+            continue
+        content = path.read_text(errors="replace")
+        if "Experiment completed successfully!" not in content:
+            continue
+        if path == exact_path:
+            return True
+        legacy_values = logged_config(path)
+        if all(legacy_values.get(key) == value for key, value in task["payload"].items()):
+            return True
+    return False
+
+
+def build_tasks(config: dict, args: argparse.Namespace) -> list[dict]:
+    stages = [args.stage] if args.stage else config["exp_types"]
+    datasets = [args.dataset] if args.dataset else config["datasets"]
+    imputers = [args.imputer] if args.imputer else config["imputers"]
+    predictors = [args.predictor] if args.predictor else config["predictors"]
+
+    for selected, available, label in (
+        (stages, config["exp_types"], "stage"),
+        (datasets, config["datasets"], "dataset"),
+        (imputers, config["imputers"], "imputer"),
+        (predictors, config["predictors"], "predictor"),
+    ):
+        unknown = set(selected).difference(available)
+        if unknown:
+            raise ValueError(f"Unknown {label}: {sorted(unknown)}")
+
+    tasks = []
+    # A model combination is the scheduling unit. Its stages stay adjacent,
+    # e.g. B1 -> B2 for the main experiment, rather than running all B1 first.
+    for dataset, imputer, predictor in product(datasets, imputers, predictors):
+        group = f"{dataset}/{imputer}/{predictor}"
+        for stage in stages:
+            overrides = task_overrides(
+                stage, dataset, imputer, predictor, config["fixed"]
+            )
+            final_config = config_from_overrides(overrides)
+            name = final_config.get("experiment", "name")
+            tasks.append(
+                {
+                    "label": f"{stage} {group}",
+                    "group": group,
+                    "name": name,
+                    "payload": selected_config_payload(final_config),
+                    "overrides": overrides,
+                }
+            )
+    return tasks
+
+
+def run_one(task: dict) -> tuple[dict, str]:
+    if completed(task):
+        return task, "cached"
+    command = [sys.executable, str(ROOT / "main.py"), *task["overrides"]]
+    result = subprocess.run(command, cwd=ROOT, check=False)
+    # ``main.py`` writes the completion marker only after training, checkpoint
+    # saving, and all split evaluations have finished.  Some predictor
+    # runtimes can still return a non-zero code during interpreter/CUDA
+    # teardown.  Treat the durable marker as authoritative so a successfully
+    # completed B1 does not prevent its paired B2 from being scheduled.
+    if completed(task):
+        if result.returncode != 0:
+            emit(
+                f"[WARN  ] {task['label']} completed, but its process exited "
+                f"with code {result.returncode}; continuing from the log "
+                "completion marker."
+            )
+        return task, "ok"
+    return task, "failed"
+
+
+def run_group(tasks: list[dict]) -> list[tuple[dict, str]]:
+    """Run all stages for one model combination in configured order."""
+    results = []
     for task in tasks:
-        log(f"  {task['label']:<{label_width}}  ...", end=" ")
-        name, success, was_cached = run_one(
-            task["exp_type"], task["dataset"], task["imputer"],
-            task["predictor"], task["lr"], task["bs"],
-            ckpt=task["ckpt"],
-        )
-        if was_cached:
-            log("OK (cached)")
-            ok += 1
-            cached += 1
-        elif success:
-            log("OK")
-            ok += 1
-        else:
-            log("FAILED")
-            fail += 1
-    return ok, fail, cached
+        task_result = run_one(task)
+        results.append(task_result)
+        if task_result[1] == "failed":
+            break
+    return results
 
 
-def run_parallel(tasks: list[dict], workers: int) -> tuple[int, int, int]:
-    ok = fail = cached = 0
-    failed_labels: list[str] = []
-
-    def worker(task: dict) -> tuple[str, bool, bool]:
-        name, success, was_cached = run_one(
-            task["exp_type"], task["dataset"], task["imputer"],
-            task["predictor"], task["lr"], task["bs"],
-            ckpt=task["ckpt"],
-        )
-        return task["label"], success, was_cached
-
-    try:
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            futures = {pool.submit(worker, t): t for t in tasks}
-            for future in as_completed(futures):
-                label, success, was_cached = future.result()
-                if was_cached:
-                    log(f"  {label}  OK (cached)")
-                    ok += 1
-                    cached += 1
-                elif success:
-                    log(f"  {label}  OK")
-                    ok += 1
-                else:
-                    log(f"  {label}  FAILED")
-                    fail += 1
-                    failed_labels.append(label)
-    except KeyboardInterrupt:
-        log("\n[ABORT] Interrupted; cancelling pending tasks...")
-        for f in futures:
-            f.cancel()
-        pool.shutdown(wait=False)
-        raise
-
-    if failed_labels:
-        log(f"\n  Failed tasks ({len(failed_labels)}):")
-        for label in failed_labels:
-            log(f"    {label}")
-
-    return ok, fail, cached
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Run configured experiments")
-    parser.add_argument("-j", "--workers", type=int, default=1,
-                        help="Number of parallel workers (default: 1)")
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Run real-task experiments with one fixed hyperparameter set."
+    )
+    parser.add_argument("--workers", "-j", type=int, default=1)
+    parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--stage")
+    parser.add_argument("--dataset")
+    parser.add_argument("--imputer")
+    parser.add_argument("--predictor")
     args = parser.parse_args()
+    if args.workers < 1:
+        parser.error("--workers must be at least 1")
 
-    main_exp = load_json(MAIN_EXP)
+    config = load_config(args.config.expanduser().resolve())
+    tasks = build_tasks(config, args)
+    pending = [task for task in tasks if not completed(task)]
+    emit(
+        f"Fixed protocol: {len(tasks)} tasks; "
+        f"{len(tasks) - len(pending)} completed; {len(pending)} pending."
+    )
+    emit(json.dumps(config["fixed"], ensure_ascii=False, sort_keys=True))
 
-    best_cfgs: dict[tuple[str, str], dict[str, str]] = {}
-    for dataset, imputer in product(main_exp["datasets"], main_exp["imputers"]):
-        cfg = read_best_config(dataset, imputer)
-        if cfg:
-            best_cfgs[(dataset, imputer)] = cfg
-        else:
-            log(f"[SKIP] {dataset}/{imputer}: no best config")
+    if args.dry_run:
+        for index, task in enumerate(tasks, start=1):
+            state = "DONE" if completed(task) else "TODO"
+            emit(f"[{index:03d}/{len(tasks):03d}] {state} {task['label']}")
+        return 0
 
-    tasks, skip_count = build_tasks(main_exp, best_cfgs)
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    counts = {"ok": 0, "cached": len(tasks) - len(pending), "failed": 0}
+    groups: dict[str, list[dict]] = {}
+    for task in pending:
+        groups.setdefault(task["group"], []).append(task)
 
-    log(f"\n{'='*60}")
-    log(f"  {len(tasks)} tasks, {skip_count} skipped, {args.workers} worker(s)")
-    log(f"{'='*60}\n")
-
-    if args.workers <= 1:
-        ok, fail, cached = run_serial(tasks)
+    if args.workers == 1:
+        group_results = map(run_group, groups.values())
+        for results in group_results:
+            for task, state in results:
+                counts[state] += 1
+                emit(f"[{state.upper():6}] {task['label']}")
     else:
-        ok, fail, cached = run_parallel(tasks, args.workers)
+        with ThreadPoolExecutor(max_workers=args.workers) as executor:
+            futures = [
+                executor.submit(run_group, group_tasks)
+                for group_tasks in groups.values()
+            ]
+            for future in as_completed(futures):
+                for task, state in future.result():
+                    counts[state] += 1
+                    emit(f"[{state.upper():6}] {task['label']}")
 
-    log(f"\n{'='*60}")
-    parts = [f"{ok} OK"]
-    if cached:
-        parts.append(f"{cached} cached")
-    parts.append(f"{fail} FAILED")
-    if skip_count:
-        parts.append(f"{skip_count} SKIP")
-    log(f"  Done: {', '.join(parts)}")
-    log(f"{'='*60}")
+    emit(
+        f"Finished: {counts['ok']} new, {counts['cached']} cached, "
+        f"{counts['failed']} failed."
+    )
+    return 1 if counts["failed"] else 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

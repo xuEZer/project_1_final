@@ -217,9 +217,9 @@ def _match_log(
         "--loader.batch_size", bs,
     ]
 
-    k_match = re.search(r"(?:^|_)k([\d.]+)(?:_|$)", extra)
-    if k_match:
-        overrides.extend(["--tip.k", k_match.group(1)])
+    rank_match = re.search(r"(?:^|_)rank([\d.]+)(?:_|$)", extra)
+    if rank_match:
+        overrides.extend(["--tip.subspace_rank", rank_match.group(1)])
 
     p_match = re.search(r"(?:^|_)p([\d.]+)(?:_|$)", extra)
     if p_match:
@@ -490,8 +490,8 @@ def gen_cost_table(results: dict[str, EvalResult],
     lr = bc.lr if bc else "?"
     bs = bc.bs if bc else "?"
 
-    def _epoch_time(exp_type: str, k: str = "") -> float | None:
-        extra = f"k{k}_" if k else ""
+    def _epoch_time(exp_type: str, rank: str = "") -> float | None:
+        extra = f"rank{rank}_" if rank else ""
         r = _match_log(results, exp_type, ds_key, imp, pred, lr, bs, extra=extra)
         if r is None:
             return None
@@ -523,16 +523,12 @@ def gen_cost_table(results: dict[str, EvalResult],
     rows = []
     # B1 row
     rows.append(r"B1            & 1          & 1           & 0            & $1\times$               \\")
-    # B2 with different k
-    for k in ["5", "10", "20"]:
-        t = _epoch_time("B2", k)
+    # B2 with different local-subspace ranks
+    for rank in ["2", "3", "4"]:
+        t = _epoch_time("B2", rank)
         rel = f"${t/b1_time:.1f}\\times$" if t and b1_time else r"\ldots"
-        fwd = 1 + 2 * int(k)
-        rows.append(rf"B2 ($k={k}$)    & {fwd:<10} & 1           & {fwd:<13} & {rel} \\")
-    # B6
-    t = _epoch_time("B6", "20")
-    rel = f"${t/b1_time:.1f}\\times$" if t and b1_time else r"\ldots"
-    rows.append(rf"B6 ($k=20$)   & 41         & 0           & 41           & {rel} \\")
+        fwd = 1 + 2 * int(rank)
+        rows.append(rf"B2 ($r={rank}$)    & {fwd:<10} & 1           & 1            & {rel} \\")
 
     return rf"""\begin{{tabular}}{{lcccc}}
 \toprule

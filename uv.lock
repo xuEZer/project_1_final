@@ -21,7 +21,7 @@ wheels = [
 
 [[package]]
 name = "accelerate"
-version = "0.34.2"
+version = "1.14.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "huggingface-hub" },
@@ -32,9 +32,9 @@ dependencies = [
     { name = "safetensors" },
     { name = "torch" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4d/82/5712c44a5a5ef7c4d375363b179a099e834491221ece02e81a1209b08233/accelerate-0.34.2.tar.gz", hash = "sha256:98c1ebe1f5a45c0a3af02dc60b5bb8b7d58d60c3326a326a06ce6d956b18ca5b", size = 328806, upload-time = "2024-09-05T16:45:20.816Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/8d/75/94cd5d389649578aca399e5aa822637eec18319a1dadc400ffe2f9a7493f/accelerate-1.14.0.tar.gz", hash = "sha256:41b9c4377a54e0b460a959b0defa1b736e4ca0a2373252d9a539964c2afe3c8d", size = 412167, upload-time = "2026-06-11T13:45:52.326Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b0/5e/80cee674cdbe529ef008721d7eebb50ae5def4314211d82123aa23e828f8/accelerate-0.34.2-py3-none-any.whl", hash = "sha256:d69159e2c4e4a473d14443b27d2d732929254e826b3ab4813b3785b5ac616c7c", size = 324366, upload-time = "2024-09-05T16:45:17.121Z" },
+    { url = "https://files.pythonhosted.org/packages/a8/db/253133d7e7cb40d3af384bb2f5c0b4a2b7fdcffbc95c688cc67a20a3c103/accelerate-1.14.0-py3-none-any.whl", hash = "sha256:e94390c2863b873be18f623f9df48a0d8fe5eff13ea7f1a00092b0a7904888c6", size = 389246, upload-time = "2026-06-11T13:45:50.477Z" },
 ]
 
 [[package]]
@@ -262,16 +262,19 @@ wheels = [
 
 [[package]]
 name = "chronos-forecasting"
-version = "1.5.0"
+version = "2.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "accelerate" },
+    { name = "einops" },
+    { name = "numpy" },
+    { name = "pandas" },
     { name = "torch" },
     { name = "transformers" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4c/68/cdbb4d6d0a0bf64e80be13853a43b61a3589d713b28e680ed30ff1e04e30/chronos_forecasting-1.5.0.tar.gz", hash = "sha256:2141a8cf50660e99d45f112a5d8794d6e472511859e32ad2bce47fc6f147b056", size = 521997, upload-time = "2025-02-06T15:39:03.428Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a6/71/609ff332069de0580a8a1fa357558975a91be786d612ce179c2797a00a52/chronos_forecasting-2.3.1.tar.gz", hash = "sha256:785116f3f10aaac44a315700c5e4de71a5fe6385c9c771722d688f402fe75083", size = 726426, upload-time = "2026-07-02T08:22:58.672Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/dc/ca/da16d4a7365f48c348b11bfe92ec99f4c236659eb242ce2c12cd2b68789c/chronos_forecasting-1.5.0-py3-none-any.whl", hash = "sha256:d7f0b3ecb3461f326c3e755d90378fb3d0ead281e9680fe096170be02e39455d", size = 29151, upload-time = "2025-02-06T15:39:01.923Z" },
+    { url = "https://files.pythonhosted.org/packages/79/50/41e712bb9fa93a2d4cb18e68f2667e544d46750756c808fe754180e8aba2/chronos_forecasting-2.3.1-py3-none-any.whl", hash = "sha256:d9d00ec9b1621235bfb26685638bf054885f4c000863678f1c775dfab2697496", size = 80559, upload-time = "2026-07-02T08:22:57.296Z" },
 ]
 
 [[package]]
@@ -1629,7 +1632,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "chronos-forecasting" },
+    { name = "chronos-forecasting", specifier = ">=2.0" },
     { name = "datasets" },
     { name = "h5py" },
     { name = "huggingface-hub", specifier = ">=0.19.3,<1.0" },
@@ -1641,7 +1644,7 @@ requires-dist = [
     { name = "tensorboard" },
     { name = "torch", specifier = ">=2.12.1" },
     { name = "toto-models", specifier = ">=1.0.0" },
-    { name = "transformers", specifier = "==4.40.1" },
+    { name = "transformers", specifier = ">=4.41,<4.42" },
 ]
 
 [[package]]
@@ -2424,7 +2427,7 @@ wheels = [
 
 [[package]]
 name = "transformers"
-version = "4.40.1"
+version = "4.41.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "filelock" },
@@ -2438,9 +2441,9 @@ dependencies = [
     { name = "tokenizers" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4c/89/916d19fa02f460a095292292ad489d9f7c0884b877ff67f9aa8eb0df0ed1/transformers-4.40.1.tar.gz", hash = "sha256:55e1697e6f18b58273e7117bb469cdffc11be28995462d8d5e422fef38d2de36", size = 7796775, upload-time = "2024-04-23T22:01:15.805Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/50/c9/b8acdf584f19558e29f46d36b5ed80954c2d3831811f129a5a6e84c4537b/transformers-4.41.2.tar.gz", hash = "sha256:80a4db216533d573e9cc7388646c31ed9480918feb7c55eb211249cb23567f87", size = 7841904, upload-time = "2024-05-30T17:59:26.634Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/cf/90/2596ac2ab49c4df6ff1fceaf7f5afb18401ba2f326348ce1a6261a65e7ed/transformers-4.40.1-py3-none-any.whl", hash = "sha256:9d5ee0c8142a60501faf9e49a0b42f8e9cb8611823bce4f195a9325a6816337e", size = 8998636, upload-time = "2024-04-23T22:01:10.479Z" },
+    { url = "https://files.pythonhosted.org/packages/d9/b7/98f821d70102e2d38483bbb7013a689d2d646daa4495377bc910374ad727/transformers-4.41.2-py3-none-any.whl", hash = "sha256:05555d20e43f808de1ef211ab64803cdb513170cef70d29a888b589caebefc67", size = 9092643, upload-time = "2024-05-30T17:59:20.944Z" },
 ]
 
 [[package]]

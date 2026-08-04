@@ -176,16 +176,23 @@ def evaluate(
     """Evaluate a trained joint model on the evaluation dataloader."""
     logger.info("Starting evaluation on %s split...", split_name)
 
-    metric_fns = {
-        "mae": masked_mae_cal,
-        "mse": masked_mse_cal,
-        "mre": masked_mre_cal,
-        "rmse": masked_rmse_cal,
-    }
     totals = {
-        name: {"imp": 0.0, "pred": 0.0, "imp_weight": 0.0, "pred_weight": 0.0}
-        for name in metric_fns
+        kind: {"abs_error": 0.0, "sq_error": 0.0, "target_abs": 0.0, "count": 0.0}
+        for kind in ("imp", "pred")
     }
+
+    def accumulate(
+        kind: str,
+        prediction: torch.Tensor,
+        target: torch.Tensor,
+        mask: torch.Tensor,
+    ) -> None:
+        """Accumulate sufficient statistics for exact dataset-level metrics."""
+        error = prediction - target
+        totals[kind]["abs_error"] += (error.abs() * mask).sum().item()
+        totals[kind]["sq_error"] += (error.square() * mask).sum().item()
+        totals[kind]["target_abs"] += (target.abs() * mask).sum().item()
+        totals[kind]["count"] += mask.sum().item()
 
     if no_gt:
         logger.info(
@@ -204,26 +211,36 @@ def evaluate(
             imputed = outputs["imp_data"]
             pred = _require_prediction(outputs, "evaluation")
 
-            for name, metric_fn in metric_fns.items():
-                if X is not None and X_mask is not None:
-                    w = X_mask.sum().item()
-                    totals[name]["imp"] += metric_fn(imputed, X, X_mask).item() * w
-                    totals[name]["imp_weight"] += w
-                w = Y_mask.sum().item()
-                totals[name]["pred"] += metric_fn(pred, Y, Y_mask).item() * w
-                totals[name]["pred_weight"] += w
+            if X is not None and X_mask is not None:
+                accumulate("imp", imputed, X, X_mask)
+            accumulate("pred", pred, Y, Y_mask)
 
     logger.info("-" * 50)
     logger.info("Evaluation Results Summary: split=%s", split_name)
     logger.info(f"{'':<10} {'Imputation':<20} {'Prediction':<20}")
     logger.info("-" * 50)
 
+    def finalize(kind: str) -> dict[str, float] | None:
+        values = totals[kind]
+        if values["count"] <= 0:
+            return None
+        mse = values["sq_error"] / values["count"]
+        return {
+            "mae": values["abs_error"] / values["count"],
+            "mse": mse,
+            "mre": values["abs_error"] / (values["target_abs"] + 1e-9),
+            "rmse": mse ** 0.5,
+        }
+
+    imp_metrics = finalize("imp")
+    pred_metrics = finalize("pred")
+    if pred_metrics is None:
+        raise RuntimeError(f"No observed prediction targets on {split_name} split.")
+
     metrics: dict[str, float | None] = {}
     for name in ("mae", "mse", "mre", "rmse"):
-        imp_w = totals[name]["imp_weight"]
-        pred_w = max(1.0, totals[name]["pred_weight"])
-        avg_imp = totals[name]["imp"] / imp_w if imp_w > 0 else None
-        avg_pred = totals[name]["pred"] / pred_w
+        avg_imp = imp_metrics[name] if imp_metrics is not None else None
+        avg_pred = pred_metrics[name]
         metrics[f"imp_{name}"] = avg_imp
         metrics[f"pred_{name}"] = avg_pred
         if avg_imp is None:

@@ -48,7 +48,7 @@ def run_checked(command: list[str], label: str) -> None:
 def load_complete_best_result() -> tuple[dict, int]:
     grid = json.loads(GRID_PATH.read_text())
     expected = math.prod(
-        len(grid[key]) for key in ("k", "epsilon", "confidence_delta")
+        len(grid[key]) for key in ("subspace_rank", "epsilon", "confidence_delta")
     )
     results = json.loads(RESULT_PATH.read_text())
     complete = [
@@ -58,11 +58,11 @@ def load_complete_best_result() -> tuple[dict, int]:
         and math.isfinite(float(row["val_pred_mse"]))
     ]
     combinations = {
-        (row["k"], row["epsilon"], row["confidence_delta"])
+        (row["subspace_rank"], row["epsilon"], row["confidence_delta"])
         for row in complete
     }
     expected_combinations = set(product(
-        grid["k"], grid["epsilon"], grid["confidence_delta"]
+        grid["subspace_rank"], grid["epsilon"], grid["confidence_delta"]
     ))
     if len(complete) != expected or combinations != expected_combinations:
         missing = expected_combinations - combinations
@@ -75,7 +75,7 @@ def load_complete_best_result() -> tuple[dict, int]:
 
 def update_tip_section(best: dict) -> None:
     replacements = {
-        "k": str(best["k"]),
+        "subspace_rank": str(best["subspace_rank"]),
         "epsilon": str(best["epsilon"]),
         "confidence_delta": str(best["confidence_delta"]),
     }
@@ -113,7 +113,7 @@ def main() -> None:
     best, total = load_complete_best_result()
     print(
         f"\n[2/3 Select TIP] evaluated={total} | "
-        f"k={best['k']} | epsilon={best['epsilon']} | "
+        f"subspace_rank={best['subspace_rank']} | epsilon={best['epsilon']} | "
         f"confidence_delta={best['confidence_delta']} | "
         f"val_pred_mse={float(best['val_pred_mse']):.6f}",
         flush=True,

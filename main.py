@@ -88,11 +88,15 @@ def selected_config_payload(config: ConfigParser) -> dict[str, str]:
     for key in ("optimizer", "lr", "max_epochs", "patience", "min_delta"):
         add("training", key)
 
-    for key in ("batch_size", "auto_batch", "micro_batch"):
+    # ``batch_size`` defines the effective optimization batch and therefore
+    # the experiment.  ``auto_batch`` and ``micro_batch`` only choose how that
+    # effective batch is executed in memory; changing either must not create a
+    # new scientific experiment identity.
+    for key in ("batch_size",):
         add("loader", key)
 
-    if exp_type == "B2":
-        for key in ("k", "epsilon", "confidence_delta"):
+    if exp_type in {"B2", "B3", "B4", "B5"}:
+        for key in ("subspace_rank", "epsilon", "confidence_delta"):
             add("tip", key)
 
     return payload
@@ -111,11 +115,11 @@ def generate_experiment_name(config: ConfigParser) -> str:
         f"lr{lr}",
         f"bs{batch_size}",
     ]
-    if exp_type == "B2":
-        k = normalize_config_value(config.get("tip", "k"))
+    if exp_type in {"B2", "B3", "B4", "B5"}:
+        rank = normalize_config_value(config.get("tip", "subspace_rank"))
         epsilon = normalize_config_value(config.get("tip", "epsilon"))
         confidence_delta = normalize_config_value(config.get("tip", "confidence_delta"))
-        parts.extend([f"k{k}", f"eps{epsilon}", f"delta{confidence_delta}"])
+        parts.extend([f"rank{rank}", f"eps{epsilon}", f"delta{confidence_delta}"])
 
     prefix = "_".join(safe_name_part(part) for part in parts)
     payload = selected_config_payload(config)
@@ -371,6 +375,18 @@ def main() -> None:
     ckpt_path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(joint_model.imputer.state_dict(), ckpt_path)
     logger.info("Saved checkpoint to %s", ckpt_path)
+
+    train_eval_loader = train_loader.get("train_eval")
+    if train_eval_loader is not None:
+        with torch_seed_scope(seed, "train_evaluation"):
+            evaluate(
+                config,
+                joint_model,
+                train_eval_loader,
+                no_gt=False,
+                logger=logger,
+                split_name="train",
+            )
 
     val_loader = train_loader.get("val")
     if val_loader is not None:

@@ -75,7 +75,7 @@ def overrides_for(row: dict) -> list[str]:
         "--predictor.model", PREDICTOR,
         "--training.lr", str(row["lr"]),
         "--loader.batch_size", str(row["batch_size"]),
-        "--tip.k", str(row["k"]),
+        "--tip.subspace_rank", str(row["subspace_rank"]),
         "--tip.epsilon", str(row["epsilon"]),
         "--tip.confidence_delta", str(row["confidence_delta"]),
     ]
@@ -86,7 +86,7 @@ def load_rows(path: Path) -> list[dict]:
     if not isinstance(rows, list) or not rows:
         raise ValueError(f"Expected a non-empty JSON list: {path}")
     required = {
-        "name", "k", "epsilon", "confidence_delta", "lr", "batch_size"
+        "name", "subspace_rank", "epsilon", "confidence_delta", "lr", "batch_size"
     }
     for index, row in enumerate(rows):
         missing = required - row.keys()
@@ -244,7 +244,7 @@ def main() -> None:
         write_atomic(output_path, rows)
         print(
             f"[{completed_before + offset:02d}/{total}] "
-            f"k={row['k']} eps={row['epsilon']} "
+            f"rank={row['subspace_rank']} eps={row['epsilon']} "
             f"delta={row['confidence_delta']} train_pred_mse={mse:.6f}",
             flush=True,
         )

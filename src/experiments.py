@@ -3,7 +3,7 @@
 Supported experiment types:
 
 - ``B1``: Two-stage baseline — imputer only, reconstruction loss L_I.
-- ``B2``: TIP — zero-order ĝ_P + conditional orthogonal projection.
+- ``B2``: TIP — deterministic local-subspace prediction projection.
 """
 
 from __future__ import annotations
@@ -48,6 +48,7 @@ class EpochMonitor:
         self._val_loader = val_loader
         self._num_epoch = num_epoch
         self._patience = patience
+        self._checkpoint_enabled = patience > 0
         self._min_delta = min_delta
         self._logger = logger
         self._best_value = float("inf")
@@ -71,8 +72,10 @@ class EpochMonitor:
 
         self._logger.info("Epoch %03d/%d | %s", epoch, self._num_epoch, " | ".join(parts))
 
-        # Checkpoint & early stopping (always on val imp_loss)
-        if self._val_loader is not None:
+        # ``patience <= 0`` is the fixed-horizon mode: validation is still
+        # logged, but neither early stopping nor best-checkpoint selection is
+        # allowed to replace the final-epoch state.
+        if self._checkpoint_enabled and self._val_loader is not None:
             if self._best_value - val_current > self._min_delta:
                 self._best_value = val_current
                 self._best_epoch = epoch
@@ -84,7 +87,7 @@ class EpochMonitor:
             else:
                 self._no_improve += 1
 
-        if self._no_improve >= self._patience:
+        if self._checkpoint_enabled and self._no_improve >= self._patience:
             self._logger.info(
                 "Early stopping at epoch %03d (no improvement for %d epochs)",
                 epoch, self._no_improve,
@@ -95,6 +98,13 @@ class EpochMonitor:
     # ------------------------------------------------------------------
     def restore_best(self) -> None:
         """Load the best imputer state back into the model."""
+        if not self._checkpoint_enabled:
+            self._logger.info(
+                "Early stopping and best-checkpoint selection disabled "
+                "(patience=%d); keeping final epoch state.",
+                self._patience,
+            )
+            return
         if self._best_state is None:
             return
         self._model.imputer.load_state_dict(self._best_state)
@@ -146,11 +156,15 @@ def run_experiment(
 
     if exp_type == "B1":
         trained_model = _run_b1(joint_model, train_loader, config, logger, on_epoch_end)
-    elif exp_type == "B2":
-        trained_model = _run_b2(joint_model, train_loader, config, logger, on_epoch_end)
+    elif exp_type in {"B2", "B3", "B4", "B5"}:
+        trained_model = _run_b2(
+            joint_model, train_loader, config, logger, on_epoch_end,
+            exp_type=exp_type,
+        )
     else:
         raise ValueError(
-            f"Unknown experiment type {exp_type}. Available types: B1, B2"
+            f"Unknown experiment type {exp_type}. "
+            "Available types: B1, B2, B3, B4, B5"
         )
 
     epoch_monitor.restore_best()
@@ -181,11 +195,26 @@ def _run_b1(
     num_epoch = config.getint("training", "max_epochs")
 
     log_phase(logger, "B1 — Standard Imputer Training", num_epoch)
+
+    def observe_optimizer_step(
+        pred_loss_before: float,
+        pred_loss_after_raw_adamw: float,
+        pred_loss_after_applied_update: float,
+    ) -> None:
+        joint_model.record_prediction_optimizer_step(
+            phase_name="b1",
+            pred_loss_before=pred_loss_before,
+            pred_loss_after_raw_adamw=pred_loss_after_raw_adamw,
+            pred_loss_after_applied_update=pred_loss_after_applied_update,
+            projection_applied=False,
+        )
+
     joint_model.fit(
         data_loader=train_loader,
         phase_name="b1",
         num_epoch=num_epoch,
         on_epoch_end=on_epoch_end,
+        optimizer_step_observer=observe_optimizer_step,
     )
 
     return joint_model
@@ -200,25 +229,44 @@ def _run_b2(
     config: ConfigParser,
     logger: logging.Logger,
     on_epoch_end=None,
+    exp_type: str = "B2",
 ) -> JointModel:
-    """B2: Full TIP — zero-order ĝ_P estimation + conditional projection."""
+    """Run TIP or a matched subspace/correction ablation."""
     num_epoch = config.getint("training", "max_epochs")
-    k = config.getint("tip", "k")
+    subspace_rank = config.getint("tip", "subspace_rank")
     epsilon = config.getfloat("tip", "epsilon")
     confidence_delta = config.getfloat("tip", "confidence_delta")
 
-    log_phase(logger, "B2 — TIP Training", num_epoch)
+    variants = {
+        "B2": ("history", "robust", "ucb"),
+        "B3": ("random", "robust", "ucb"),
+        "B4": ("history", "point", "ucb"),
+        "B5": ("history", "robust", "mean"),
+    }
+    basis_mode, correction_mode, gate_mode = variants[exp_type]
+    log_phase(
+        logger,
+        f"{exp_type} — TIP ({basis_mode} subspace, {correction_mode} "
+        f"correction, {gate_mode} gate)",
+        num_epoch,
+    )
     logger.info(
-        f"  k={k}, epsilon={epsilon}, confidence_delta={confidence_delta}"
+        "  subspace_rank=%d, epsilon=%g, confidence_delta=%g, "
+        "basis_mode=%s, correction_mode=%s, gate_mode=%s",
+        subspace_rank, epsilon, confidence_delta, basis_mode, correction_mode,
+        gate_mode,
     )
     joint_model.fit_tip(
         data_loader=train_loader,
-        phase_name="b2",
+        phase_name=exp_type.lower(),
         num_epoch=num_epoch,
         on_epoch_end=on_epoch_end,
-        k=k,
+        subspace_rank=subspace_rank,
         epsilon=epsilon,
         confidence_delta=confidence_delta,
+        basis_mode=basis_mode,
+        correction_mode=correction_mode,
+        gate_mode=gate_mode,
     )
 
     return joint_model

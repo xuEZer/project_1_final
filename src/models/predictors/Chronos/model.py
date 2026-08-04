@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 class ChronosPredictor(nn.Module):
-    """Chronos forecasting model (e.g. ``amazon/chronos-bolt-small``).
+    """Chronos forecasting model (e.g. ``amazon/chronos-2``).
 
     Uses the ``chronos`` package pipeline.  Output is converted to a
     deterministic point forecast via mean aggregation.
@@ -52,7 +52,12 @@ class ChronosPredictor(nn.Module):
             )
         config = AutoConfig.from_pretrained(model_path)
         arch = next(iter(getattr(config, "architectures", []) or []), "")
-        if "Chronos2" in arch and Chronos2Pipeline is not None:
+        if "Chronos2" in arch:
+            if Chronos2Pipeline is None:
+                raise RuntimeError(
+                    "Chronos-2 requires chronos-forecasting>=2.0; "
+                    "update the project environment before running experiments."
+                )
             pipeline_cls: Any = Chronos2Pipeline
         elif "ChronosBolt" in arch:
             pipeline_cls = ChronosBoltPipeline
@@ -90,7 +95,7 @@ class ChronosPredictor(nn.Module):
             imputed_X.detach()
             .permute(0, 2, 1)
             .reshape(B * D, -1)
-            .float()
+            .to(device="cpu", dtype=torch.float32)
         )
 
         predict_kwargs: dict[str, Any] = {
@@ -99,7 +104,21 @@ class ChronosPredictor(nn.Module):
         if self._accepts_num_samples:
             predict_kwargs["num_samples"] = self.num_samples
 
-        samples = self.pipeline.predict(contexts, **predict_kwargs)
+        # Chronos-2 requires (n_series, n_variates, history_length), whereas
+        # Chronos and Chronos-Bolt accept (n_series, history_length).  Keep
+        # variables independent here to preserve the predictor's established
+        # D=1 evaluation semantics.
+        pipeline_inputs = contexts
+        if Chronos2Pipeline is not None and isinstance(self.pipeline, Chronos2Pipeline):
+            pipeline_inputs = contexts.unsqueeze(1)
+
+        if pipeline_inputs.device.type != "cpu":
+            raise RuntimeError(
+                "Chronos pipeline inputs must be CPU tensors before its "
+                "internal pinned-memory DataLoader runs."
+            )
+
+        samples = self.pipeline.predict(pipeline_inputs, **predict_kwargs)
         point = _chronos_to_array(samples, self.forecast_length, batch_size=B * D)
 
         pred_data = (
@@ -141,7 +160,20 @@ def _chronos_to_array(
 def _forecast_to_array(
     output: Any, prediction_length: int, *, batch_size: int,
 ) -> np.ndarray:
-    """Normalize heterogeneous forecast backend output to ``(B, P)`` float32."""
+    """Normalize heterogeneous forecast backend output to ``(B, P)`` float32.
+
+    Layout convention (verified against chronos-forecasting 2.3.1): every
+    supported pipeline returns the horizon as the LAST dim —
+
+    * ``ChronosPipeline.predict``   → tensor ``(B, num_samples, P)``
+    * ``ChronosBoltPipeline.predict`` → tensor ``(B, n_quantiles, P)``
+    * ``Chronos2Pipeline.predict``  → list of tensors ``(n_variates,
+      n_quantiles, P)``
+
+    The 3-D case is therefore resolved deterministically (horizon on dim -1)
+    instead of guessing from dimension sizes, which silently mis-averages the
+    samples axis whenever ``num_samples >= prediction_length``.
+    """
     if isinstance(output, (tuple, list)) and output:
         output = output[0]
     if isinstance(output, torch.Tensor):
@@ -163,11 +195,18 @@ def _forecast_to_array(
     elif arr.ndim == 3:
         if arr.shape[0] != batch_size:
             raise RuntimeError(f"Unexpected Chronos output shape: {arr.shape}")
-        # (B, samples, P) or (B, P, samples) — detect which dim is P
-        if arr.shape[1] >= prediction_length:
+        # (B, S, P) is the canonical layout: horizon is always dim -1.
+        if arr.shape[-1] == prediction_length:
+            arr = arr.mean(axis=1)[:, -prediction_length:]
+        # (B, P, S) legacy layout — kept only for exotic backends that do not
+        # follow the canonical convention; no supported pipeline uses it.
+        elif arr.shape[1] == prediction_length:
             arr = arr.mean(axis=2)[:, -prediction_length:]
         else:
-            arr = arr.mean(axis=1)[:, -prediction_length:]
+            raise RuntimeError(
+                f"Cannot determine Chronos sample layout: {arr.shape}; "
+                f"expected horizon {prediction_length} on dim -1 or dim 1."
+            )
     else:
         raise RuntimeError(f"Unexpected Chronos output shape: {arr.shape}")
 

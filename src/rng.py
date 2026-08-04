@@ -2,8 +2,8 @@
 
 The project uses one user-facing ``experiment.random_seed`` as a base seed,
 but each stochastic process derives its own named seed from that base. This
-keeps model initialization, data shuffling, missing-mask generation, and TIP
-random directions independent from one another.
+keeps model initialization, data shuffling, and missing-mask generation
+independent from one another.
 """
 
 from __future__ import annotations

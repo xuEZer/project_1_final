@@ -4,14 +4,41 @@
     "B2"
   ],
   "datasets": [
-    "ETTh1_H"
+    "azure2019_I_5T",
+    "EWELD_Load_15T",
+    "Coastal_T_S_15T",
+    "Smart_Manufacturing_H",
+    "SG_Weather_D",
+    "MetroPT-3_5T",
+    "Australia_Solar_H"
   ],
   "imputers": [
     "SAITS",
-    "DeepMVI"
+    "DeepMVI",
+    "FITS",
+    "ModernTCN",
+    "TimesNet",
+    "TSLANet",
+    "BRITS"
   ],
   "predictors": [
+    "Toto2",
     "Chronos",
-    "Toto2"
-  ]
+    "Sundial"
+  ],
+  "fixed": {
+    "seed": 42,
+    "learning_rate": 0.001,
+    "batch_size": 256,
+    "max_epochs": 300,
+    "patience": 10,
+    "missing_rate": 0.2,
+    "artificial_missing_rate": 0.2,
+    "block_size": 32,
+    "lookback": 512,
+    "prediction_length": 16,
+    "subspace_rank": 8,
+    "epsilon": 0.001,
+    "confidence_delta": 0.1
+  }
 }
