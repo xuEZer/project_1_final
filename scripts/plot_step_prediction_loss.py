@@ -13,15 +13,12 @@ import numpy as np
 
 
 STEP_PATTERN = re.compile(
-    r"Prediction optimizer step: step=(?P<step>\d+) \| phase=(?P<phase>\w+) \| "
+    r"Prediction optimizer step: step=(?P<step>\d+) \| "
     r"pred_loss_before=(?P<before>[-+\d.eE]+) \| "
-    r"raw_adamw_pred_loss_after=(?P<raw_after>[-+\d.eE]+) \| "
-    r"pred_loss_after=(?P<after>[-+\d.eE]+) \| "
     r"raw_adamw_pred_loss_delta=(?P<raw_delta>[-+\d.eE]+) \| "
     r"pred_loss_delta=(?P<delta>[-+\d.eE]+) \| "
     r"pred_loss_relative_delta=(?P<relative_delta>[-+\d.eE]+) \| "
-    r"tip_projection_gain=(?P<gain>[-+\d.eE]+) \| "
-    r"projection_applied=(?P<projected>[01])"
+    r"tip_projection_gain=(?P<gain>[-+\d.eE]+)"
 )
 
 def parse_args() -> argparse.Namespace:
@@ -53,18 +50,21 @@ def parse_log(path: Path) -> list[dict[str, float | int | str]]:
         if match is None:
             continue
         values = match.groupdict()
+        # ``after`` values are no longer logged (redundant with delta);
+        # reconstruct them from before + delta for plotting.
+        before = float(values["before"])
+        raw_delta = float(values["raw_delta"])
+        delta = float(values["delta"])
         records.append(
             {
                 "step": int(values["step"]),
-                "phase": values["phase"],
-                "before": float(values["before"]),
-                "raw_after": float(values["raw_after"]),
-                "after": float(values["after"]),
-                "raw_delta": float(values["raw_delta"]),
-                "delta": float(values["delta"]),
+                "before": before,
+                "raw_after": before + raw_delta,
+                "after": before + delta,
+                "raw_delta": raw_delta,
+                "delta": delta,
                 "relative_delta": float(values["relative_delta"]),
                 "gain": float(values["gain"]),
-                "projected": int(values["projected"]),
             }
         )
     if not records:
@@ -109,7 +109,6 @@ def align_records(
                 "b2_raw_delta": float(right["raw_delta"]),
                 "b2_delta": float(right["delta"]),
                 "b2_projection_gain": float(right["gain"]),
-                "b2_projection_applied": int(right["projected"]),
             }
         )
     return rows
@@ -144,9 +143,6 @@ def plot(
         [row["b2_raw_delta"] for row in rows], dtype=float
     )
     b2_delta = np.asarray([row["b2_delta"] for row in rows], dtype=float)
-    projected = np.asarray(
-        [row["b2_projection_applied"] for row in rows], dtype=bool
-    )
 
     fig, axes = plt.subplots(2, 1, figsize=(9, 6.5), sharex=True)
     axes[0].plot(step, moving_average(b1_after, smooth), label="B1 after")
@@ -169,14 +165,6 @@ def plot(
         label="B2 raw AdamW delta",
     )
     axes[1].plot(step, moving_average(b2_delta, smooth), label="B2 TIP delta")
-    if projected.any():
-        axes[1].scatter(
-            step[projected],
-            b2_delta[projected],
-            s=10,
-            alpha=0.35,
-            label="TIP projection applied",
-        )
     axes[1].set_xlabel("Optimizer step")
     axes[1].set_ylabel("Prediction MSE change")
     axes[1].legend(frameon=False, ncol=2)

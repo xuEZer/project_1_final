@@ -169,7 +169,6 @@ class TimerPredictor(nn.Module):
             n_bad = int((~torch.isfinite(imputed_X)).sum().item())
             raise RuntimeError(f"Timer received {n_bad} non-finite input(s).")
 
-        # (B, T, D) → (B*D, T) on inference device
         contexts = (
             imputed_X.detach()
             .permute(0, 2, 1)
@@ -187,30 +186,41 @@ class TimerPredictor(nn.Module):
 
         raw_logits, mean, std = self._forward_logits(contexts, mean=mean, std=std)
 
-        # Non-finite guard — retry on CPU once
-        if (isinstance(raw_logits, torch.Tensor)
-                and not torch.isfinite(raw_logits).all()):
+        # Timer's CUDA float16 logits occasionally go non-finite; retry the
+        # batch once on CPU and move the module back so the configured device
+        # and dtype stay untouched for subsequent calls.
+        run_device = self.device
+        if (
+            isinstance(raw_logits, torch.Tensor)
+            and not torch.isfinite(raw_logits).all()
+        ):
             n_bad = int((~torch.isfinite(raw_logits)).sum().item())
             if self.device != "cpu":
                 logger.warning(
                     "Timer produced %d non-finite logit(s) on %s; "
                     "retrying on CPU.", n_bad, self.device,
                 )
-                self.device = "cpu"
-                _move_module(self.backbone, "cpu")
-                self.input_dtype = torch.float32
-                contexts_cpu = contexts.to(device="cpu", dtype=torch.float32)
-                raw_logits, mean, std = self._forward_logits(
-                    contexts_cpu, mean=mean, std=std,
-                )
+                run_device = "cpu"
+                _move_module(self.backbone, run_device)
+                try:
+                    run_dtype = torch.float32
+                    contexts = contexts.to(device=run_device, dtype=run_dtype)
+                    if mean is not None:
+                        mean = mean.to(device=run_device, dtype=run_dtype)
+                    if std is not None:
+                        std = std.to(device=run_device, dtype=run_dtype)
+                    raw_logits, mean, std = self._forward_logits(
+                        contexts, mean=mean, std=std,
+                    )
+                finally:
+                    _move_module(self.backbone, self.device)
             else:
                 raise RuntimeError(
                     f"Timer produced {n_bad} non-finite logit(s) even on CPU."
                 )
 
-        # Convert to array for shape normalisation, then back to tensor
         point = _logits_to_array(raw_logits, self.forecast_length, B * D)
-        pred = torch.from_numpy(point).to(device=self.device, dtype=torch.float32)
+        pred = torch.from_numpy(point).to(device=run_device, dtype=torch.float32)
         if mean is not None and std is not None:
             pred = pred * std.float() + mean.float()
 

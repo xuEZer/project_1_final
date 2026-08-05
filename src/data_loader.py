@@ -14,7 +14,6 @@ import numpy as np
 import torch
 from datasets import load_dataset, load_from_disk
 from huggingface_hub import snapshot_download
-from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, TensorDataset
 
 from src.rng import numpy_rng
@@ -335,7 +334,6 @@ def generate_missing(
     incomplete_data = data.copy()
     incomplete_data[missing_mask] = np.nan
 
-    # --- assertions ---
     assert natural_missing_data.shape == data.shape
     assert incomplete_data.shape == data.shape
     assert natural_mask.shape == data.shape and natural_mask.dtype == bool
@@ -463,7 +461,6 @@ def split_data(
     val_split = _make_split(val_start, val_end) if fixed_boundaries or val_ratio > 0 else None
     test_split = _make_split(test_start, test_end)
 
-    # --- assertions ---
     _expected_keys = {"N_data", "N_mask", "NA_data", "NA_mask", "A_mask", "data"}
     assert train_split.keys() == _expected_keys
     assert test_split.keys() == _expected_keys
@@ -478,6 +475,21 @@ def split_data(
     return train_split, val_split, test_split
 
 
+class _IgnoreNaNScaler:
+    """Column-wise z-score transform whose statistics ignore NaNs.
+
+    NaNs pass through the transform unchanged so downstream NaN
+    replacement happens after standardization.
+    """
+
+    def __init__(self, mean: np.ndarray, scale: np.ndarray) -> None:
+        self.mean_ = mean
+        self.scale_ = scale
+
+    def transform(self, values: np.ndarray) -> np.ndarray:
+        return (values - self.mean_) / self.scale_
+
+
 def standardize_data(
     train_data: dict[str, np.ndarray | None],
     val_data: dict[str, np.ndarray | None] | None,
@@ -486,7 +498,7 @@ def standardize_data(
     dict[str, np.ndarray | None],
     dict[str, np.ndarray | None] | None,
     dict[str, np.ndarray | None],
-    StandardScaler,
+    _IgnoreNaNScaler,
 ]:
     """Fit a scaler on train data and transform all data partitions.
 
@@ -499,10 +511,18 @@ def standardize_data(
         Scaled train/val/test dictionaries and the fitted scaler.
 
     """
-    scaler = StandardScaler()
-    scaler.fit(train_data["N_data"])
+    # StandardScaler propagates NaN into mean_/scale_ when the series
+    # carries natural missing values; fit on observed values instead.
+    train_observed = train_data["N_data"]
+    mean = np.nanmean(train_observed, axis=0)
+    std = np.nanstd(train_observed, axis=0)
+    # Constant columns would divide by zero; centering alone keeps them at zero.
+    std = np.where(std == 0, 1.0, std)
+    scaler = _IgnoreNaNScaler(mean, std)
 
-    def _scale(split: dict[str, np.ndarray | None]) -> dict[str, np.ndarray | None]:
+    def _scale(
+        split: dict[str, np.ndarray | None],
+    ) -> dict[str, np.ndarray | None] | None:
         if split is None:
             return None
         s = split.copy()
@@ -517,7 +537,6 @@ def standardize_data(
     val_data_scaled = _scale(val_data)
     test_data_scaled = _scale(test_data)
 
-    # --- assertions ---
     assert not np.any(np.isnan(scaler.mean_)), "Scaler mean must not be NaN"
     assert not np.any(np.isnan(scaler.scale_)), "Scaler scale must not be NaN"
     assert np.all(scaler.scale_ > 0), "Scaler scale must be positive"
@@ -563,7 +582,6 @@ def white_nan_with_zero(
     val_data_filled = _fill(val_data)
     test_data_filled = _fill(test_data)
 
-    # --- assertions ---
     assert not np.isnan(train_data_filled["N_data"]).any(), \
         "N_data must have no NaN after filling"
     assert not np.isnan(train_data_filled["NA_data"]).any(), \
@@ -655,7 +673,6 @@ def truncate_data(
     val_set = truncate_data_(val_data, lookback_len, pred_len) if val_data is not None else None
     test_set = truncate_data_(test_data, lookback_len, pred_len)
 
-    # --- assertions ---
     assert len(train_set["X_N"]) > 0, (
         "Lookback length is too long for the training data."
     )
@@ -663,29 +680,24 @@ def truncate_data(
 
     for name, dset in [("train", train_set), ("test", test_set)]:
         n_windows = len(dset["X_N"])
-        # X and Y must have the same number of windows
         assert len(dset["Y_N"]) == n_windows, \
             f"{name}: X/Y window count mismatch"
-        # All X tensors must share the first dim
         for key in ["X_N", "X_NA", "X_N_mask", "X_NA_mask", "X_A_mask"]:
             assert dset[key].shape[0] == n_windows, \
                 f"{name}: {key} has wrong window count"
             assert dset[key].shape[1] == lookback_len, \
                 f"{name}: {key} has wrong lookback_len"
-        # All Y tensors
         for key in ["Y_N", "Y_N_mask"]:
             assert dset[key].shape[0] == n_windows, \
                 f"{name}: {key} has wrong window count"
             assert dset[key].shape[1] == pred_len, \
                 f"{name}: {key} has wrong pred_len"
-        # Optional X and Y
         if dset["X"] is not None:
             assert dset["X"].shape[:2] == (n_windows, lookback_len), \
                 f"{name}: X has wrong shape"
         if dset["Y"] is not None:
             assert dset["Y"].shape[:2] == (n_windows, pred_len), \
                 f"{name}: Y has wrong shape"
-        # Masks must be 0/1
         for key in ["X_N_mask", "X_NA_mask", "X_A_mask", "Y_N_mask"]:
             vals = dset[key]
             assert vals.min() >= 0.0 and vals.max() <= 1.0, \

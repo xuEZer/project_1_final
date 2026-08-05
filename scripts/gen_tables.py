@@ -30,10 +30,6 @@ from main import resolve_experiment_name
 LOG_DIR = ROOT / "logs"
 BEST_CFG_DIR = ROOT / "configs" / "best_cfg"
 
-# ---------------------------------------------------------------------------
-# Data model
-# ---------------------------------------------------------------------------
-
 
 @dataclass
 class EvalResult:
@@ -51,11 +47,6 @@ class BestConfig:
     lr: str = ""
     bs: str = ""
     ckpt: str = ""
-
-
-# ---------------------------------------------------------------------------
-# Log parsing
-# ---------------------------------------------------------------------------
 
 
 def parse_log(path: Path) -> EvalResult:
@@ -108,7 +99,7 @@ def load_all_results() -> dict[str, EvalResult]:
 def load_best_configs() -> dict[str, BestConfig]:
     cfgs: dict[str, BestConfig] = {}
     for cfg_path in sorted(BEST_CFG_DIR.glob("best_*.ini")):
-        ds_imp = cfg_path.stem[5:]  # remove "best_"
+        ds_imp = cfg_path.stem[5:]
         bc = BestConfig()
         section = ""
         for line in cfg_path.read_text().splitlines():
@@ -130,13 +121,8 @@ def load_best_configs() -> dict[str, BestConfig]:
     return cfgs
 
 
-# ---------------------------------------------------------------------------
-# Dynamic discovery of datasets / imputers / predictors
-# ---------------------------------------------------------------------------
-
 MAIN_EXP_JSON = ROOT / "configs" / "main_exp.json"
 
-# Short display names for datasets in LaTeX tables
 _DATASET_LABELS: dict[str, str] = {
     "Supply_Chain_Customer_D": "Supply Chain",
     "current_velocity_H": "Current Vel.",
@@ -152,7 +138,6 @@ BSS = ["16", "32", "64"]
 
 
 def _load_main_exp() -> dict:
-    """Load main_exp.json or return empty dict."""
     if MAIN_EXP_JSON.exists():
         with open(MAIN_EXP_JSON) as f:
             return json.load(f)
@@ -160,7 +145,6 @@ def _load_main_exp() -> dict:
 
 
 def discover() -> tuple[list[tuple[str, str]], list[str], list[str]]:
-    """Return (datasets, imputers, predictors) strictly from main_exp.json."""
     cfg = _load_main_exp()
     cfg_datasets = cfg.get("datasets", [])
     cfg_imputers = cfg.get("imputers", [])
@@ -170,7 +154,6 @@ def discover() -> tuple[list[tuple[str, str]], list[str], list[str]]:
     return datasets, list(cfg_imputers), list(cfg_predictors)
 
 
-# Module-level singletons (lazily resolved on first use)
 _DATASETS: list[tuple[str, str]] | None = None
 _IMPUTERS: list[str] | None = None
 _PREDICTORS: list[str] | None = None
@@ -207,7 +190,6 @@ def _match_log(
     bs: str,
     extra: str = "",
 ) -> EvalResult | None:
-    """Find the exact run defined by the current global and template configs."""
     overrides = [
         "--experiment.type", exp_type,
         "--data.dataset", ds_key,
@@ -234,7 +216,6 @@ def _match_log(
 
 @lru_cache(maxsize=None)
 def _expected_experiment_name(overrides: tuple[str, ...]) -> str:
-    """Generate a canonical name using the same config path as main.py."""
     return resolve_experiment_name(list(overrides))
 
 
@@ -245,15 +226,8 @@ def fmt_val(v: float | None, best: bool = False) -> str:
     return rf"\best{{{s}}}" if best else s
 
 
-# ---------------------------------------------------------------------------
-# Table generators
-# ---------------------------------------------------------------------------
-
-
 def gen_grid_search_table(results: dict[str, EvalResult],
                           best_cfgs: dict[str, BestConfig]) -> str:
-    """Generate the hyperparameter grid search table (tab:hparam_grid)."""
-
     def _row(ds_key: str, ds_label: str, imp: str) -> str:
         ds_imp = f"{ds_key}_{imp}"
         bc = best_cfgs.get(ds_imp)
@@ -300,9 +274,6 @@ def gen_grid_search_table(results: dict[str, EvalResult],
 
 def gen_main_results_table(results: dict[str, EvalResult],
                            best_cfgs: dict[str, BestConfig]) -> str:
-    """Generate the main prediction results table (tab:main_results)."""
-
-    # Build data matrix: [ds_idx][imp_idx][pred_idx] -> (b1_mse, b1_mae, b2_mse, b2_mae)
     data: dict = {}
     for _ds_idx, (ds_key, _) in enumerate(DATASETS()):
         for imp in IMPUTERS():
@@ -326,7 +297,6 @@ def gen_main_results_table(results: dict[str, EvalResult],
             b2_mae = fmt_val(b2.pred_mae if b2 else None)
         return b1_mse, b1_mae, b2_mse, b2_mae
 
-    # --- (a) Sundial: full table ---
     sundial_rows = []
     for ds_key, ds_label in DATASETS():
         ds_imp_rows = []
@@ -341,7 +311,6 @@ def gen_main_results_table(results: dict[str, EvalResult],
             sundial_rows.extend(ds_imp_rows)
             sundial_rows.append(r"\midrule")
 
-    # Remove trailing \midrule
     if sundial_rows and sundial_rows[-1] == r"\midrule":
         sundial_rows.pop()
 
@@ -361,7 +330,6 @@ def gen_main_results_table(results: dict[str, EvalResult],
 \end{{tabular}}
 \end{{minipage}}"""
 
-    # --- (b) Toto2, (c) Chronos: compact tables ---
     compact_tables = []
     for pred_idx, pred in enumerate(["Toto2", "Chronos"]):
         label = ["(b) Toto2", "(c) Chronos"][pred_idx]
@@ -401,8 +369,6 @@ MSE & MAE & MSE & MAE \\
 
 def gen_ablation_table(results: dict[str, EvalResult],
                        best_cfgs: dict[str, BestConfig]) -> str:
-    """Generate the projection ablation table (tab:projection_ablation)."""
-
     # Only Supply Chain and Current Velocity, SAITS + DeepMVI, Toto2 + Chronos
     ds_list = [("Supply_Chain_Customer_D", "Supply Chain"),
                ("current_velocity_H", "Current Vel.")]
@@ -448,8 +414,6 @@ def gen_ablation_table(results: dict[str, EvalResult],
 
 def gen_robustness_table(results: dict[str, EvalResult],
                          best_cfgs: dict[str, BestConfig]) -> str:
-    """Generate the missing rate robustness table (tab:missing_robustness)."""
-
     # Fixed: Supply Chain, SAITS, Chronos
     ds_key = "Supply_Chain_Customer_D"
     imp = "SAITS"
@@ -479,8 +443,6 @@ $p$ & B1 & B2 \\
 
 def gen_cost_table(results: dict[str, EvalResult],
                    best_cfgs: dict[str, BestConfig]) -> str:
-    """Generate the compute cost table (tab:compute_cost)."""
-
     # Fixed: Supply Chain, SAITS, Chronos
     ds_key = "Supply_Chain_Customer_D"
     imp = "SAITS"
@@ -495,7 +457,6 @@ def gen_cost_table(results: dict[str, EvalResult],
         r = _match_log(results, exp_type, ds_key, imp, pred, lr, bs, extra=extra)
         if r is None:
             return None
-        # Read log to get timing
         prefix = f"{exp_type}_{ds_key}_{imp}_{pred}_lr{lr}_bs{bs}"
         if extra:
             prefix += f"_{extra}"
@@ -521,9 +482,7 @@ def gen_cost_table(results: dict[str, EvalResult],
     b1_time = _epoch_time("B1")
 
     rows = []
-    # B1 row
     rows.append(r"B1            & 1          & 1           & 0            & $1\times$               \\")
-    # B2 with different local-subspace ranks
     for rank in ["2", "3", "4"]:
         t = _epoch_time("B2", rank)
         rel = f"${t/b1_time:.1f}\\times$" if t and b1_time else r"\ldots"
@@ -537,11 +496,6 @@ def gen_cost_table(results: dict[str, EvalResult],
 {chr(10).join(rows)}
 \bottomrule
 \end{{tabular}}"""
-
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
 
 
 TABLE_GENERATORS = {

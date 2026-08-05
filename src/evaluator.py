@@ -235,18 +235,23 @@ def evaluate(
     imp_metrics = finalize("imp")
     pred_metrics = finalize("pred")
     if pred_metrics is None:
-        raise RuntimeError(f"No observed prediction targets on {split_name} split.")
+        # A split can have no observed prediction targets (all masks missing);
+        # that is a valid outcome, not an error — report pred_* as N/A.
+        logger.info(
+            "No observed prediction targets on %s split — pred_* metrics are N/A.",
+            split_name,
+        )
+
+    def _fmt(value: float | None) -> str:
+        return f"{value:<20.6f}" if value is not None else f"{'N/A':<20}"
 
     metrics: dict[str, float | None] = {}
     for name in ("mae", "mse", "mre", "rmse"):
         avg_imp = imp_metrics[name] if imp_metrics is not None else None
-        avg_pred = pred_metrics[name]
+        avg_pred = pred_metrics[name] if pred_metrics is not None else None
         metrics[f"imp_{name}"] = avg_imp
         metrics[f"pred_{name}"] = avg_pred
-        if avg_imp is None:
-            logger.info(f"{name.upper():<10} {'N/A':<20} {avg_pred:<20.6f}")
-        else:
-            logger.info(f"{name.upper():<10} {avg_imp:<20.6f} {avg_pred:<20.6f}")
+        logger.info(f"{name.upper():<10} {_fmt(avg_imp)} {_fmt(avg_pred)}")
 
     logger.info("-" * 50)
     logger.info("Evaluation completed on %s split.", split_name)

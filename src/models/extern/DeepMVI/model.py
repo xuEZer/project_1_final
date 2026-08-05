@@ -80,8 +80,6 @@ class OurModel(nn.Module):
     ):
         super().__init__()
         hidden_dim = 512
-        # nkernel=int(32*np.log10(kernel_size))
-        # nkernel=int(3.2*kernel_size)
         nkernel = 64
         embedding_size = 10
 
@@ -125,7 +123,6 @@ class OurModel(nn.Module):
             dropout=0.0,
             mask_len=mask_len,
         )
-        # self.mapping_value = nn.Linear(nkernel,self.vdim)
 
         if use_local:
             assert self.kernel_size % self.block_size == 0
@@ -133,17 +130,10 @@ class OurModel(nn.Module):
                 kernel_size=self.block_size, stride=self.block_size
             )
 
-        if use_embed:
-            final_input_dim = self.vdim + kernel_output_dim
-        elif use_embed:
-            final_input_dim = kernel_output_dim
-        else:
-            final_input_dim = self.vdim
+        final_input_dim = self.vdim + (kernel_output_dim if use_embed else 0)
         if use_local:
             final_input_dim += 1
-            self.mean_outlier_layer = nn.Linear(final_input_dim, 1)
-        else:
-            self.mean_outlier_layer = nn.Linear(final_input_dim, 1)
+        self.mean_outlier_layer = nn.Linear(final_input_dim, 1)
         self.dropout = torch.nn.Dropout(p=0.1)
         self.std = None
         self.mlp = nn.Sequential(
@@ -218,12 +208,6 @@ class OurModel(nn.Module):
         attn_mask = self.pool(context_info[3])
 
         if self.use_embed:
-            # bs = residuals.shape[0]
-            # ns = residuals.shape[1]
-            # residuals = residuals.reshape(bs*ns,1,residuals.shape[2])
-            # residuals_conv = self.conv(self.dropout(residuals)).clamp(min=0)
-            # residuals_conv = residuals_conv.reshape(bs,ns,residuals_conv.shape[1],residuals_conv.shape[2])
-            # siblings = self.sibling_feats(residuals_conv,context_info[0].transpose(0,1))
             siblings = self.sibling_feats([residuals], context_info[0].transpose(0, 1))
 
         if self.use_context:
@@ -239,14 +223,12 @@ class OurModel(nn.Module):
                 (value.shape[0], self.atten_qdim, value.shape[2])
             ).to(value.device)
 
-        # value = self.mapping_value(value.transpose(1,2)).transpose(1,2)
         hidden_state = self.attention(
             value.clamp(min=0),
             attn_query.clamp(min=0),
             attn_mask[:, : attn_mask.shape[2], :],
             test,
         ).clamp(min=0)
-        # hidden_state = self.mlp(torch.cat([hidden_state,self.transformer_embeddings[0].weight[context_info[0][:,0]][:,None,:].expand(-1,hidden_state.shape[1],-1)],dim=-1))
         hidden_state = self.deconv(hidden_state.transpose(1, 2)).transpose(1, 2)
 
         if in_series.shape[1] % self.kernel_size != 0:
@@ -290,5 +272,4 @@ class OurModel(nn.Module):
     def mae_loss(self, y, y_pred, mask, context_info):
         temp = torch.abs((y_pred - y).cuda() * self.std[context_info[0]])
         loss = temp[mask > 0]
-        # print (loss.mean())
         return loss

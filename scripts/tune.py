@@ -3,8 +3,8 @@
 
 Grid search over lr × batch_size, selecting the best configuration by
 imputation MSE on the validation split after restoring the early-stopping
-checkpoint. Experiment names describe the training
-configuration itself, so the same run can be reused across analyses.
+checkpoint. Experiment names describe the training configuration itself, so
+the same run can be reused across analyses.
 
 Usage:
   python scripts/tune.py              # serial (default)
@@ -50,7 +50,6 @@ def load_json(path: Path) -> dict:
 
 
 def is_completed(name: str) -> bool:
-    """Check if experiment already ran successfully."""
     log_path = LOG_DIR / f"{name}.log"
     if not log_path.exists():
         return False
@@ -59,7 +58,6 @@ def is_completed(name: str) -> bool:
 
 
 def parse_result(name: str, lr: float, batch_size: int) -> dict:
-    """Parse validation imputation MSE from a completed experiment log."""
     result = {
         "name": name,
         "lr": lr,
@@ -100,7 +98,6 @@ def parse_result(name: str, lr: float, batch_size: int) -> dict:
 
 
 def run_one(dataset: str, imputer: str, lr: float, batch_size: int) -> dict:
-    """Run a single B1 experiment and return parsed results."""
     overrides = [
         "--experiment.type", "B1",
         "--data.dataset", dataset,
@@ -153,7 +150,6 @@ def run_one(dataset: str, imputer: str, lr: float, batch_size: int) -> dict:
 
 
 def run_serial(groups: dict[tuple[str, str], list[dict]]) -> dict[tuple[str, str], list[dict]]:
-    """Run tasks sequentially, with a header per (dataset, imputer) group."""
     results: dict[tuple[str, str], list[dict]] = {}
     for key, group_tasks in groups.items():
         dataset, imputer = key
@@ -174,7 +170,6 @@ def run_serial(groups: dict[tuple[str, str], list[dict]]) -> dict[tuple[str, str
 
 
 def run_parallel(tasks: list[dict], workers: int) -> dict[tuple[str, str], list[dict]]:
-    """Run tasks in parallel, grouped by (dataset, imputer)."""
     results: dict[tuple[str, str], list[dict]] = {}
 
     def worker(task: dict) -> dict:
@@ -208,7 +203,6 @@ def run_parallel(tasks: list[dict], workers: int) -> dict[tuple[str, str], list[
 
 
 def save_best_config(dataset: str, imputer: str, best: dict) -> Path:
-    """Write best config .ini file and return its path."""
     ckpt_path = CKPT_DIR / f"{best['name']}.pt"
     best_cfg = BEST_CFG_DIR / f"best_{dataset}_{imputer}.ini"
     best_cfg.write_text(
@@ -236,7 +230,6 @@ def main() -> None:
     CKPT_DIR.mkdir(parents=True, exist_ok=True)
     BEST_CFG_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Build grouped tasks: (dataset, imputer) → list of {lr, batch_size}
     groups: dict[tuple[str, str], list[dict]] = {}
     for dataset, imputer in product(main_exp["datasets"], main_exp["imputers"]):
         key = (dataset, imputer)
@@ -249,18 +242,15 @@ def main() -> None:
     log(f"  {len(groups)} dataset×imputer pairs, {total} runs, {args.workers} worker(s)")
     log(f"{'='*60}")
 
-    # Run
     if args.workers <= 1:
         results = run_serial(groups)
     else:
-        # Flatten for parallel execution
         flat_tasks = [
             {"dataset": ds, "imputer": imp, "lr": t["lr"], "batch_size": t["batch_size"]}
             for (ds, imp), ts in groups.items() for t in ts
         ]
         results = run_parallel(flat_tasks, args.workers)
 
-    # Process results: select best per (dataset, imputer)
     log(f"\n{'='*60}")
     log("  Selecting best configs")
     log(f"{'='*60}")

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import math
 from configparser import ConfigParser
 
 import torch
@@ -76,16 +77,21 @@ class EpochMonitor:
         # logged, but neither early stopping nor best-checkpoint selection is
         # allowed to replace the final-epoch state.
         if self._checkpoint_enabled and self._val_loader is not None:
-            if self._best_value - val_current > self._min_delta:
-                self._best_value = val_current
-                self._best_epoch = epoch
-                self._best_state = {
-                    k: v.detach().cpu().clone()
-                    for k, v in model.imputer.state_dict().items()
-                }
-                self._no_improve = 0
-            else:
-                self._no_improve += 1
+            # A non-finite val loss is an invalid observation (e.g. a split
+            # with no observed target): neither count it as an improvement
+            # nor as a no-improvement, so it cannot trigger early stopping
+            # or poison the best checkpoint.
+            if math.isfinite(val_current):
+                if self._best_value - val_current > self._min_delta:
+                    self._best_value = val_current
+                    self._best_epoch = epoch
+                    self._best_state = {
+                        k: v.detach().cpu().clone()
+                        for k, v in model.imputer.state_dict().items()
+                    }
+                    self._no_improve = 0
+                else:
+                    self._no_improve += 1
 
         if self._checkpoint_enabled and self._no_improve >= self._patience:
             self._logger.info(
@@ -95,7 +101,6 @@ class EpochMonitor:
             return True
         return False
 
-    # ------------------------------------------------------------------
     def restore_best(self) -> None:
         """Load the best imputer state back into the model."""
         if not self._checkpoint_enabled:
@@ -181,9 +186,6 @@ def imputer_state_hash(joint_model: JointModel) -> str:
     return digest.hexdigest()[:16]
 
 
-# ------------------------------------------------------------------ B1 --
-
-
 def _run_b1(
     joint_model: JointModel,
     train_loader: dict[str, DataLoader],
@@ -202,11 +204,9 @@ def _run_b1(
         pred_loss_after_applied_update: float,
     ) -> None:
         joint_model.record_prediction_optimizer_step(
-            phase_name="b1",
             pred_loss_before=pred_loss_before,
             pred_loss_after_raw_adamw=pred_loss_after_raw_adamw,
             pred_loss_after_applied_update=pred_loss_after_applied_update,
-            projection_applied=False,
         )
 
     joint_model.fit(
@@ -218,9 +218,6 @@ def _run_b1(
     )
 
     return joint_model
-
-
-# ------------------------------------------------------------------ B2 --
 
 
 def _run_b2(
@@ -270,9 +267,6 @@ def _run_b2(
     )
 
     return joint_model
-
-
-# ------------------------------------------------------------------ util --
 
 
 def log_phase(logger: logging.Logger, phase: str, epochs: int) -> None:

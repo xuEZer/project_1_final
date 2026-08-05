@@ -8,14 +8,11 @@
     "EWELD_Load_15T",
     "Coastal_T_S_15T",
     "Smart_Manufacturing_H",
-    "SG_Weather_D",
-    "MetroPT-3_5T",
-    "Australia_Solar_H"
+    "MetroPT-3_5T"
   ],
   "imputers": [
     "SAITS",
     "DeepMVI",
-    "FITS",
     "ModernTCN",
     "TimesNet",
     "TSLANet",
@@ -30,8 +27,8 @@
     "seed": 42,
     "learning_rate": 0.001,
     "batch_size": 256,
-    "max_epochs": 300,
-    "patience": 10,
+    "max_epochs": 50,
+    "patience": 5,
     "missing_rate": 0.2,
     "artificial_missing_rate": 0.2,
     "block_size": 32,

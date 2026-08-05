@@ -1,12 +1,4 @@
-"""Main entry point for the FOTSI training and evaluation workflow.
-
-This script orchestrates the full pipeline:
-1. Load and merge configuration files.
-2. Preprocess and window time-series data.
-3. Build dataloaders and initialize model components.
-4. Run the configured experiment phase.
-5. Evaluate and log final metrics.
-"""
+"""FOTSI training/evaluation entry point; the experiment phase is config-driven."""
 
 import hashlib
 import json
@@ -59,14 +51,12 @@ def normalize_config_value(value: str) -> str:
 
 
 def safe_name_part(value: str) -> str:
-    """Convert a config value into a filesystem-friendly name component."""
     normalized = normalize_config_value(value)
     safe = re.sub(r"[^A-Za-z0-9_.=-]+", "-", normalized).strip("-")
     return safe or "none"
 
 
 def selected_config_payload(config: ConfigParser) -> dict[str, str]:
-    """Return the final semantic config fields that define a run."""
     exp_type = config.get("experiment", "type")
     payload: dict[str, str] = {}
 
@@ -103,7 +93,6 @@ def selected_config_payload(config: ConfigParser) -> dict[str, str]:
 
 
 def generate_experiment_name(config: ConfigParser) -> str:
-    """Generate a canonical experiment name from the final run config."""
     exp_type = config.get("experiment", "type")
     lr = normalize_config_value(config.get("training", "lr"))
     batch_size = normalize_config_value(config.get("loader", "batch_size"))
@@ -132,7 +121,6 @@ def generate_experiment_name(config: ConfigParser) -> str:
 def set_generated_experiment_name(
     config: ConfigParser, init_logs: list[tuple[str, str]]
 ) -> None:
-    """Set ``experiment.name`` to the canonical name for the final config."""
     configured = (
         config.get("experiment", "name").strip()
         if config.has_option("experiment", "name")
@@ -151,18 +139,15 @@ def set_generated_experiment_name(
 
 
 def config_from_overrides(overrides: list[str]) -> ConfigParser:
-    """Build the same final config that ``main.py`` would run."""
     config, _ = parse_config([], cli_args=overrides)
     return config
 
 
 def resolve_experiment_name(overrides: list[str]) -> str:
-    """Resolve the canonical name for a list of ``--section.key value`` overrides."""
     return config_from_overrides(overrides).get("experiment", "name")
 
 
 def parse_column_index(value: str) -> int | str:
-    """Parse a dataset column selector as an integer index or ``"all"``."""
     normalized = value.strip().lower()
     if normalized == "all":
         return normalized
@@ -184,20 +169,6 @@ def resolve_batch_size(
     loader_kwargs: dict,
     logger: logging.Logger,
 ) -> tuple[int, int]:
-    """Determine micro batch size and gradient accumulation steps.
-
-    Three strategies (in priority order):
-
-    1. **Manual** — ``micro_batch_size`` config is non-zero; explicit override.
-    2. **Auto** — ternary search over power-of-2 batch sizes for maximum
-       throughput via :func:`src.auto_batch_size.find_max_batch_size`.
-    3. **Fallback** — ``micro_batch_size = effective_batch_size``, no
-       accumulation.
-
-    Returns:
-        ``(micro_batch_size, accum_steps)``.
-
-    """
     manual_micro_batch = config.getint("loader", "micro_batch")
     if manual_micro_batch > 0:
         micro_batch_size = manual_micro_batch
@@ -258,17 +229,6 @@ def build_dataloaders(
     joint_model: JointModel,
     logger: logging.Logger,
 ) -> tuple[dict[str, DataLoader], DataLoader, bool]:
-    """Build training and evaluation dataloaders with resolved batch size.
-
-    Reads dataloader config, determines the micro batch size via
-    :func:`resolve_batch_size`, sets ``joint_model.accum_steps`` /
-    ``joint_model.micro_batch_size``, and constructs train / train-eval /
-    test :class:`~torch.utils.data.DataLoader` instances.
-
-    Returns:
-        ``(train_loader, eval_loader, no_gt)``.
-
-    """
     effective_batch_size = config.getint("loader", "batch_size")
     device = config.get("training", "device")
     num_workers = config.getint("loader", "num_workers")
@@ -305,15 +265,6 @@ def build_dataloaders(
 
 
 def main() -> None:
-    """Run the end-to-end experiment lifecycle.
-
-    Args:
-        None.
-
-    Returns:
-        None.
-
-    """
     config, logger, tb_summary_writer = init_exp()
 
     log_system_info(logger)
@@ -409,18 +360,7 @@ def main() -> None:
 
 
 def init_exp() -> tuple[ConfigParser, logging.Logger, SummaryWriter]:
-    """Initialize configuration, logger, and TensorBoard writer.
-
-    Args:
-        None.
-
-    Returns:
-        A tuple of parsed config, initialized logger, and TensorBoard writer.
-
-    """
-    init_logs = []
-
-    config, init_logs = parse_config(init_logs)
+    config, init_logs = parse_config([])
 
     exp_name = config.get("experiment", "name")
     log_save_dir = Path(config.get("paths", "log_dir"))
@@ -450,17 +390,6 @@ def parse_config(
     init_logs: list[tuple[str, str]],
     cli_args: list[str] | None = None,
 ) -> tuple[ConfigParser, list[tuple[str, str]]]:
-    """Load global and template configs, then apply CLI overrides.
-
-    Args:
-        init_logs: Mutable list that collects startup log messages.
-        cli_args: Optional ``--section.key value`` override list. Defaults to
-            the current process argv when omitted.
-
-    Returns:
-        Parsed configuration and the updated startup logs.
-
-    """
     config = ConfigParser(interpolation=ExtendedInterpolation())
 
     if not GLOBAL_CONFIG_PATH.exists():
@@ -535,30 +464,18 @@ def parse_config(
 
 
 def exit_if_experiment_completed(exp_name: str, log_save_dir: Path) -> None:
-    """Exit early if a completed log for the same experiment already exists.
-
-    Args:
-        exp_name: Experiment name to check against existing log files.
-        log_save_dir: Directory that stores experiment log files.
-
-    Returns:
-        None.
-
-    """
     if not log_save_dir.exists():
-        return None
+        return
 
     log_path = log_save_dir / f"{exp_name}.log"
     if not log_path.exists():
-        return None
+        return
     try:
         content = log_path.read_text(encoding="utf-8", errors="ignore")
     except OSError:
-        return None
+        return
     if "Experiment completed successfully!" in content:
         sys.exit(0)
-
-    return None
 
 
 def configure_deterministic_runtime(seed: int, logger: logging.Logger) -> None:
@@ -573,17 +490,6 @@ def configure_deterministic_runtime(seed: int, logger: logging.Logger) -> None:
 def init_joint_model(
     config: ConfigParser, logger: logging.Logger, tb_summary_writer: SummaryWriter
 ) -> JointModel:
-    """Construct and move the joint model to the configured device.
-
-    Args:
-        config: Parsed experiment configuration.
-        logger: Logger instance for model lifecycle messages.
-        tb_summary_writer: TensorBoard writer used for training metrics.
-
-    Returns:
-        Initialized joint model moved to the configured device.
-
-    """
     base_seed = config.getint("experiment", "seed")
     with torch_seed_scope(
         base_seed,

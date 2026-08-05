@@ -59,6 +59,7 @@ class JointModel(nn.Module):
         self.tb_summary_writer = tb_summary_writer
         self.logger = logger
         self.device = device
+        self.optimizer_name = optimizer_name
 
         self.global_epoch = 0
         self.global_optim_step = 0
@@ -83,14 +84,12 @@ class JointModel(nn.Module):
         self.predictor.eval()
 
     def set_predictor(self, predictor: nn.Module) -> None:
-        """Replace the frozen predictor used for forecasting/evaluation."""
         self.predictor = predictor
         for p in self.predictor.parameters():
             p.requires_grad = False
         self.predictor.eval()
 
     def configure_random_generators(self, base_seed: int) -> None:
-        """Configure independent Torch generators owned by this model."""
         self.base_seed = int(base_seed)
         self.training_stochastic_seed = derive_seed(base_seed, "training_stochastic")
         self.training_stochastic_seed_applied = False
@@ -151,14 +150,12 @@ class JointModel(nn.Module):
         imputed_X = imputer_output["imp_data"]
         imp_loss = imputer_output["imp_loss"]
 
-        # Predictor runs in inference mode — no gradient graph built
         pred_data = None
         if run_predictor:
             with torch.no_grad():
                 predictor_output = self.predictor(imputed_X)
             pred_data = predictor_output.get("pred_data", None)
 
-        # --- assertions ---
         assert not torch.isnan(imputed_X).any(), "Imputer output 'imp_data' contains NaN"
         if pred_data is not None:
             assert not torch.isnan(pred_data).any(), \
@@ -210,45 +207,20 @@ class JointModel(nn.Module):
         self.imputer.train()
         return total / max(total_samples, 1)
 
-    # ------------------------------------------------------------------
-    # TIP helper methods
-    # ------------------------------------------------------------------
-
-    def _get_flattened_grad(self) -> torch.Tensor:
-        """Flatten all imputer .grad tensors into a single 1-D vector."""
-        grads: list[torch.Tensor] = []
-        for p in self.imputer.parameters():
-            if p.grad is not None:
-                grads.append(p.grad.detach().flatten())
-            else:
-                grads.append(torch.zeros_like(p).flatten())
-        return torch.cat(grads)
-
     def _move_batch_to_device(
         self,
         batch: collections.abc.Iterable[torch.Tensor],
     ) -> tuple[torch.Tensor, ...]:
-        """Move a dataloader batch to the configured device."""
         return tuple(
             t.to(self.device, non_blocking=self.non_blocking_transfer) for t in batch
         )
 
-    def _set_flattened_grad(self, flat_grad: torch.Tensor) -> None:
-        """Write a flat gradient vector back to imputer .grad attributes."""
-        offset = 0
-        for p in self.imputer.parameters():
-            numel = p.numel()
-            p.grad = flat_grad[offset : offset + numel].view_as(p).clone()
-            offset += numel
-
     @staticmethod
     def _capture_training_modes(module: nn.Module) -> dict[nn.Module, bool]:
-        """Capture train/eval flags for a module and all descendants."""
         return {submodule: submodule.training for submodule in module.modules()}
 
     @staticmethod
     def _restore_training_modes(training_modes: dict[nn.Module, bool]) -> None:
-        """Restore train/eval flags captured by ``_capture_training_modes``."""
         for module, is_training in training_modes.items():
             module.train(is_training)
 
@@ -257,7 +229,7 @@ class JointModel(nn.Module):
         vectors: list[torch.Tensor],
         max_rank: int,
         relative_tolerance: float = 1e-6,
-    ) -> torch.Tensor:
+    ) -> torch.Tensor | None:
         """Build a local orthonormal basis with the current update first."""
         basis: list[torch.Tensor] = []
         for vector in vectors:
@@ -274,7 +246,7 @@ class JointModel(nn.Module):
             if len(basis) >= max_rank:
                 break
         if not basis:
-            raise RuntimeError("Cannot construct a TIP subspace from zero updates")
+            return None
         return torch.stack(basis, dim=1)
 
     @torch.no_grad()
@@ -379,7 +351,6 @@ class JointModel(nn.Module):
                 p.copy_(base)
             self._restore_training_modes(training_modes)
 
-        # [B, r]: each row is one window's paired low-dimensional gradient.
         per_sample_coordinates = torch.stack(coordinate_samples, dim=1)
         gradient_coordinates = per_sample_coordinates.mean(dim=0)
         z_samples = per_sample_coordinates @ update_coordinates
@@ -400,54 +371,64 @@ class JointModel(nn.Module):
         """Evaluate prediction MSE on one optimizer step's exact samples.
 
         The imputer is temporarily put in evaluation mode so the before/after
-        comparison measures only the parameter update, not dropout noise.  All
-        accumulated micro-batches are concatenated and use the same target
-        mask in both evaluations.
+        comparison measures only the parameter update, not dropout noise.
+        Each micro-batch is forwarded separately, bounding activation memory
+        to one micro-batch instead of the whole accumulation window.  Every
+        micro-batch enters the same per-step seed scope, so before/after share
+        identical sampling noise and their difference stays unbiased (CRN).
+        The per-micro-batch MSEs are aggregated by observed-target count,
+        which reproduces the concatenated-batch masked MSE.
         """
         if not microbatches:
             return None
 
-        def concatenate(key: str) -> torch.Tensor | None:
-            values = [batch[key] for batch in microbatches]
-            if any(value is None for value in values):
-                return None
-            return torch.cat(values, dim=0)
-
         training_modes = self._capture_training_modes(self.imputer)
+        weighted_error_sum = 0.0
+        target_count = 0.0
         try:
             self.imputer.eval()
-            inputs = (
-                concatenate("X_NA"),
-                concatenate("X_NA_mask"),
-                concatenate("X_N"),
-                concatenate("X_A_mask"),
-                concatenate("Y_N"),
-                concatenate("Y_N_mask"),
-            )
-            if rng_namespace is None:
-                output = self.forward(*inputs, run_predictor=True)
-            else:
-                with torch_seed_scope(
-                    self.base_seed,
-                    rng_namespace,
-                    self.global_optim_step,
-                ):
+            for microbatch in microbatches:
+                inputs = (
+                    microbatch["X_NA"],
+                    microbatch["X_NA_mask"],
+                    microbatch["X_N"],
+                    microbatch["X_A_mask"],
+                    microbatch["Y_N"],
+                    microbatch["Y_N_mask"],
+                )
+                if rng_namespace is None:
                     output = self.forward(*inputs, run_predictor=True)
-            pred_loss = output["pred_loss"]
-            return pred_loss.item() if pred_loss is not None else None
+                else:
+                    with torch_seed_scope(
+                        self.base_seed,
+                        rng_namespace,
+                        self.global_optim_step,
+                    ):
+                        output = self.forward(*inputs, run_predictor=True)
+                pred_loss = output["pred_loss"]
+                if pred_loss is None:
+                    continue
+                y_mask = microbatch["Y_N_mask"]
+                count = (
+                    float((1.0 - y_mask).sum())
+                    if y_mask is not None
+                    else float(microbatch["Y_N"].numel())
+                )
+                weighted_error_sum += pred_loss.item() * count
+                target_count += count
+            if target_count <= 0:
+                return None
+            return weighted_error_sum / target_count
         finally:
             self._restore_training_modes(training_modes)
 
     def record_prediction_optimizer_step(
         self,
         *,
-        phase_name: str,
         pred_loss_before: float,
         pred_loss_after_raw_adamw: float,
         pred_loss_after_applied_update: float,
-        projection_applied: bool,
     ) -> None:
-        """Persist one optimizer step's prediction-loss transition."""
         step = self.global_optim_step + 1
         denominator = max(abs(pred_loss_before), 1e-12)
         raw_delta = pred_loss_after_raw_adamw - pred_loss_before
@@ -457,38 +438,30 @@ class JointModel(nn.Module):
         )
         values = {
             "pred_loss_before": pred_loss_before,
-            "pred_loss_after": pred_loss_after_applied_update,
             "pred_loss_delta": applied_delta,
             "pred_loss_decrease": -applied_delta,
             "pred_loss_relative_delta": applied_delta / denominator,
-            "raw_adamw_pred_loss_after": pred_loss_after_raw_adamw,
             "raw_adamw_pred_loss_delta": raw_delta,
             "raw_adamw_pred_loss_decrease": -raw_delta,
             "raw_adamw_pred_loss_relative_delta": raw_delta / denominator,
             "tip_projection_gain": projection_gain,
-            "projection_applied": float(projection_applied),
         }
         for name, value in values.items():
             self.tb_summary_writer.add_scalar(
                 f"prediction_step/{name}", value, step
             )
         self.logger.info(
-            "Prediction optimizer step: step=%d | phase=%s | "
-            "pred_loss_before=%.9g | raw_adamw_pred_loss_after=%.9g | "
-            "pred_loss_after=%.9g | raw_adamw_pred_loss_delta=%.9g | "
+            "Prediction optimizer step: step=%d | "
+            "pred_loss_before=%.9g | raw_adamw_pred_loss_delta=%.9g | "
             "pred_loss_delta=%.9g | pred_loss_relative_delta=%.9g | "
-            "tip_projection_gain=%.9g | projection_applied=%d | "
+            "tip_projection_gain=%.9g | "
             "pred_loss_decrease=%.9g | raw_adamw_pred_loss_decrease=%.9g",
             step,
-            phase_name,
             pred_loss_before,
-            pred_loss_after_raw_adamw,
-            pred_loss_after_applied_update,
             raw_delta,
             applied_delta,
             applied_delta / denominator,
             projection_gain,
-            int(projection_applied),
             -applied_delta,
             -raw_delta,
         )
@@ -498,7 +471,6 @@ class JointModel(nn.Module):
         samples: torch.Tensor,
         delta: float,
     ) -> torch.Tensor:
-        """Return the one-sided Student-t upper confidence bound for a mean."""
         if samples.numel() < 2:
             return torch.full((), float("inf"), device=samples.device)
         if not 0.0 < delta < 1.0:
@@ -600,10 +572,6 @@ class JointModel(nn.Module):
             "fallback": fallback,
         }
 
-    # ------------------------------------------------------------------
-    # Training loop
-    # ------------------------------------------------------------------
-
     def fit(
         self,
         data_loader: dict[str, DataLoader],
@@ -639,12 +607,12 @@ class JointModel(nn.Module):
             on_epoch_end: Optional callback ``(epoch, train_loss, model)``
                 invoked after each training epoch.
             optimizer_update_modifier: Optional callback receiving the model,
-                accumulated micro-batches, and the actual AdamW update vector
+                accumulated micro-batches, and the actual optimizer update vector
                 ``theta_before - theta_after``. It returns the update vector
                 that will be applied to the parameters.
             optimizer_step_observer: Optional callback receiving prediction
                 loss on the exact same samples before the update, after the
-                raw AdamW proposal, and after the TIP-projected AdamW update.
+                raw optimizer proposal, and after the TIP-projected update.
                 Enabling it adds three predictor forward calls per step.
 
         Returns:
@@ -724,8 +692,8 @@ class JointModel(nn.Module):
                             accum_microbatches,
                             rng_namespace="prediction_step_monitor",
                         )
-                        # Advance AdamW exactly once, including moments and
-                        # weight decay, then extract its true parameter-space
+                        # Advance the optimizer exactly once, including any
+                        # state and weight decay, then extract its true parameter-space
                         # proposal before TIP changes the applied displacement.
                         self.optimizer.step()
                         parameters_after_raw_adamw = [
@@ -756,7 +724,7 @@ class JointModel(nn.Module):
                         offset = 0
                         with torch.no_grad():
                             if torch.equal(final_update, raw_adamw_update):
-                                # Preserve AdamW's exact floating-point state
+                                # Preserve the optimizer's exact floating-point state
                                 # when TIP is a no-op; reconstructing it as
                                 # before-(before-after) accumulates roundoff.
                                 for parameter, after in zip(
@@ -861,7 +829,6 @@ class JointModel(nn.Module):
         on_epoch_end=None, basis_mode="history", correction_mode="robust",
         gate_mode="ucb",
     ):
-        """TIP with deterministic local-subspace gradient measurement."""
         if subspace_rank < 2:
             raise ValueError("subspace_rank must be at least 2")
         if epsilon <= 0:
@@ -891,18 +858,15 @@ class JointModel(nn.Module):
         history: list[torch.Tensor] = []
         stats = {
             "steps": 0,
-            "warmup": 0,
             "raw": 0,
+            "ucb_conflict": 0,
             "projected": 0,
-            "uncertain": 0,
-            "rank": 0.0,
             "ucb": 0.0,
             "z_mean": 0.0,
             "z_std": 0.0,
             "z_sem": 0.0,
             "adamw_update_norm": 0.0,
             "gp_subspace_norm": 0.0,
-            "dot": 0.0,
             "cosine": 0.0,
             "candidate_correction_ratio": 0.0,
             "applied_correction_ratio": 0.0,
@@ -930,13 +894,15 @@ class JointModel(nn.Module):
             "projected_tip_adamw_delta": 0.0,
             "projected_tip_adamw_relative_delta": 0.0,
             "projected_tip_adamw_nonincrease": 0,
+            "projected_gain_ratio": 0.0,
+            "projected_gain_ratio_sq": 0.0,
         }
         last_step_projected = False
 
         def modifier(model, microbatches, raw_adamw_update):
             nonlocal last_step_projected
-            # TIP now operates in the parameter-space direction that AdamW
-            # actually proposed, after momentum, adaptive scaling, and decay.
+            # TIP operates on the parameter-space direction proposed by the
+            # configured optimizer, after any momentum, scaling, and decay.
             g_i = raw_adamw_update
             if basis_mode == "history":
                 basis_candidates = [g_i, *reversed(history)]
@@ -963,6 +929,10 @@ class JointModel(nn.Module):
             basis = model._orthonormal_update_basis(
                 basis_candidates, subspace_rank
             )
+            if basis is None:
+                last_step_projected = False
+                stats["steps"] += 1
+                return g_i
             effective_rank = basis.shape[1]
             update_coordinates = basis.T @ g_i
 
@@ -1049,11 +1019,9 @@ class JointModel(nn.Module):
             )
 
             stats["steps"] += 1
-            stats["warmup"] += int(not rank_ready)
             stats["raw"] += int(raw_conflict)
+            stats["ucb_conflict"] += int(gate_conflict)
             stats["projected"] += int(project)
-            stats["uncertain"] += int(rank_ready and raw_conflict and not project)
-            stats["rank"] += effective_rank
             stats["ucb"] += upper.item()
             stats["z_mean"] += z_samples.mean().item()
             z_std = z_samples.std(unbiased=z_samples.numel() > 1)
@@ -1061,7 +1029,6 @@ class JointModel(nn.Module):
             stats["z_sem"] += (z_std / math.sqrt(z_samples.numel())).item()
             stats["adamw_update_norm"] += gi_norm.item()
             stats["gp_subspace_norm"] += gp_norm.item()
-            stats["dot"] += dot.item()
             stats["cosine"] += cosine.item()
             stats["candidate_correction_ratio"] += correction_ratio.item()
             stats["applied_correction_ratio"] += (
@@ -1099,11 +1066,9 @@ class JointModel(nn.Module):
             pred_loss_after_tip_adamw: float,
         ) -> None:
             self.record_prediction_optimizer_step(
-                phase_name=phase_name,
                 pred_loss_before=pred_loss_before,
                 pred_loss_after_raw_adamw=pred_loss_after_raw_adamw,
                 pred_loss_after_applied_update=pred_loss_after_tip_adamw,
-                projection_applied=last_step_projected,
             )
             denominator = max(abs(pred_loss_before), 1e-12)
             raw_adamw_delta = pred_loss_after_raw_adamw - pred_loss_before
@@ -1133,6 +1098,10 @@ class JointModel(nn.Module):
                 tip_adamw_delta <= 0.0
             )
             if last_step_projected:
+                projection_gain_ratio = (
+                    (raw_adamw_delta - tip_adamw_delta)
+                    / max(abs(raw_adamw_delta), 1e-12)
+                )
                 prediction_change_stats["projected_observed"] += 1
                 prediction_change_stats[
                     "projected_raw_adamw_delta"
@@ -1152,6 +1121,12 @@ class JointModel(nn.Module):
                 prediction_change_stats[
                     "projected_tip_adamw_nonincrease"
                 ] += int(tip_adamw_delta <= 0.0)
+                prediction_change_stats[
+                    "projected_gain_ratio"
+                ] += projection_gain_ratio
+                prediction_change_stats[
+                    "projected_gain_ratio_sq"
+                ] += projection_gain_ratio ** 2
 
         def epoch_end(epoch, train_loss, model):
             steps = stats["steps"]
@@ -1161,16 +1136,17 @@ class JointModel(nn.Module):
                     key: value / steps
                     for key, value in stats.items()
                     if key not in {
-                        "steps", "warmup", "raw", "projected", "uncertain"
+                        "steps", "raw", "ucb_conflict", "projected"
                     }
                 }
                 model.logger.info(
-                    "TIP subspace: mean_rank=%.2f/%d | warmup_rate=%.4f | "
-                    "raw_conflict_rate=%.4f | projection_rate=%.4f | "
-                    "uncertain_conflict_rate=%.4f | steps=%d",
-                    averages["rank"], subspace_rank, stats["warmup"] / steps,
-                    stats["raw"] / steps, stats["projected"] / steps,
-                    stats["uncertain"] / steps, steps,
+                    "TIP subspace: raw_conflict_rate=%.4f | "
+                    "ucb_conflict_rate=%.4f | projection_rate=%.4f | "
+                    "steps=%d",
+                    stats["raw"] / steps,
+                    stats["ucb_conflict"] / steps,
+                    stats["projected"] / steps,
+                    steps,
                 )
                 model.logger.info(
                     "TIP confidence: mean_ucb=%.6g | z_mean=%.6g | "
@@ -1183,13 +1159,13 @@ class JointModel(nn.Module):
                 model.logger.info(
                     "TIP geometry: adamw_update_norm=%.6g | "
                     "gp_subspace_norm=%.6g | "
-                    "dot=%.6g | cosine=%.6g | "
+                    "cosine=%.6g | "
                     "candidate_correction_ratio=%.6g | "
                     "applied_correction_ratio=%.6g | robust_margin=%.6g | "
                     "robust_solver_success=%.4f | robust_fallback=%.4f",
                     averages["adamw_update_norm"],
                     averages["gp_subspace_norm"],
-                    averages["dot"], averages["cosine"],
+                    averages["cosine"],
                     averages["candidate_correction_ratio"],
                     averages["applied_correction_ratio"],
                     stats["robust_margin"] / projected,
@@ -1276,8 +1252,43 @@ class JointModel(nn.Module):
                         "projected_tip_adamw_pred_loss_delta"
                     ]
                 )
+                projected_count = prediction_change_stats["projected_observed"]
+                gain_ratio_mean = (
+                    prediction_change_stats["projected_gain_ratio"]
+                    / projected_count
+                    if projected_count
+                    else float("nan")
+                )
+                if projected_count > 1:
+                    gain_ratio_variance = max(
+                        0.0,
+                        (
+                            prediction_change_stats["projected_gain_ratio_sq"]
+                            - projected_count * gain_ratio_mean ** 2
+                        )
+                        / (projected_count - 1),
+                    )
+                    gain_ratio_std = math.sqrt(gain_ratio_variance)
+                elif projected_count == 1:
+                    gain_ratio_std = 0.0
+                else:
+                    gain_ratio_std = float("nan")
+                prediction_change_values[
+                    "projected_tip_improvement_rate"
+                ] = (
+                    prediction_change_stats["projected_tip_adamw_nonincrease"]
+                    / projected_count
+                    if projected_count
+                    else float("nan")
+                )
+                prediction_change_values[
+                    "projected_tip_relative_gain_mean"
+                ] = gain_ratio_mean
+                prediction_change_values[
+                    "projected_tip_relative_gain_std"
+                ] = gain_ratio_std
                 model.logger.info(
-                    "TIP raw AdamW proposal: pred_loss_before=%.6g | "
+                    "TIP raw optimizer proposal: pred_loss_before=%.6g | "
                     "pred_loss_after=%.6g | pred_loss_delta=%.6g | "
                     "pred_loss_relative_delta=%.6g | "
                     "pred_loss_nonincrease_rate=%.4f | "
@@ -1304,7 +1315,7 @@ class JointModel(nn.Module):
                     ],
                 )
                 model.logger.info(
-                    "TIP projected AdamW step: pred_loss_after=%.6g | "
+                    "TIP projected optimizer step: pred_loss_after=%.6g | "
                     "pred_loss_delta=%.6g | pred_loss_relative_delta=%.6g | "
                     "pred_loss_nonincrease_rate=%.4f | "
                     "projected_pred_loss_delta=%.6g | "
@@ -1312,6 +1323,9 @@ class JointModel(nn.Module):
                     "projected_pred_loss_nonincrease_rate=%.4f | "
                     "tip_projection_gain=%.6g | "
                     "projected_tip_projection_gain=%.6g | "
+                    "projected_tip_improvement_rate=%.4f | "
+                    "projected_tip_relative_gain_mean=%.6g | "
+                    "projected_tip_relative_gain_std=%.6g | "
                     "observed_steps=%d | projected_observed_steps=%d",
                     prediction_change_values["tip_adamw_pred_loss_after"],
                     prediction_change_values["tip_adamw_pred_loss_delta"],
@@ -1334,15 +1348,22 @@ class JointModel(nn.Module):
                     prediction_change_values[
                         "projected_tip_projection_gain"
                     ],
+                    prediction_change_values[
+                        "projected_tip_improvement_rate"
+                    ],
+                    prediction_change_values[
+                        "projected_tip_relative_gain_mean"
+                    ],
+                    prediction_change_values[
+                        "projected_tip_relative_gain_std"
+                    ],
                     prediction_change_stats["observed"],
                     prediction_change_stats["projected_observed"],
                 )
                 tb_values = {
-                    "effective_rank": averages["rank"],
-                    "warmup_rate": stats["warmup"] / steps,
                     "raw_conflict_rate": stats["raw"] / steps,
+                    "ucb_conflict_rate": stats["ucb_conflict"] / steps,
                     "projection_rate": stats["projected"] / steps,
-                    "uncertain_conflict_rate": stats["uncertain"] / steps,
                     **averages,
                     "robust_margin": stats["robust_margin"] / projected,
                     "robust_solver_success": (
@@ -1363,7 +1384,7 @@ class JointModel(nn.Module):
                     )
             for key in stats:
                 stats[key] = 0 if key in {
-                    "steps", "warmup", "raw", "projected", "uncertain"
+                    "steps", "raw", "ucb_conflict", "projected"
                 } else 0.0
             for key in prediction_change_stats:
                 prediction_change_stats[key] = 0 if key in {

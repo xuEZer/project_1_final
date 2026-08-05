@@ -95,7 +95,6 @@ def task_overrides(
 
 
 def logged_config(path: Path) -> dict[str, str]:
-    """Recover normalized ``section.key`` values from one experiment log."""
     values: dict[str, str] = {}
     section: str | None = None
     for line in path.read_text(errors="replace").splitlines():
@@ -125,10 +124,8 @@ def completed(task: dict) -> bool:
         content = path.read_text(errors="replace")
         if "Experiment completed successfully!" not in content:
             continue
-        if path == exact_path:
-            return True
-        legacy_values = logged_config(path)
-        if all(legacy_values.get(key) == value for key, value in task["payload"].items()):
+        logged_values = logged_config(path)
+        if all(logged_values.get(key) == value for key, value in task["payload"].items()):
             return True
     return False
 
@@ -194,7 +191,6 @@ def run_one(task: dict) -> tuple[dict, str]:
 
 
 def run_group(tasks: list[dict]) -> list[tuple[dict, str]]:
-    """Run all stages for one model combination in configured order."""
     results = []
     for task in tasks:
         task_result = run_one(task)

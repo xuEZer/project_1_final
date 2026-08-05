@@ -87,7 +87,6 @@ def robust_projection(
     samples: np.ndarray,
     delta: float,
 ) -> tuple[np.ndarray, dict[str, float]]:
-    """Closest coordinates satisfying a prediction-direction confidence cone."""
     sample_count, rank = samples.shape
     if sample_count < 2:
         return np.zeros_like(raw_coordinates), {
@@ -414,6 +413,25 @@ def write_csv(path: Path, rows: list[dict]) -> None:
         writer.writerows(rows)
 
 
+def wilson_interval(success_rate: float, sample_count: int) -> tuple[float, float]:
+    """Return a two-sided 95% Wilson interval for a Bernoulli rate."""
+    if sample_count <= 0 or not math.isfinite(success_rate):
+        return math.nan, math.nan
+    z = 1.959963984540054
+    z_squared = z * z
+    denominator = 1.0 + z_squared / sample_count
+    center = (success_rate + z_squared / (2.0 * sample_count)) / denominator
+    radius = (
+        z
+        * math.sqrt(
+            success_rate * (1.0 - success_rate) / sample_count
+            + z_squared / (4.0 * sample_count * sample_count)
+        )
+        / denominator
+    )
+    return max(0.0, center - radius), min(1.0, center + radius)
+
+
 def make_figure(summary: list[dict], path: Path) -> dict[str, float]:
     fig, axes = plt.subplots(2, 2, figsize=(11.5, 8.3), constrained_layout=True)
     colors = {
@@ -438,7 +456,10 @@ def make_figure(summary: list[dict], path: Path) -> dict[str, float]:
             marker="o",
             label=method,
             color=colors[method],
-            capsize=2,
+            capsize=3,
+            capthick=1.0,
+            elinewidth=1.0,
+            markersize=4,
         )
     ax.axhline(0, color="black", linewidth=0.8)
     ax.axvline(90, color="black", linestyle=":", linewidth=0.8)
@@ -488,11 +509,23 @@ def make_figure(summary: list[dict], path: Path) -> dict[str, float]:
             ],
             key=lambda r: r["delta"],
         )
-        ax.plot(
+        rates = np.asarray([r["false_projection_mean"] for r in rows])
+        intervals = [
+            wilson_interval(rate, int(row["n"]))
+            for rate, row in zip(rates, rows, strict=True)
+        ]
+        lower = np.asarray([interval[0] for interval in intervals])
+        upper = np.asarray([interval[1] for interval in intervals])
+        ax.errorbar(
             [r["delta"] for r in rows],
-            [r["false_projection_mean"] for r in rows],
+            rates,
+            yerr=np.maximum(0.0, np.vstack((rates - lower, upper - rates))),
             marker="o",
             label=rf"$\sigma={sigma:g}$",
+            capsize=3,
+            capthick=1.0,
+            elinewidth=1.0,
+            markersize=4,
         )
     ax.plot([0.01, 0.10], [0.01, 0.10], linestyle=":", color="black", label="nominal")
     ax.set(title="(d) UCB false-projection calibration (null)", xlabel=r"Nominal $\delta$", ylabel="Empirical false-projection rate")

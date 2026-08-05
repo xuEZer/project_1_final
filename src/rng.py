@@ -1,9 +1,9 @@
-"""Independent RNG utilities for reproducible experiments.
+"""Deterministic, per-process RNG utilities.
 
-The project uses one user-facing ``experiment.random_seed`` as a base seed,
-but each stochastic process derives its own named seed from that base. This
-keeps model initialization, data shuffling, and missing-mask generation
-independent from one another.
+The project exposes a single user-facing ``experiment.random_seed``, but every
+stochastic process (model initialization, data shuffling, missing-mask
+generation) derives its own named seed from it via ``derive_seed`` so that the
+processes stay independent of one another.
 """
 
 from __future__ import annotations
@@ -21,7 +21,6 @@ MAX_SEED = 2**63 - 1
 
 
 def derive_seed(base_seed: int, *parts: Any) -> int:
-    """Derive a deterministic integer seed from a base seed and namespace."""
     payload = json.dumps(
         [int(base_seed), *parts],
         sort_keys=True,
@@ -35,12 +34,10 @@ def derive_seed(base_seed: int, *parts: Any) -> int:
 
 
 def numpy_rng(base_seed: int, *parts: Any) -> np.random.Generator:
-    """Create an independent NumPy generator for a named random process."""
     return np.random.default_rng(derive_seed(base_seed, *parts))
 
 
 def torch_generator(base_seed: int, *parts: Any, device: str = "cpu") -> torch.Generator:
-    """Create an independent Torch generator for a named random process."""
     generator_device = device if str(device).startswith("cuda") else "cpu"
     try:
         generator = torch.Generator(device=generator_device)
@@ -52,12 +49,9 @@ def torch_generator(base_seed: int, *parts: Any, device: str = "cpu") -> torch.G
 
 @contextlib.contextmanager
 def torch_seed_scope(base_seed: int, *parts: Any) -> Iterator[int]:
-    """Temporarily seed global Torch RNGs for APIs without generator args.
-
-    Some module constructors and third-party model loaders use global Torch RNG
-    internally. ``fork_rng`` confines that global seeding to the current block
-    and restores the caller state afterwards.
-    """
+    # Some module constructors and third-party model loaders consume the global
+    # Torch RNG, so fork_rng confines that global seeding to the current block
+    # and restores the caller's state afterwards.
     seed = derive_seed(base_seed, *parts)
     devices = list(range(torch.cuda.device_count())) if torch.cuda.is_available() else []
     with torch.random.fork_rng(devices=devices, enabled=True):
@@ -68,6 +62,5 @@ def torch_seed_scope(base_seed: int, *parts: Any) -> Iterator[int]:
 
 
 def configure_deterministic_backend() -> None:
-    """Configure deterministic backend behavior without seeding global RNGs."""
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False

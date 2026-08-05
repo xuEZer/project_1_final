@@ -69,7 +69,7 @@ class Toto2Predictor(nn.Module):
         """
         B, _T, D = imputed_X.shape
 
-        # Toto2 expects (batch, n_variates, time_steps)
+        # Toto2 consumes (batch, n_variates, time_steps).
         target = imputed_X.permute(0, 2, 1).to(
             device=self.device, dtype=torch.float32,
         )
@@ -80,8 +80,8 @@ class Toto2Predictor(nn.Module):
             .expand(B, -1)
         )
 
-        # Returns quantiles of shape (9, batch, n_variates, horizon)
-        # Quantile levels: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+        # Quantiles are ordered ``[0.1, ..., 0.9]``; index 4 is the median,
+        # which is the deterministic point forecast.
         quantiles = self.backbone.forecast(
             {
                 "target": target,
@@ -92,11 +92,8 @@ class Toto2Predictor(nn.Module):
             decode_block_size=768,
             has_missing_values=False,
         )
-
-        # Median (0.5 quantile = index 4) → (B, D, forecast_length)
         pred = quantiles[4]
 
-        # Convert back to (B, forecast_length, D) for downstream consumers
         pred_data = pred.permute(0, 2, 1).to(
             device=imputed_X.device, dtype=torch.float32,
         ).contiguous()

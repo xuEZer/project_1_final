@@ -104,8 +104,6 @@ class _TSLABlock(nn.Module):
 
 
 class TSLANet(nn.Module):
-    """Project-standard TSLANet imputer."""
-
     def __init__(
         self,
         d_feature: int,
@@ -122,7 +120,6 @@ class TSLANet(nn.Module):
         super().__init__()
         if patch_size < 2 or patch_size > d_time:
             raise ValueError("patch_size must be in [2, d_time]")
-        self.device = device
         self.patch_size = patch_size
         self.stride = patch_size // 2
         self.n_patches = (d_time - patch_size) // self.stride + 1
@@ -144,7 +141,7 @@ class TSLANet(nn.Module):
         self.output_layer = nn.Linear(d_embedding * self.n_patches, d_time)
 
     def _reconstruct(self, x: torch.Tensor) -> torch.Tensor:
-        batch_size, _time_steps, n_features = x.shape
+        batch_size, _, n_features = x.shape
         patches = x.transpose(1, 2).unfold(-1, self.patch_size, self.stride)
         encoded = self.input_layer(patches.reshape(batch_size * n_features, self.n_patches, self.patch_size))
         for block in self.blocks:
@@ -159,7 +156,6 @@ class TSLANet(nn.Module):
         X_N: torch.Tensor | None = None,
         X_A_mask: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
-        """Run TSLANet reconstruction and preserve observed input values."""
         observed_mask = (1.0 - X_NA_mask).to(X_NA.dtype)
         reconstruction = self._reconstruct(X_NA)
         imputed_data = observed_mask * X_NA + (1.0 - observed_mask) * reconstruction

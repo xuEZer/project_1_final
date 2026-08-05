@@ -12,7 +12,6 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import math
 import sys
 from configparser import ConfigParser
 from pathlib import Path
@@ -101,7 +100,6 @@ def estimate(
     *, imputer_model, pred_model, batch, epsilon: float, k: int,
     generator: torch.Generator, basis: torch.Tensor | None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Return an estimate and per-direction alignment samples."""
     device = next(imputer_model.parameters()).device
     X_N, X_NA, X_NA_mask, X_A_mask, Y_N, Y_N_mask = (
         tensor.to(device) for tensor in batch

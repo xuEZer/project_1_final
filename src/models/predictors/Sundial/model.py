@@ -63,6 +63,31 @@ def _patch_dynamic_cache() -> None:
         DynamicCache.get_usable_length = get_usable_length  # type: ignore[attr-defined]
 
 
+def _assert_transformers_4_41() -> None:
+    """Raise unless the installed Transformers matches the patched signature.
+
+    ``_patch_sundial_generation`` adapts the Transformers 4.41 ``_sample``
+    signature.  Against any other version it silently drops sampling options
+    (e.g. ``top_k``/``top_p``) or misroutes the search, so the mismatch must
+    fail loudly at model load time.
+    """
+    import transformers
+
+    parts = transformers.__version__.split(".")
+    try:
+        major, minor = int(parts[0]), int(parts[1])
+    except (IndexError, ValueError):
+        raise RuntimeError(
+            f"Cannot parse transformers version {transformers.__version__!r}."
+        ) from None
+    if (major, minor) != (4, 41):
+        raise RuntimeError(
+            f"Sundial's generation patch targets transformers 4.41, but "
+            f"{transformers.__version__} is installed. Install "
+            f"transformers==4.41.* (or migrate the patch) before Sundial."
+        )
+
+
 def _patch_sundial_generation(model: nn.Module) -> None:
     """Route the Transformers 4.41 generation entry point to Sundial's search.
 
@@ -71,6 +96,7 @@ def _patch_sundial_generation(model: nn.Module) -> None:
     returning a standard 2-D causal-LM sequence.  Adapt the new signature to
     the remote implementation without modifying the HuggingFace cache.
     """
+    _assert_transformers_4_41()
     sundial_search = getattr(model, "_greedy_search", None)
     if sundial_search is None:
         return
@@ -195,6 +221,13 @@ class SundialPredictor(nn.Module):
             )
             output = output * stdev.unsqueeze(1) + means.unsqueeze(1)
 
+            # A truncated sequence would silently produce a shorter forecast;
+            # fail instead of slicing past the generated horizon.
+            if output.shape[-1] < self.forecast_length:
+                raise RuntimeError(
+                    f"Sundial returned {output.shape[-1]} generated steps, "
+                    f"fewer than forecast_length={self.forecast_length}."
+                )
             # Some Transformers versions return context + continuation for
             # this remote-code model, while older versions returned only the
             # continuation.  Normalize both forms explicitly.

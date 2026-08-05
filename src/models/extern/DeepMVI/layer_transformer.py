@@ -6,8 +6,6 @@ from torch.nn import functional as F
 class MultiheadAttention(torch.nn.Module):
     def __init__(self, d_query: int, d_key: int, d_value: int, nhead: int, dropout=0.1):
         super().__init__()
-        # d_query = int(d_query/nhead)
-        # d_key = int(d_key/nhead)
 
         self.dropout = torch.nn.Dropout(dropout)
         self.head_dim = d_value
@@ -17,8 +15,6 @@ class MultiheadAttention(torch.nn.Module):
         self.d_key = d_key
         self.d_value = d_value
         hidden_dim = 256
-        # self.query_linear = torch.nn.Linear(nhead*d_query,nhead*d_query)
-        # self.key_linear = torch.nn.Linear(nhead*d_key,nhead*d_key)
         self.query_linear = torch.nn.Sequential(
             torch.nn.Linear(d_query, hidden_dim),
             torch.nn.ReLU(),
@@ -34,9 +30,6 @@ class MultiheadAttention(torch.nn.Module):
             torch.nn.ReLU(),
             torch.nn.Linear(hidden_dim, nhead * d_value),
         )
-        # self.query_linear = torch.nn.Linear(d_query,nhead*d_query)
-        # self.key_linear = torch.nn.Linear(d_key,nhead*d_key)
-        # self.value_linear = torch.nn.Linear(d_value,nhead*d_value)
         self.out_linear = torch.nn.Linear(nhead * d_value, d_value)
 
     def forward(
@@ -71,8 +64,6 @@ class MultiheadAttention(torch.nn.Module):
             else:
                 attn_output_weights += attn_mask
         attn_output_weights = F.softmax(attn_output_weights, dim=-1)
-        # print (torch.where(torch.isnan(attn_output_weights)))
-        # exit()
         attn_output_weights = self.dropout(attn_output_weights)
         attn_output = torch.bmm(attn_output_weights, value)
         attn_output = (
@@ -118,13 +109,4 @@ class AttentionLayer(torch.nn.Module):
         src = self.self_attn1(query, key, value, src_mask)
         src[torch.isnan(src)] = 0
         src = self.linear2(self.activation(self.linear1(src)))
-
-        # src = self.self_attn2(query, key, src, src_mask)
-        # src = self.linear2(self.dropout(self.activation(self.linear1(self.activation(src)))))
-        # src[torch.isnan(src)] = 0
-
-        # src = self.self_attn2(src, src, src, src_mask)
-        # src = self.linear2(self.dropout(self.activation(self.linear1(self.activation(src)))))
-        # src[torch.isnan(src)] = 0
-
         return src

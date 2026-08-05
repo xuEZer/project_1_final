@@ -26,16 +26,7 @@ IMPUTATOR_REGISTRY: dict[str, type] = {
 
 
 def config2param_dict4SAITS(config: ConfigParser) -> dict[str, Any]:
-    """Convert configuration values to SAITS constructor parameters.
-
-    Args:
-        config: Parsed experiment configuration.
-
-    Returns:
-        Dictionary of SAITS constructor arguments.
-
-    """
-    param_dict = {
+    return {
         "n_groups": int(config["imputer"]["n_groups"]),
         "n_group_inner_layers": int(config["imputer"]["n_group_inner_layers"]),
         "d_time": int(config["data"]["lookback"]),
@@ -52,38 +43,18 @@ def config2param_dict4SAITS(config: ConfigParser) -> dict[str, Any]:
         ),
         "device": config["training"]["device"],
     }
-    return param_dict
 
 
 def config2param_dict4BRITS(config: ConfigParser) -> dict[str, Any]:
-    """Convert configuration values to BRITS constructor parameters.
-
-    Args:
-        config: Parsed experiment configuration.
-
-    Returns:
-        Dictionary of BRITS constructor arguments.
-
-    """
-    param_dict = {
+    return {
         "d_feature": int(config["data"]["d_feature"]),
         "d_model": int(config["imputer"]["d_model"]),
         "device": config["training"]["device"],
     }
-    return param_dict
 
 
 def config2param_dict4DeepMVI(config: ConfigParser) -> dict[str, Any]:
-    """Convert configuration values to DeepMVI constructor parameters.
-
-    Args:
-        config: Parsed experiment configuration.
-
-    Returns:
-        Dictionary of DeepMVI constructor arguments.
-
-    """
-    param_dict = {
+    return {
         "d_feature": int(config["data"]["d_feature"]),
         "d_time": int(config["data"]["lookback"]),
         "device": config["training"]["device"],
@@ -93,20 +64,10 @@ def config2param_dict4DeepMVI(config: ConfigParser) -> dict[str, Any]:
         "use_context": config["imputer"].getboolean("use_context"),
         "use_local": config["imputer"].getboolean("use_local"),
     }
-    return param_dict
 
 
 def config2param_dict4TimesNet(config: ConfigParser) -> dict[str, Any]:
-    """Convert configuration values to TimesNet constructor parameters.
-
-    Args:
-        config: Parsed experiment configuration.
-
-    Returns:
-        Dictionary of TimesNet constructor arguments.
-
-    """
-    param_dict = {
+    return {
         "d_feature": int(config["data"]["d_feature"]),
         "d_time": int(config["data"]["lookback"]),
         "d_model": int(config["imputer"]["d_model"]),
@@ -119,11 +80,9 @@ def config2param_dict4TimesNet(config: ConfigParser) -> dict[str, Any]:
         "freq": config["imputer"]["freq"],
         "device": config["training"]["device"],
     }
-    return param_dict
 
 
 def config2param_dict4FITS(config: ConfigParser) -> dict[str, Any]:
-    """Convert FITS configuration values to constructor parameters."""
     return {
         "d_feature": int(config["data"]["d_feature"]),
         "d_time": int(config["data"]["lookback"]),
@@ -134,7 +93,6 @@ def config2param_dict4FITS(config: ConfigParser) -> dict[str, Any]:
 
 
 def config2param_dict4ModernTCN(config: ConfigParser) -> dict[str, Any]:
-    """Convert ModernTCN configuration values to constructor parameters."""
     return {
         "d_feature": int(config["data"]["d_feature"]),
         "d_time": int(config["data"]["lookback"]),
@@ -153,7 +111,6 @@ def config2param_dict4ModernTCN(config: ConfigParser) -> dict[str, Any]:
 
 
 def config2param_dict4TSLANet(config: ConfigParser) -> dict[str, Any]:
-    """Convert TSLANet configuration values to constructor parameters."""
     return {
         "d_feature": int(config["data"]["d_feature"]),
         "d_time": int(config["data"]["lookback"]),

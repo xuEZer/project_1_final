@@ -1,8 +1,7 @@
 """FITS imputer adapter.
 
-Backbone adapted from the official FITS implementation and its PyPOTS
-imputation integration. FITS: Modeling Time Series with 10k Parameters
-(ICLR 2024).
+Backbone from the official FITS implementation (ICLR 2024) via its PyPOTS
+integration: "FITS: Modeling Time Series with 10k Parameters".
 """
 
 from __future__ import annotations
@@ -14,15 +13,12 @@ from src.models.extern.SAITS.utils import masked_mse_cal
 
 
 class _FITSBackbone(nn.Module):
-    """Frequency interpolation backbone from FITS."""
-
     def __init__(self, n_steps: int, n_features: int, cut_freq: int, individual: bool):
         super().__init__()
         if not 1 <= cut_freq <= n_steps // 2 + 1:
             raise ValueError("cut_freq must be in [1, n_steps // 2 + 1]")
 
         self.n_steps = n_steps
-        self.n_features = n_features
         self.cut_freq = cut_freq
         self.individual = individual
 
@@ -47,12 +43,20 @@ class _FITSBackbone(nn.Module):
             for feature_index, (real_layer, imag_layer) in enumerate(
                 zip(self.real_upsampler, self.imag_upsampler, strict=True)
             ):
-                real[:, :, feature_index] = real_layer(low_spectrum.real[:, :, feature_index])
-                imag[:, :, feature_index] = imag_layer(low_spectrum.imag[:, :, feature_index])
+                real[:, :, feature_index] = real_layer(
+                    low_spectrum.real[:, :, feature_index]
+                )
+                imag[:, :, feature_index] = imag_layer(
+                    low_spectrum.imag[:, :, feature_index]
+                )
             projected = torch.complex(real, imag)
         else:
-            real = self.real_upsampler(low_spectrum.real.permute(0, 2, 1)).permute(0, 2, 1)
-            imag = self.imag_upsampler(low_spectrum.imag.permute(0, 2, 1)).permute(0, 2, 1)
+            real = self.real_upsampler(
+                low_spectrum.real.permute(0, 2, 1)
+            ).permute(0, 2, 1)
+            imag = self.imag_upsampler(
+                low_spectrum.imag.permute(0, 2, 1)
+            ).permute(0, 2, 1)
             projected = torch.complex(real, imag)
 
         padded = torch.zeros_like(spectrum)
@@ -61,8 +65,6 @@ class _FITSBackbone(nn.Module):
 
 
 class FITS(nn.Module):
-    """Project-standard FITS imputer with mask-aware input embedding."""
-
     def __init__(
         self,
         d_feature: int,
@@ -72,7 +74,6 @@ class FITS(nn.Module):
         device: str,
     ) -> None:
         super().__init__()
-        self.device = device
         self.embedding = nn.Linear(d_feature * 2, d_feature)
         self.backbone = _FITSBackbone(d_time, d_feature, cut_freq, individual)
         self.output_projection = nn.Linear(d_feature, d_feature)
@@ -84,7 +85,6 @@ class FITS(nn.Module):
         X_N: torch.Tensor | None = None,
         X_A_mask: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
-        """Return FITS reconstruction and the observed-value-preserving imputation."""
         observed_mask = (1.0 - X_NA_mask).to(X_NA.dtype)
         embedded = self.embedding(torch.cat([X_NA, observed_mask], dim=-1))
         reconstruction = self.output_projection(self.backbone(embedded))

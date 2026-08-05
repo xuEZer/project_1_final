@@ -1,8 +1,8 @@
 """ModernTCN imputer adapter.
 
-This is the imputation backbone from ModernTCN: A Modern Pure Convolution
-Structure for General Time Series Analysis (ICLR 2024), adapted to the
-project-standard imputer interface.
+Imputation backbone from ModernTCN: A Modern Pure Convolution Structure for
+General Time Series Analysis (ICLR 2024), adapted to the project-standard
+imputer interface.
 """
 
 from __future__ import annotations
@@ -21,8 +21,6 @@ def _conv_bn(channels: int, kernel_size: int, groups: int) -> nn.Sequential:
 
 
 class _ReparamLargeKernelConv(nn.Module):
-    """Large depth-wise convolution with ModernTCN's small-kernel branch."""
-
     def __init__(self, channels: int, large_size: int, small_size: int | None) -> None:
         super().__init__()
         self.large_branch = _conv_bn(channels, large_size, channels)
@@ -48,11 +46,8 @@ class _ModernTCNBlock(nn.Module):
         super().__init__()
         channels = n_features * d_model
         d_ff = d_model * ffn_ratio
-        self.n_features = n_features
-        self.d_model = d_model
         self.depthwise = _ReparamLargeKernelConv(channels, large_size, small_size)
         self.norm = nn.BatchNorm1d(d_model)
-
         self.feature_mixing = nn.Sequential(
             nn.Conv1d(channels, n_features * d_ff, 1, groups=n_features),
             nn.GELU(),
@@ -74,7 +69,6 @@ class _ModernTCNBlock(nn.Module):
         x = self.depthwise(x.reshape(batch_size, n_features * d_model, patches))
         x = self.norm(x.reshape(batch_size * n_features, d_model, patches))
         x = x.reshape(batch_size, n_features, d_model, patches)
-
         x = self.feature_mixing(x.reshape(batch_size, n_features * d_model, patches))
         x = x.reshape(batch_size, n_features, d_model, patches)
         x = x.permute(0, 2, 1, 3).reshape(batch_size, d_model * n_features, patches)
@@ -108,8 +102,6 @@ class _FlattenHead(nn.Module):
 
 
 class _ModernTCNBackbone(nn.Module):
-    """Single-stage ModernTCN, matching the official imputation recipe."""
-
     def __init__(
         self,
         d_time: int,
@@ -124,16 +116,17 @@ class _ModernTCNBackbone(nn.Module):
         dropout: float,
     ) -> None:
         super().__init__()
-        if patch_size < 1 or patch_stride < 1 or patch_size > d_time:
-            raise ValueError("ModernTCN patch_size and patch_stride must be positive and fit the lookback")
+        if not 1 <= patch_stride <= patch_size <= d_time:
+            raise ValueError("ModernTCN requires 1 <= patch_stride <= patch_size <= d_time")
         if large_size % 2 == 0 or small_size % 2 == 0:
             raise ValueError("ModernTCN kernel sizes must be odd to preserve the sequence length")
 
         self.patch_size = patch_size
         self.patch_stride = patch_stride
-        self.n_patches = (d_time - patch_size) // patch_stride + 1
-        if patch_size != patch_stride:
-            self.n_patches += 1
+        # forward pads the tail by pad_length before unfolding, so the unfold
+        # window count — and therefore head_nf — is exactly this formula.
+        self.pad_length = patch_size - patch_stride
+        self.n_patches = (d_time + self.pad_length - patch_size) // patch_stride + 1
         self.stem = nn.Linear(patch_size, d_model)
         self.blocks = nn.ModuleList(
             [
@@ -152,9 +145,8 @@ class _ModernTCNBackbone(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: [batch, feature, time]
-        if self.patch_size != self.patch_stride:
-            pad_length = self.patch_size - self.patch_stride
-            x = torch.cat([x, x[:, :, -1:].expand(-1, -1, pad_length)], dim=-1)
+        if self.pad_length:
+            x = torch.cat([x, x[:, :, -1:].expand(-1, -1, self.pad_length)], dim=-1)
         x = self.stem(x.unfold(-1, self.patch_size, self.patch_stride)).permute(0, 1, 3, 2)
         for block in self.blocks:
             x = block(x)
@@ -162,8 +154,6 @@ class _ModernTCNBackbone(nn.Module):
 
 
 class ModernTCN(nn.Module):
-    """Project-standard ModernTCN imputer."""
-
     def __init__(
         self,
         d_feature: int,
@@ -181,7 +171,6 @@ class ModernTCN(nn.Module):
         device: str,
     ) -> None:
         super().__init__()
-        self.device = device
         self.backbone = _ModernTCNBackbone(
             d_time,
             d_feature,
@@ -209,7 +198,6 @@ class ModernTCN(nn.Module):
         X_N: torch.Tensor | None = None,
         X_A_mask: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
-        """Run ModernTCN reconstruction and preserve observed input values."""
         observed_mask = (1.0 - X_NA_mask).to(X_NA.dtype)
         encoded = self.backbone(X_NA.transpose(1, 2))
         reconstruction = self.head(encoded).transpose(1, 2)

@@ -36,11 +36,6 @@ def _suppress_multiprocess_resource_tracker_error():
 _suppress_multiprocess_resource_tracker_error()
 
 
-# ---------------------------------------------------------------------------
-# subprocess worker — measures one batch size
-# ---------------------------------------------------------------------------
-
-
 def _worker(
     config_str: str,
     sample_tensors: tuple[torch.Tensor, ...],
@@ -119,22 +114,25 @@ def _worker(
 
     X_N, X_NA, X_NA_mask, X_A_mask = sample_tensors[:4]
 
+    # Measure the imputation-only workload: training forward passes run with
+    # run_predictor=False, so throughput must reflect that same load.
+    forward_kwargs = {"run_predictor": False}
+
     try:
         _X_N = X_N[:bs].to(device)
         _X_NA = X_NA[:bs].to(device)
         _X_NA_mask = X_NA_mask[:bs].to(device)
         _X_A_mask = X_A_mask[:bs].to(device)
 
-        # warmup
-        joint_model(_X_NA, _X_NA_mask, _X_N, _X_A_mask)
-        loss = joint_model(_X_NA, _X_NA_mask, _X_N, _X_A_mask)["loss"]
+        joint_model(_X_NA, _X_NA_mask, _X_N, _X_A_mask, **forward_kwargs)
+        loss = joint_model(_X_NA, _X_NA_mask, _X_N, _X_A_mask, **forward_kwargs)["loss"]
         if loss is not None:
             loss.backward()
         joint_model.zero_grad(set_to_none=True)
 
         torch.cuda.synchronize()
 
-        output = joint_model(_X_NA, _X_NA_mask, _X_N, _X_A_mask)
+        output = joint_model(_X_NA, _X_NA_mask, _X_N, _X_A_mask, **forward_kwargs)
         loss = output["loss"]
         if loss is not None:
             loss.backward()
@@ -152,11 +150,6 @@ def _worker(
             result_queue.put((bs, -2.0))
     except Exception:
         result_queue.put((bs, -2.0))
-
-
-# ---------------------------------------------------------------------------
-# measurement — spawns one subprocess per batch size
-# ---------------------------------------------------------------------------
 
 
 def _measure(
@@ -212,11 +205,6 @@ def _measure(
     logger.info(f"  batch_size={bs:3d} → {elapsed:.2f}s  ({tp:.2f} samples/s)")
     torch.cuda.empty_cache()
     return tp
-
-
-# ---------------------------------------------------------------------------
-# ternary search over exponents — every candidate is a power of 2
-# ---------------------------------------------------------------------------
 
 
 def _ternary_search(
@@ -284,11 +272,6 @@ def _ternary_search(
     return best
 
 
-# ---------------------------------------------------------------------------
-# public API
-# ---------------------------------------------------------------------------
-
-
 def find_max_batch_size(
     model: torch.nn.Module,
     sample_batch: tuple[torch.Tensor, ...],
@@ -331,7 +314,6 @@ def find_max_batch_size(
         return 1
 
     if max_exp <= 1:
-        # Only 2 and maybe 4 — test directly.
         for exp in range(1, max_exp + 1):
             bs = 1 << exp
             best_tp = max((v for v in cache.values() if v > 0), default=0.0)
@@ -352,11 +334,6 @@ def find_max_batch_size(
     return best
 
 
-# ---------------------------------------------------------------------------
-# synchronous fallback (no subprocess)
-# ---------------------------------------------------------------------------
-
-
 def _find_sync(
     model: torch.nn.Module,
     sample_batch: tuple[torch.Tensor, ...],
@@ -368,6 +345,9 @@ def _find_sync(
     X_N, X_NA, X_NA_mask, X_A_mask = sample_batch[:4]
     cache: dict[int, float] = {}
 
+    # Same imputation-only workload as the subprocess worker (and training).
+    forward_kwargs = {"run_predictor": False}
+
     def _test(bs: int) -> float:
         if bs in cache:
             return cache[bs]
@@ -377,13 +357,13 @@ def _find_sync(
             _X_NA_mask = X_NA_mask[:bs].to(device)
             _X_A_mask = X_A_mask[:bs].to(device)
 
-            model(_X_NA, _X_NA_mask, _X_N, _X_A_mask)
+            model(_X_NA, _X_NA_mask, _X_N, _X_A_mask, **forward_kwargs)
             model.zero_grad(set_to_none=True)
 
             torch.cuda.synchronize()
             start = time.perf_counter()
 
-            output = model(_X_NA, _X_NA_mask, _X_N, _X_A_mask)
+            output = model(_X_NA, _X_NA_mask, _X_N, _X_A_mask, **forward_kwargs)
             loss = output["loss"]
             if loss is not None:
                 loss.backward()
@@ -404,7 +384,6 @@ def _find_sync(
                 raise
         return cache[bs]
 
-    # Measure bs=1 first.
     if _test(1) <= 0:
         logger.warning("Even batch_size=1 OOM – falling back to 1.")
         return 1

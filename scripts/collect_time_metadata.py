@@ -5,7 +5,6 @@ Columns: dataset, frequency, item_id, variate_name, variate_index, length, missi
 """
 
 import sqlite3
-import sys
 from pathlib import Path
 
 import numpy as np
@@ -17,7 +16,6 @@ REPO_ID = "Real-TSF/TIME"
 
 
 def discover_datasets() -> list[tuple[str, list[str]]]:
-    """Return [(dataset_name, [frequency, ...]), ...] for all TIME datasets."""
     tree = list(list_repo_tree(REPO_ID, repo_type="dataset", recursive=False))
     result: list[tuple[str, list[str]]] = []
     for item in tree:
@@ -38,7 +36,6 @@ def discover_datasets() -> list[tuple[str, list[str]]]:
 
 
 def process_dataset(db: sqlite3.Connection, ds_name: str, freq: str) -> None:
-    """Download, load, and insert variate-level metadata for one dataset-frequency."""
     print(f"  {ds_name}/{freq} ...", end=" ", flush=True)
     try:
         snap = snapshot_download(
@@ -56,7 +53,7 @@ def process_dataset(db: sqlite3.Connection, ds_name: str, freq: str) -> None:
     for item_idx in range(len(ds)):
         item = ds[item_idx]
         item_id = item["item_id"]
-        target = np.array(item["target"])  # (num_variates, time_steps)
+        target = np.array(item["target"])
         variate_names = item.get("variate_names", None)
 
         if target.ndim == 1:

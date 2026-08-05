@@ -9,6 +9,9 @@ from typing import Any
 
 import torch.nn as nn
 
+# huggingface_hub caches HF_ENDPOINT at import time, so the mirror must be
+# set before the predictor imports below; setdefault honors an explicit user
+# setting.
 os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
 
 from .Chronos.model import ChronosPredictor

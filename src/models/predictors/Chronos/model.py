@@ -64,6 +64,7 @@ class ChronosPredictor(nn.Module):
         else:
             pipeline_cls = ChronosPipeline
 
+        # bfloat16 halves GPU memory; CPU stays float32 for determinism.
         dtype = torch.bfloat16 if self.device.startswith("cuda") else torch.float32
         self.pipeline = pipeline_cls.from_pretrained(
             model_path, device_map=self.device, torch_dtype=dtype,
@@ -90,7 +91,8 @@ class ChronosPredictor(nn.Module):
             logger.warning("Chronos: sanitizing %d non-finite input(s).", n_bad)
             imputed_X = torch.nan_to_num(imputed_X, nan=0.0, posinf=0.0, neginf=0.0)
 
-        # (B, T, D) → (B*D, T) on CPU for the pipeline
+        # The chronos pipelines only accept CPU float32 input; their internal
+        # DataLoader moves the batches to the accelerator.
         contexts = (
             imputed_X.detach()
             .permute(0, 2, 1)
