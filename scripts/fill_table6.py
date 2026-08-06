@@ -10,7 +10,7 @@
   * 填充的指标:
       终点插补/预测 MSE —— evaluate(split=test) 的 MSE 行
       预测误差非增率     —— "Prediction optimizer step" 行中 pred_loss_delta <= 0 的比例
-      均值/UCB 冲突率    —— B2 最后一个 epoch 的 "TIP subspace" 行
+      均值/UCB 冲突率    —— "TIP subspace" 行按全部 epoch 累计（rate×steps 反推计数求和）
       介入后改善率、相对原更新改善比例 —— 从 step 级数据识别投影步：
       优先 projection_applied 字段，回退 tip_projection_gain != 0（投影步
       的 gain 必非零）。改善率 = 投影步中 gain > 0 的比例；改善比例 =
@@ -54,12 +54,12 @@ STEP_RE = re.compile(
 )
 EVAL_MSE_RE = re.compile(
     r"Evaluation Results Summary: split=test\b.*?"
-    r"\bMSE\s+([-+\d.eE]+)\s+([-+\d.eE]+)", re.S
+    r"\bMSE\s+(?P<imp>[-+\d.eE]+|N/A)\s+(?P<pred>[-+\d.eE]+|N/A)", re.S
 )
 TIP_SUBSPACE_RE = re.compile(
     r"TIP subspace: raw_conflict_rate=(?P<raw>[-\d.eE]+) \| "
     r"(?:ucb_conflict_rate=(?P<ucb>[-\d.eE]+) \| )?"
-    r"projection_rate=(?P<proj>[-\d.eE]+) \| steps=\d+"
+    r"projection_rate=(?P<proj>[-\d.eE]+) \| steps=(?P<steps>\d+)"
 )
 
 
@@ -91,8 +91,11 @@ def parse_log(path: Path, verbose: bool = False) -> dict:
 
     m = EVAL_MSE_RE.search(text)
     if m:
-        result["imp_mse"] = float(m.group(1))
-        result["pred_mse"] = float(m.group(2))
+        # 自然缺失数据集的 test 无完整真值：imp 列可能为 N/A，pred 列独立提取
+        result["imp_mse"] = (float(m.group("imp"))
+                             if m.group("imp") != "N/A" else None)
+        result["pred_mse"] = (float(m.group("pred"))
+                              if m.group("pred") != "N/A" else None)
 
     # 预测误差非增率：全部 step 记录中 pred_loss_delta <= 0 的比例
     steps = []
@@ -130,14 +133,27 @@ def parse_log(path: Path, verbose: bool = False) -> dict:
                 result["improve_ratio_mean"] = mean
                 result["improve_ratio_std"] = std
 
-    # TIP subspace：取最后一个 epoch（最终统计）
+    # TIP subspace：全部 epoch 累计（每 epoch 一条，含该 epoch 的 rate 与
+    # steps；按 rate×steps 反推计数后累加，再除以总步数——反映整个训练过程，
+    # 而非最后一个 epoch 的快照）
     subspaces = list(TIP_SUBSPACE_RE.finditer(text))
     if subspaces:
-        last = subspaces[-1]
-        result["raw_conflict_rate"] = float(last.group("raw")) * 100.0
-        if last.group("ucb") is not None:
-            result["ucb_conflict_rate"] = float(last.group("ucb")) * 100.0
-        result["projection_rate"] = float(last.group("proj")) * 100.0
+        raw_total = 0
+        ucb_total = 0
+        proj_total = 0
+        steps_total = 0
+        for match in subspaces:
+            steps_i = int(match.group("steps"))
+            raw_total += round(float(match.group("raw")) * steps_i)
+            if match.group("ucb") is not None:
+                ucb_total += round(float(match.group("ucb")) * steps_i)
+            proj_total += round(float(match.group("proj")) * steps_i)
+            steps_total += steps_i
+        if steps_total > 0:
+            result["raw_conflict_rate"] = raw_total / steps_total * 100.0
+            if "ucb_total" in locals():
+                result["ucb_conflict_rate"] = ucb_total / steps_total * 100.0
+            result["projection_rate"] = proj_total / steps_total * 100.0
 
     if verbose:
         print(f"  {path.name}: imp={result['imp_mse']} pred={result['pred_mse']} "
