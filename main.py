@@ -66,6 +66,11 @@ def selected_config_payload(config: ConfigParser) -> dict[str, str]:
 
     add("experiment", "type")
     add("experiment", "seed")
+    if (
+        config.has_option("experiment", "missing_seed")
+        and config.get("experiment", "missing_seed").strip()
+    ):
+        add("experiment", "missing_seed")
 
     for section in ("data", "dataset", "imputer", "predictor"):
         if not config.has_section(section):
@@ -85,9 +90,12 @@ def selected_config_payload(config: ConfigParser) -> dict[str, str]:
     for key in ("batch_size",):
         add("loader", key)
 
-    if exp_type in {"B2", "B3", "B4", "B5"}:
+    if exp_type in {"B2", "B3", "B4", "B5", "RQ3", "RQ4"}:
         for key in ("subspace_rank", "epsilon", "confidence_delta"):
             add("tip", key)
+        if exp_type == "RQ4":
+            for key in ("rq4_ranks", "rq4_epsilons", "rq4_gate_deltas"):
+                add("tip", key)
 
     return payload
 
@@ -104,7 +112,7 @@ def generate_experiment_name(config: ConfigParser) -> str:
         f"lr{lr}",
         f"bs{batch_size}",
     ]
-    if exp_type in {"B2", "B3", "B4", "B5"}:
+    if exp_type in {"B2", "B3", "B4", "B5", "RQ3", "RQ4"}:
         rank = normalize_config_value(config.get("tip", "subspace_rank"))
         epsilon = normalize_config_value(config.get("tip", "epsilon"))
         confidence_delta = normalize_config_value(config.get("tip", "confidence_delta"))
@@ -157,6 +165,12 @@ def parse_column_index(value: str) -> int | str:
         raise ValueError(
             f"dataset.column_index must be an integer or 'all', got {value!r}"
         ) from exc
+
+
+def resolve_missing_seed(config: ConfigParser) -> int:
+    """Resolve the mask seed while preserving legacy seed behavior."""
+    configured = config.get("experiment", "missing_seed", fallback="").strip()
+    return int(configured) if configured else config.getint("experiment", "seed")
 
 
 def resolve_batch_size(
@@ -271,7 +285,13 @@ def main() -> None:
     log_config(config, logger)
 
     seed = int(config.get("experiment", "seed"))
+    missing_seed = resolve_missing_seed(config)
     configure_deterministic_runtime(seed, logger)
+    logger.info(
+        "Seed routing: experiment_seed=%d | missing_seed=%d",
+        seed,
+        missing_seed,
+    )
 
     dataset_folder = preprocess_dataset(
         source=config.get("dataset", "source"),
@@ -287,7 +307,7 @@ def main() -> None:
         pred_len=config.getint("data", "pred_len"),
         val_ratio=config.getfloat("data", "val_ratio"),
         test_ratio=config.getfloat("data", "test_ratio"),
-        random_seed=config.getint("experiment", "seed"),
+        random_seed=missing_seed,
         logger=logger,
         save_path=Path(config.get("paths", "cache_dir")) / "data",
     )

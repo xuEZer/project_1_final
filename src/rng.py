@@ -1,9 +1,9 @@
 """Deterministic, per-process RNG utilities.
 
-The project exposes a single user-facing ``experiment.random_seed``, but every
-stochastic process (model initialization, data shuffling, missing-mask
-generation) derives its own named seed from it via ``derive_seed`` so that the
-processes stay independent of one another.
+Training stochasticity is rooted at ``experiment.seed``. Missing-mask
+generation may use a separately resolved seed, while every consumer still
+derives a named local seed via ``derive_seed`` so the processes remain
+independent of one another.
 """
 
 from __future__ import annotations

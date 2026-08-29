@@ -161,6 +161,14 @@ def run_experiment(
 
     if exp_type == "B1":
         trained_model = _run_b1(joint_model, train_loader, config, logger, on_epoch_end)
+    elif exp_type == "RQ3":
+        trained_model = _run_rq3(
+            joint_model, train_loader, config, logger, on_epoch_end
+        )
+    elif exp_type == "RQ4":
+        trained_model = _run_rq4(
+            joint_model, train_loader, config, logger, on_epoch_end
+        )
     elif exp_type in {"B2", "B3", "B4", "B5"}:
         trained_model = _run_b2(
             joint_model, train_loader, config, logger, on_epoch_end,
@@ -169,10 +177,11 @@ def run_experiment(
     else:
         raise ValueError(
             f"Unknown experiment type {exp_type}. "
-            "Available types: B1, B2, B3, B4, B5"
+            "Available types: B1, B2, B3, B4, B5, RQ3, RQ4"
         )
 
     epoch_monitor.restore_best()
+    logger.info("Final imputer state hash: %s", imputer_state_hash(trained_model))
 
     return trained_model
 
@@ -266,6 +275,73 @@ def _run_b2(
         gate_mode=gate_mode,
     )
 
+    return joint_model
+
+
+def _run_rq3(
+    joint_model: JointModel,
+    train_loader: dict[str, DataLoader],
+    config: ConfigParser,
+    logger: logging.Logger,
+    on_epoch_end=None,
+) -> JointModel:
+    """Train once with B1 and evaluate B2--B5 counterfactually per step."""
+    num_epoch = config.getint("training", "max_epochs")
+    subspace_rank = config.getint("tip", "subspace_rank")
+    epsilon = config.getfloat("tip", "epsilon")
+    confidence_delta = config.getfloat("tip", "confidence_delta")
+    log_phase(logger, "RQ3 — shared B1 trajectory", num_epoch)
+    joint_model.fit_rq3_counterfactual(
+        data_loader=train_loader,
+        phase_name="rq3",
+        num_epoch=num_epoch,
+        on_epoch_end=on_epoch_end,
+        subspace_rank=subspace_rank,
+        epsilon=epsilon,
+        confidence_delta=confidence_delta,
+    )
+    return joint_model
+
+
+def _csv_values(config: ConfigParser, key: str, cast):
+    values = [
+        cast(value.strip())
+        for value in config.get("tip", key).split(",")
+        if value.strip()
+    ]
+    if not values:
+        raise ValueError(f"tip.{key} must contain at least one value")
+    return values
+
+
+def _run_rq4(
+    joint_model: JointModel,
+    train_loader: dict[str, DataLoader],
+    config: ConfigParser,
+    logger: logging.Logger,
+    on_epoch_end=None,
+) -> JointModel:
+    """Train B1 once and evaluate all RQ4 sensitivity candidates per step."""
+    num_epoch = config.getint("training", "max_epochs")
+    base_rank = config.getint("tip", "subspace_rank")
+    base_epsilon = config.getfloat("tip", "epsilon")
+    base_delta = config.getfloat("tip", "confidence_delta")
+    ranks = _csv_values(config, "rq4_ranks", int)
+    epsilons = _csv_values(config, "rq4_epsilons", float)
+    gate_deltas = _csv_values(config, "rq4_gate_deltas", float)
+    log_phase(logger, "RQ4 — shared B1 sensitivity trajectory", num_epoch)
+    joint_model.fit_rq4_counterfactual(
+        data_loader=train_loader,
+        phase_name="rq4",
+        num_epoch=num_epoch,
+        on_epoch_end=on_epoch_end,
+        base_rank=base_rank,
+        base_epsilon=base_epsilon,
+        cone_delta=base_delta,
+        ranks=ranks,
+        epsilons=epsilons,
+        gate_deltas=gate_deltas,
+    )
     return joint_model
 
 

@@ -12,8 +12,9 @@ Usage:
   scripts/sync_artifacts.sh unpack <archive.tar.gz> [--force]
 
 Commands:
-  pack      Archive the project's logs/ and cache/ directories. By default, the
-            archive is created next to the project directory.
+  pack      Archive only successfully completed experiment logs and their
+            matching checkpoints. By default, the archive is created next to
+            the project directory.
   unpack    Extract an archive into the project. Existing files are preserved
             unless --force is specified.
 EOF
@@ -27,7 +28,12 @@ die() {
 pack_artifacts() {
     local archive="${1:-}"
     local timestamp
-    local sources=()
+    local log_path
+    local ckpt_path
+    local exp_name
+    local artifacts=()
+    local completed_count=0
+    local checkpoint_count=0
 
     timestamp="$(date '+%Y%m%d_%H%M%S')"
     if [[ -z "$archive" ]]; then
@@ -39,14 +45,31 @@ pack_artifacts() {
     [[ "$archive" == *.tar.gz || "$archive" == *.tgz ]] \
         || die "archive must end in .tar.gz or .tgz"
 
-    [[ -d "$PROJECT_ROOT/logs" ]] && sources+=(logs)
-    [[ -d "$PROJECT_ROOT/cache" ]] && sources+=(cache)
-    ((${#sources[@]} > 0)) || die "neither logs/ nor cache/ exists"
+    if [[ -d "$PROJECT_ROOT/logs" ]]; then
+        while IFS= read -r -d '' log_path; do
+            grep -qF "Experiment completed successfully!" "$log_path" \
+                || continue
+            artifacts+=("${log_path#"$PROJECT_ROOT/"}")
+            ((completed_count += 1))
+
+            exp_name="$(basename "$log_path" .log)"
+            ckpt_path="$PROJECT_ROOT/cache/ckpt/$exp_name.pt"
+            if [[ -f "$ckpt_path" ]]; then
+                artifacts+=("${ckpt_path#"$PROJECT_ROOT/"}")
+                ((checkpoint_count += 1))
+            fi
+        done < <(find "$PROJECT_ROOT/logs" -maxdepth 1 -type f -name '*.log' \
+            -print0 | sort -z)
+    fi
+    ((completed_count > 0)) \
+        || die "no successfully completed experiment logs were found"
 
     mkdir -p "$(dirname "$archive")"
-    tar -C "$PROJECT_ROOT" -czf "$archive" "${sources[@]}"
+    tar -C "$PROJECT_ROOT" -czf "$archive" "${artifacts[@]}"
 
     printf 'Created: %s\n' "$archive"
+    printf 'Completed experiments: %d\n' "$completed_count"
+    printf 'Matching checkpoints: %d\n' "$checkpoint_count"
     printf 'Size:    %s\n' "$(du -h "$archive" | cut -f1)"
     printf 'SHA256:  %s\n' "$(sha256sum "$archive" | cut -d' ' -f1)"
 }

@@ -47,6 +47,11 @@ def load_config(config_path: Path) -> dict:
         raise ValueError(f"Missing keys in {config_path}: {sorted(missing)}")
     if any(name.startswith("ETT") for name in config["datasets"]):
         raise ValueError("ETT datasets are excluded from the real-task batch.")
+    seeds = config.get("seeds", [config["fixed"]["seed"]])
+    if not seeds or any(isinstance(seed, bool) or not isinstance(seed, int) for seed in seeds):
+        raise ValueError("seeds must be a non-empty list of integers")
+    if len(set(seeds)) != len(seeds):
+        raise ValueError("seeds must not contain duplicates")
     return config
 
 
@@ -71,6 +76,11 @@ def fixed_overrides(fixed: dict) -> list[str]:
         if key not in fixed:
             raise ValueError(f"Missing fixed hyperparameter: {key}")
         overrides.extend((f"--{option}", str(fixed[key])))
+    for key in ("rq4_ranks", "rq4_epsilons", "rq4_gate_deltas"):
+        if key in fixed:
+            overrides.extend((f"--tip.{key}", str(fixed[key])))
+    if "missing_seed" in fixed:
+        overrides.extend(("--experiment.missing_seed", str(fixed["missing_seed"])))
     return overrides
 
 
@@ -135,6 +145,7 @@ def build_tasks(config: dict, args: argparse.Namespace) -> list[dict]:
     datasets = [args.dataset] if args.dataset else config["datasets"]
     imputers = [args.imputer] if args.imputer else config["imputers"]
     predictors = [args.predictor] if args.predictor else config["predictors"]
+    seeds = config.get("seeds", [config["fixed"]["seed"]])
 
     for selected, available, label in (
         (stages, config["exp_types"], "stage"),
@@ -149,11 +160,14 @@ def build_tasks(config: dict, args: argparse.Namespace) -> list[dict]:
     tasks = []
     # A model combination is the scheduling unit. Its stages stay adjacent,
     # e.g. B1 -> B2 for the main experiment, rather than running all B1 first.
-    for dataset, imputer, predictor in product(datasets, imputers, predictors):
-        group = f"{dataset}/{imputer}/{predictor}"
+    for seed, dataset, imputer, predictor in product(
+        seeds, datasets, imputers, predictors
+    ):
+        group = f"seed={seed}/{dataset}/{imputer}/{predictor}"
+        fixed = {**config["fixed"], "seed": seed}
         for stage in stages:
             overrides = task_overrides(
-                stage, dataset, imputer, predictor, config["fixed"]
+                stage, dataset, imputer, predictor, fixed
             )
             final_config = config_from_overrides(overrides)
             name = final_config.get("experiment", "name")

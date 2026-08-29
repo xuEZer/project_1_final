@@ -1,0 +1,38 @@
+{
+  "exp_types": [
+    "RQ4"
+  ],
+  "datasets": [
+    "azure2019_I_5T"
+  ],
+  "imputers": [
+    "SAITS"
+  ],
+  "predictors": [
+    "Toto2"
+  ],
+  "seeds": [
+    42,
+    43,
+    44
+  ],
+  "fixed": {
+    "seed": 42,
+    "missing_seed": 42,
+    "learning_rate": 0.001,
+    "batch_size": 256,
+    "max_epochs": 50,
+    "patience": 5,
+    "missing_rate": 0.2,
+    "artificial_missing_rate": 0.2,
+    "block_size": 32,
+    "lookback": 512,
+    "prediction_length": 16,
+    "subspace_rank": 8,
+    "epsilon": 0.001,
+    "confidence_delta": 0.1,
+    "rq4_ranks": "2,4,8,16",
+    "rq4_epsilons": "1e-5,1e-4,1e-3,1e-2,1e-1",
+    "rq4_gate_deltas": "0.01,0.05,0.1,0.2,0.5"
+  }
+}
