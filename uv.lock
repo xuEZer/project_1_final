@@ -1625,6 +1625,7 @@ dependencies = [
     { name = "scipy" },
     { name = "setuptools" },
     { name = "tensorboard" },
+    { name = "timesfm", extra = ["torch"] },
     { name = "torch" },
     { name = "toto-models" },
     { name = "transformers" },
@@ -1642,6 +1643,7 @@ requires-dist = [
     { name = "scipy" },
     { name = "setuptools" },
     { name = "tensorboard" },
+    { name = "timesfm", extras = ["torch"], specifier = ">=3.0.1" },
     { name = "torch", specifier = ">=2.12.1" },
     { name = "toto-models", specifier = ">=1.0.0" },
     { name = "transformers", specifier = ">=4.41,<4.42" },
@@ -2292,6 +2294,25 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/b7/4d/08c89e34946fce2aec4fbb45c9016efd5f4d7f24af8e5d93296e935631d8/threadpoolctl-3.6.0.tar.gz", hash = "sha256:8ab8b4aa3491d812b623328249fab5302a68d2d71745c8a4c719a2fcaba9f44e", size = 21274, upload-time = "2025-03-13T13:49:23.031Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/32/d5/f9a850d79b0851d1d4ef6456097579a9005b31fea68726a4ae5f2d82ddd9/threadpoolctl-3.6.0-py3-none-any.whl", hash = "sha256:43a0b8fd5a2928500110039e43a5eed8480b918967083ea48dc3ab9f13c4a7fb", size = 18638, upload-time = "2025-03-13T13:49:21.846Z" },
+]
+
+[[package]]
+name = "timesfm"
+version = "3.0.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "huggingface-hub" },
+    { name = "numpy" },
+    { name = "safetensors" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e8/f2/13e517db75b88bd559c6134b78999b263e6238673a314a1afffa58a0aa03/timesfm-3.0.1.tar.gz", hash = "sha256:e7f0740dd90522edba487be9bf53cfde48e514c52c0e9618abdfdf66db309a3d", size = 77475, upload-time = "2026-09-02T01:48:45.814Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d9/90/871a507b5419bd54703e5f8cbd4683898d589635e6e374549e3c2e96a5ff/timesfm-3.0.1-py3-none-any.whl", hash = "sha256:7f6d047992321b5e8cfef29c462a17fe0dca07a6de7ca6166fc4197119083453", size = 87992, upload-time = "2026-09-02T01:48:44.615Z" },
+]
+
+[package.optional-dependencies]
+torch = [
+    { name = "torch" },
 ]
 
 [[package]]

@@ -21,7 +21,8 @@
   "predictors": [
     "Toto2",
     "Chronos",
-    "Sundial"
+    "Sundial",
+    "TimesFM3"
   ],
   "fixed": {
     "seed": 42,

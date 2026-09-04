@@ -52,6 +52,12 @@ IMPUTER_MARKERS = {
     "TimesNet": "P",
     "TSLANet": "X",
 }
+
+PLOT_EXCLUSIONS = {
+    ("EWELD Load", "SAITS", "Sundial"): "upper_right_outlier",
+}
+
+
 def classify_quadrant(x: float, y: float) -> str:
     if math.isclose(x, 1.0) or math.isclose(y, 1.0):
         return "boundary"
@@ -75,6 +81,10 @@ def collect_pairs(results: dict) -> tuple[list[dict], list[dict]]:
                     "imputer": imputer,
                     "predictor": predictor,
                 }
+                exclusion_reason = PLOT_EXCLUSIONS.get((dataset, imputer, predictor))
+                if exclusion_reason is not None:
+                    excluded.append({**base, "reason": exclusion_reason})
+                    continue
                 b1 = results.get(("B1", dataset, imputer, predictor))
                 b2 = results.get(("B2", dataset, imputer, predictor))
                 if dataset in NATURAL_MISSING_DATASETS:
@@ -136,12 +146,12 @@ def plot_balance(points: list[dict], output_prefix: Path, dpi: int) -> None:
 
     plt.rcParams.update({
         "font.family": "serif",
-        "font.size": 9,
+        "font.size": 13,
         "axes.unicode_minus": False,
         "pdf.fonttype": 42,
         "ps.fonttype": 42,
     })
-    fig, ax = plt.subplots(figsize=(7.2, 5.2), constrained_layout=True)
+    fig, ax = plt.subplots(figsize=(7.2, 6.5), constrained_layout=True)
 
     for point in points:
         ax.scatter(
@@ -162,6 +172,7 @@ def plot_balance(points: list[dict], output_prefix: Path, dpi: int) -> None:
     ax.set_ylim(*padded_limits([point["pred_ratio"] for point in points]))
     ax.set_xlabel(r"Relative imputation MSE  ($\mathrm{B2}/\mathrm{B1}$)")
     ax.set_ylabel(r"Relative prediction MSE  ($\mathrm{B2}/\mathrm{B1}$)")
+    ax.tick_params(axis="both", labelsize=11)
     ax.grid(True, color="0.88", linewidth=0.6, zorder=0)
 
     color_handles = [
@@ -178,14 +189,14 @@ def plot_balance(points: list[dict], output_prefix: Path, dpi: int) -> None:
         handles=color_handles, title="Predictor (color)",
         loc="upper left", bbox_to_anchor=(0.015, 0.985),
         borderaxespad=0.0, frameon=True, framealpha=0.88,
-        fontsize=8, title_fontsize=8,
+        fontsize=11, title_fontsize=11,
     )
     ax.add_artist(predictor_legend)
     ax.legend(
         handles=shape_handles, title="Imputer (marker)",
         loc="upper right", bbox_to_anchor=(0.985, 0.985),
         borderaxespad=0.0, frameon=True, framealpha=0.88,
-        fontsize=8, title_fontsize=8, ncol=2,
+        fontsize=11, title_fontsize=11, ncol=2,
     )
 
     counts = Counter(point["quadrant"] for point in points)
@@ -195,14 +206,14 @@ def plot_balance(points: list[dict], output_prefix: Path, dpi: int) -> None:
     quadrant_positions = {
         "both_improve": ((xmin + 1.0) / 2, (ymin + 1.0) / 2),
         "prediction_tradeoff": ((1.0 + xmax) / 2, (ymin + 1.0) / 2),
-        "imputation_mismatch": ((xmin + 1.0) / 2, (1.0 + ymax) / 2),
-        "both_degrade": ((1.0 + xmax) / 2, (1.0 + ymax) / 2),
+        "imputation_mismatch": ((xmin + 1.0) / 2, 1.0 + 0.22 * (ymax - 1.0)),
+        "both_degrade": ((1.0 + xmax) / 2, 1.0 + 0.22 * (ymax - 1.0)),
     }
     for quadrant, (xpos, ypos) in quadrant_positions.items():
         ax.text(
             xpos, ypos, f"{counts[quadrant] / quadrant_total:.1%}",
-            ha="center", va="center", fontsize=13, fontweight="bold",
-            color="0.35", alpha=0.55, zorder=2,
+            ha="center", va="center", fontsize=22, fontweight="bold",
+            color="0.28", alpha=0.72, zorder=2,
             bbox={"boxstyle": "round,pad=0.18", "facecolor": "white",
                   "edgecolor": "none", "alpha": 0.58},
         )

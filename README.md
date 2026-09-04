@@ -7,8 +7,9 @@ Time-series forecasting with imputation. Impute-then-predict (B1) and TIP joint 
 ```bash
 uv sync
 cd src/models/predictors/Sundial && uv sync && cd -
-cd src/models/predictors/TimesFM25 && uv sync && cd -
 ```
+
+The root environment includes the official TimesFM 3 PyTorch runtime.
 
 For users in mainland China:
 

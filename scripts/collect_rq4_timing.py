@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Summarize RQ4 wall-clock records and draw the time-effect Pareto curve."""
+"""Summarize RQ4 timing records and draw B1-relative cost-effect curves."""
 
 from __future__ import annotations
 
@@ -31,7 +31,10 @@ EFFECT_RE = re.compile(
     r"RQ4 counterfactual step: step=(?P<step>\d+) \| "
     r"sweep=(?P<sweep>B1|rank) \| value=(?P<value>[^| ]+) \| "
     r"pred_loss_before=[-+\d.eE]+ \| "
-    r"candidate_pred_loss_delta=(?P<delta>[-+\d.eE]+)"
+    r"candidate_pred_loss_delta=(?P<delta>[-+\d.eE]+) \| "
+    r"conflict=(?P<conflict>[01]) \| projected=(?P<projected>[01]) \| "
+    r"gain_vs_raw=(?P<gain>[-+\d.eE]+) \| "
+    r"relative_gain=[-+\d.eE]+"
 )
 SEED_RE = re.compile(
     r"Seed routing: experiment_seed=(?P<experiment>\d+) \| "
@@ -57,11 +60,15 @@ def pareto_mask(rows: list[dict]) -> list[bool]:
     flags = []
     for row in rows:
         dominated = any(
-            other["wall_time_mean_ms"] <= row["wall_time_mean_ms"]
-            and other["prediction_nonincrease_rate"] >= row["prediction_nonincrease_rate"]
+            other["relative_step_time_multiplier"]
+            <= row["relative_step_time_multiplier"]
+            and other["intervention_improve_rate"]
+            >= row["intervention_improve_rate"]
             and (
-                other["wall_time_mean_ms"] < row["wall_time_mean_ms"]
-                or other["prediction_nonincrease_rate"] > row["prediction_nonincrease_rate"]
+                other["relative_step_time_multiplier"]
+                < row["relative_step_time_multiplier"]
+                or other["intervention_improve_rate"]
+                > row["intervention_improve_rate"]
             )
             for other in rows
         )
@@ -94,7 +101,7 @@ def main() -> int:
     epoch_by_number: dict[int, list[float]] = defaultdict(list)
     base_by_key: dict[tuple[int, int], float] = {}
     tip_by_rank: dict[int, dict[tuple[int, int], float]] = defaultdict(dict)
-    effects: dict[str, dict[int, list[bool]]] = defaultdict(
+    effects: dict[str, dict[int, list[dict[str, float | bool]]]] = defaultdict(
         lambda: defaultdict(list)
     )
     preprocess_uids: set[str] = set()
@@ -127,7 +134,13 @@ def main() -> int:
                 if match.group("sweep") == "B1"
                 else f"TIP-r{match.group('value')}"
             )
-            effects[label][seed].append(float(match.group("delta")) <= 0.0)
+            effects[label][seed].append(
+                {
+                    "nonincrease": float(match.group("delta")) <= 0.0,
+                    "projected": bool(int(match.group("projected"))),
+                    "gain": float(match.group("gain")),
+                }
+            )
 
     if observed_seeds != {42, 43, 44}:
         raise ValueError(
@@ -162,7 +175,7 @@ def main() -> int:
     if not b1_effect:
         raise ValueError("No B1 prediction-effect records were found")
     b1_effect_rates = [
-        100.0 * sum(values) / len(values)
+        100.0 * sum(item["nonincrease"] for item in values) / len(values)
         for _, values in sorted(b1_effect.items())
     ]
     b1_effect_mean, b1_effect_std = mean_std(b1_effect_rates)
@@ -178,6 +191,10 @@ def main() -> int:
             "tip_overhead_std_ms": 0.0,
             "prediction_nonincrease_rate": b1_effect_mean,
             "prediction_nonincrease_std": b1_effect_std,
+            "relative_step_time_multiplier": 1.0,
+            "relative_step_time_multiplier_std": 0.0,
+            "intervention_improve_rate": "",
+            "intervention_improve_std": "",
         }
     )
     for rank, tip_by_key in sorted(tip_by_rank.items()):
@@ -196,10 +213,30 @@ def main() -> int:
         if not effect_values:
             raise ValueError(f"No prediction-effect records were found for rank {rank}")
         effect_rates = [
-            100.0 * sum(values) / len(values)
+            100.0 * sum(item["nonincrease"] for item in values) / len(values)
             for _, values in sorted(effect_values.items())
         ]
         effect_mean, effect_std = mean_std(effect_rates)
+        time_multipliers = [
+            (base_by_key[key] + tip_by_key[key]) / base_by_key[key]
+            for key in ordered_keys
+        ]
+        time_multiplier_by_seed = per_seed_means(
+            {
+                key: value
+                for key, value in zip(ordered_keys, time_multipliers, strict=True)
+            }
+        )
+        time_multiplier_mean, time_multiplier_std = mean_std(time_multiplier_by_seed)
+        intervention_improve_rates = [
+            100.0
+            * sum(item["gain"] > 0.0 for item in values if item["projected"])
+            / sum(item["projected"] for item in values)
+            for _, values in sorted(effect_values.items())
+        ]
+        intervention_improve_mean, intervention_improve_std = mean_std(
+            intervention_improve_rates
+        )
         rows.append(
             {
                 "method": "TIP",
@@ -212,44 +249,54 @@ def main() -> int:
                 "tip_overhead_std_ms": 1000.0 * tip_std,
                 "prediction_nonincrease_rate": effect_mean,
                 "prediction_nonincrease_std": effect_std,
+                "relative_step_time_multiplier": time_multiplier_mean,
+                "relative_step_time_multiplier_std": time_multiplier_std,
+                "intervention_improve_rate": intervention_improve_mean,
+                "intervention_improve_std": intervention_improve_std,
             }
         )
 
-    flags = pareto_mask(rows)
-    for row, flag in zip(rows, flags, strict=True):
+    tip_rows = [row for row in rows if row["method"] == "TIP"]
+    flags = pareto_mask(tip_rows)
+    for row in rows:
+        row["pareto_optimal"] = 0
+    for row, flag in zip(tip_rows, flags, strict=True):
         row["pareto_optimal"] = int(flag)
     write_csv(output_dir / "time_effect_summary.csv", rows)
 
     figure, axis = plt.subplots(figsize=(6.4, 4.2))
-    for row, flag in zip(rows, flags, strict=True):
-        label = "B1" if row["method"] == "B1" else f"r={row['rank']}"
+    for row, flag in zip(tip_rows, flags, strict=True):
+        label = f"r={row['rank']}"
         axis.errorbar(
-            row["wall_time_mean_ms"],
-            row["prediction_nonincrease_rate"],
-            xerr=row["wall_time_std_ms"],
-            yerr=row["prediction_nonincrease_std"],
+            row["relative_step_time_multiplier"],
+            row["intervention_improve_rate"],
+            xerr=row["relative_step_time_multiplier_std"],
+            yerr=row["intervention_improve_std"],
             fmt="o",
             capsize=3,
             color="tab:red" if flag else "tab:blue",
         )
         axis.annotate(
             label,
-            (row["wall_time_mean_ms"], row["prediction_nonincrease_rate"]),
+            (
+                row["relative_step_time_multiplier"],
+                row["intervention_improve_rate"],
+            ),
             xytext=(5, 5),
             textcoords="offset points",
         )
     frontier = sorted(
-        (row for row, flag in zip(rows, flags, strict=True) if flag),
-        key=lambda item: item["wall_time_mean_ms"],
+        (row for row, flag in zip(tip_rows, flags, strict=True) if flag),
+        key=lambda item: item["relative_step_time_multiplier"],
     )
     axis.plot(
-        [row["wall_time_mean_ms"] for row in frontier],
-        [row["prediction_nonincrease_rate"] for row in frontier],
+        [row["relative_step_time_multiplier"] for row in frontier],
+        [row["intervention_improve_rate"] for row in frontier],
         color="tab:red",
         linewidth=1.2,
     )
-    axis.set_xlabel("Wall-clock time per candidate step (ms)")
-    axis.set_ylabel("Prediction-error non-increase rate (%)")
+    axis.set_xlabel("Relative step-time multiplier vs. B1")
+    axis.set_ylabel("Intervention improvement rate (%)")
     axis.grid(alpha=0.25)
     figure.tight_layout()
     output_dir.mkdir(parents=True, exist_ok=True)

@@ -7,8 +7,9 @@
 ```bash
 uv sync
 cd src/models/predictors/Sundial && uv sync && cd -
-cd src/models/predictors/TimesFM25 && uv sync && cd -
 ```
+
+根环境已包含官方 TimesFM 3 PyTorch 运行时。
 
 国内用户设置镜像加速：
 
