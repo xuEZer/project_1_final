@@ -7,7 +7,6 @@
     "azure2019_I_5T",
     "EWELD_Load_15T",
     "Coastal_T_S_15T",
-    "Smart_Manufacturing_H",
     "MetroPT-3_5T"
   ],
   "imputers": [
@@ -15,8 +14,7 @@
     "DeepMVI",
     "ModernTCN",
     "TimesNet",
-    "TSLANet",
-    "BRITS"
+    "TSLANet"
   ],
   "predictors": [
     "Toto2",
@@ -35,7 +33,7 @@
     "block_size": 32,
     "lookback": 512,
     "prediction_length": 16,
-    "subspace_rank": 8,
+    "subspace_rank": 4,
     "epsilon": 0.001,
     "confidence_delta": 0.1
   }

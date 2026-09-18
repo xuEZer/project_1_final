@@ -22,6 +22,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from src.rng import derive_seed, torch_seed_scope
 
+
 optimizer_dict = {
     "Adam": torch.optim.Adam,
     "AdamW": torch.optim.AdamW,
@@ -578,6 +579,63 @@ class JointModel(nn.Module):
             "fallback": fallback,
         }
 
+    def _sync_first_moment_to_applied_update(
+        self,
+        parameters: list[torch.nn.Parameter],
+        parameters_before: list[torch.Tensor],
+        applied_update: torch.Tensor,
+    ) -> None:
+        """Make Adam's first moment consistent with the displacement actually applied.
+
+        TIP replaces the optimizer's proposed displacement *after*
+        ``optimizer.step()`` has already advanced the moment estimates using the
+        uncorrected imputation gradient.  The state therefore keeps implying the
+        raw step, so the next proposal re-injects the component TIP just removed,
+        and the paired B1/B2 divergence random-walks instead of drifting.
+
+        AdamW proposes ``d = lr * m_hat / (sqrt(v_hat) + eps) + lr * wd * theta``,
+        so the state that implies exactly ``applied_update`` is
+
+            m = (1 - beta1**t) * (sqrt(v_hat) + eps) / lr
+                * (applied_update - lr * wd * theta_before).
+
+        Only ``exp_avg`` is rewritten.  ``exp_avg_sq`` is Adam's curvature
+        estimate and must remain a statistic of the real gradients, otherwise the
+        per-coordinate step size stops being calibrated.
+
+        The applied displacement is unchanged by this call, so the per-step
+        theorems (minimum-change projection, subspace preservation, covariance-set
+        robustness) still describe the applied update verbatim; only the proposal
+        at the next step changes, and no theorem constrains that proposal.
+        """
+        group = self.optimizer.param_groups[0]
+        lr = group["lr"]
+        beta1, beta2 = group["betas"]
+        eps = group["eps"]
+        weight_decay = group.get("weight_decay", 0.0)
+        offset = 0
+        with torch.no_grad():
+            for parameter, before in zip(
+                parameters, parameters_before, strict=True
+            ):
+                count = parameter.numel()
+                applied = applied_update[offset : offset + count].view_as(parameter)
+                offset += count
+                state = self.optimizer.state.get(parameter)
+                if not state or "exp_avg" not in state or "exp_avg_sq" not in state:
+                    continue
+                step = state["step"]
+                step = int(step.item()) if torch.is_tensor(step) else int(step)
+                bias_correction1 = 1.0 - beta1 ** step
+                bias_correction2 = 1.0 - beta2 ** step
+                v_hat = state["exp_avg_sq"] / bias_correction2
+                target = applied
+                if weight_decay:
+                    target = applied - lr * weight_decay * before
+                state["exp_avg"].copy_(
+                    (bias_correction1 / lr) * (v_hat.sqrt() + eps) * target
+                )
+
     def fit(
         self,
         data_loader: dict[str, DataLoader],
@@ -884,6 +942,15 @@ class JointModel(nn.Module):
                         if offset != final_update.numel():
                             raise ValueError(
                                 "TIP update size does not match imputer parameters"
+                            )
+                        # Keep the optimizer's first moment consistent with the
+                        # displacement actually applied.  Without this, AdamW's
+                        # state still implies the raw proposal, so the next step
+                        # re-injects the component TIP just removed and the
+                        # correction never accumulates.
+                        if not torch.equal(final_update, raw_adamw_update):
+                            self._sync_first_moment_to_applied_update(
+                                parameters, parameters_before, final_update
                             )
                         pred_loss_after_tip_adamw = (
                             self._prediction_loss_on_microbatches(
