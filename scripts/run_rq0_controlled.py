@@ -1,8 +1,8 @@
 """Run the fully controlled RQ0 mechanism-validation experiment.
 
 The experiment uses analytic objectives, paired random seeds, and a local
-coordinate subspace.  It writes seed-level observations, aggregated summaries,
-a machine-readable report, and a publication-ready four-panel figure.
+coordinate subspace. It writes seed-level observations, aggregated summaries,
+a machine-readable report, and a publication-ready six-panel figure.
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ DEFAULTS = {
     "gamma": 0.75,
     "epsilon": 1e-3,
     "repeats": 20,
-    "sigma": 1e-3,
+    "sigma": 0.5,
     "delta": 0.05,
     "eta": 0.05,
     "seeds": 200,
@@ -160,13 +160,13 @@ def coordinate_samples(
 ) -> np.ndarray:
     samples = np.empty((repeats, basis.shape[1]), dtype=np.float64)
     for rep in range(repeats):
+        window_b = b.copy()
+        if sigma:
+            window_b -= basis @ rng.normal(0.0, sigma, size=basis.shape[1])
         for axis in range(basis.shape[1]):
             direction = basis[:, axis]
-            plus = loss_q(theta + epsilon * direction, b, rho)
-            minus = loss_q(theta - epsilon * direction, b, rho)
-            if sigma:
-                plus += float(rng.normal(0.0, sigma))
-                minus += float(rng.normal(0.0, sigma))
+            plus = loss_q(theta + epsilon * direction, window_b, rho)
+            minus = loss_q(theta - epsilon * direction, window_b, rho)
             samples[rep, axis] = (plus - minus) / (2.0 * epsilon)
     return samples
 
@@ -335,7 +335,10 @@ def build_cases(seeds: int) -> list[dict]:
         cases.append(cfg)
 
     for angle in range(30, 151, 10):
-        add("angle", "angle_deg", angle, angle=angle)
+        add(
+            "angle", "angle_deg", angle,
+            angle=angle, repeats=1, stochastic=False,
+        )
     for rank in (2, 4, 8):
         for gamma in np.linspace(0.0, 1.0, 11):
             add(
@@ -344,6 +347,7 @@ def build_cases(seeds: int) -> list[dict]:
                 gamma,
                 rank=rank,
                 gamma=gamma,
+                repeats=1,
                 stochastic=False,
             )
     for epsilon in (
@@ -355,12 +359,18 @@ def build_cases(seeds: int) -> list[dict]:
             epsilon,
             epsilon=epsilon,
             rho=0.1,
+            repeats=1,
             stochastic=False,
         )
     for eta in np.linspace(0.01, 0.10, 10):
-        add("locality", "eta", eta, eta=eta, stochastic=False)
+        add(
+            "locality", "eta", eta,
+            eta=eta, repeats=1, stochastic=False,
+        )
+    for angle in range(100, 151, 10):
+        add("robustness_angle", "angle_deg", angle, angle=angle)
     for angle, label in ((90.0, "uncertainty_null"), (120.0, "uncertainty_power")):
-        for sigma in (0.0, 1e-4, 1e-3, 1e-2):
+        for sigma in (0.0, 0.1, 0.25, 0.5):
             for repeats in (5, 10, 20, 50):
                 for delta in (
                     0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.08, 0.10,
@@ -461,7 +471,7 @@ def make_figure(summary: list[dict], path: Path) -> dict[str, float]:
     ax = axes[0, 0]
     ax.axvspan(25, 90, color="#DCFCE7", alpha=0.35, linewidth=0)
     ax.axvspan(90, 155, color="#FEE2E2", alpha=0.45, linewidth=0)
-    for method in METHODS:
+    for method in ("Raw", "Full-oracle", "Subspace-oracle", "Subspace-ZO"):
         rows = sorted(
             [r for r in summary if r["scan"] == "angle" and r["method"] == method],
             key=lambda r: r["x_value"],
@@ -642,42 +652,104 @@ def make_figure(summary: list[dict], path: Path) -> dict[str, float]:
     )
 
     ax = axes[1, 1]
-    rows = sorted(
+    null_rows = sorted(
         [
             r for r in summary
             if r["scan"] == "uncertainty_null"
             and r["method"] == "Subspace-ZO-UCB"
-            and r["sigma"] == 1e-3
+            and r["sigma"] == 0.5
             and r["repeats"] == 20
         ],
         key=lambda r: r["delta"],
     )
-    rates = np.asarray([r["false_projection_mean"] for r in rows])
-    intervals = [
+    power_rows = sorted(
+        [
+            r for r in summary
+            if r["scan"] == "uncertainty_power"
+            and r["method"] == "Subspace-ZO-UCB"
+            and r["sigma"] == 0.5
+            and r["repeats"] == 20
+        ],
+        key=lambda r: r["delta"],
+    )
+    null_rates = np.asarray([r["false_projection_mean"] for r in null_rows])
+    null_intervals = [
         wilson_interval(rate, int(row["n"]))
-        for rate, row in zip(rates, rows, strict=True)
+        for rate, row in zip(null_rates, null_rows, strict=True)
     ]
-    lower = np.asarray([interval[0] for interval in intervals])
-    upper = np.asarray([interval[1] for interval in intervals])
-    ax.errorbar(
-        [r["delta"] for r in rows],
-        rates,
-        yerr=np.maximum(0.0, np.vstack((rates - lower, upper - rates))),
+    null_lower = np.asarray([interval[0] for interval in null_intervals])
+    null_upper = np.asarray([interval[1] for interval in null_intervals])
+    null_color = colors["Robust-ZO-UCB"]
+    null_line = ax.errorbar(
+        [r["delta"] for r in null_rows],
+        null_rates,
+        yerr=np.maximum(
+            0.0,
+            np.vstack((null_rates - null_lower, null_upper - null_rates)),
+        ),
         marker="o",
-        label="Empirical rate",
-        color=colors["Robust-ZO-UCB"],
+        label=r"Boundary intervention  $90^\circ$",
+        color=null_color,
         capsize=3,
         capthick=1.0,
         elinewidth=1.0,
         markersize=4,
     )
-    ax.plot([0.01, 0.10], [0.01, 0.10], linestyle="--", color="black", label="Reference")
-    ax.legend(frameon=False, loc="upper left", fontsize=8)
+    reference_line, = ax.plot(
+        [0.01, 0.10], [0.01, 0.10],
+        linestyle="--", color="black", label=r"Reference  $y=\delta$",
+    )
+    power_rates = np.asarray([r["projected_mean"] for r in power_rows])
+    power_intervals = [
+        wilson_interval(rate, int(row["n"]))
+        for rate, row in zip(power_rates, power_rows, strict=True)
+    ]
+    power_lower = np.asarray([interval[0] for interval in power_intervals])
+    power_upper = np.asarray([interval[1] for interval in power_intervals])
+    power_color = colors["Subspace-ZO-UCB"]
+    power_ax = ax.twinx()
+    power_line = power_ax.errorbar(
+        [r["delta"] for r in power_rows],
+        power_rates,
+        yerr=np.maximum(
+            0.0,
+            np.vstack((power_rates - power_lower, power_upper - power_rates)),
+        ),
+        marker="s",
+        label=r"Conflict detection  $120^\circ$",
+        color=power_color,
+        capsize=3,
+        capthick=1.0,
+        elinewidth=1.0,
+        markersize=4,
+    )
+    ax.tick_params(axis="y", colors=null_color)
+    power_ax.tick_params(axis="y", colors=power_color)
+    ax.spines["left"].set_color(null_color)
+    power_ax.spines["right"].set_color(power_color)
+    power_ax.set_ylabel("Conflict detection rate", color=power_color)
+    power_ax.set_ylim(0.70, 1.01)
+    power_ax.yaxis.label.set_fontsize(14)
+    power_ax.tick_params(axis="y", labelsize=12)
+    ax.legend(
+        [null_line, power_line, reference_line],
+        [
+            r"Boundary intervention  $90^\circ$",
+            r"Conflict detection  $120^\circ$",
+            r"Reference  $y=\delta$",
+        ],
+        frameon=False,
+        loc="center left",
+        bbox_to_anchor=(0.02, 0.62),
+        fontsize=7,
+    )
     ax.set(
-        title="(e) Margin tracks the intervention level",
+        title="(e) Margin calibrates detection behavior",
         xlabel=r"Margin parameter $\delta$",
         ylabel="Boundary intervention rate",
     )
+    ax.yaxis.label.set_color(null_color)
+    ax.set_ylim(-0.005, 0.125)
 
     ax = axes[1, 2]
     angles = tuple(float(angle) for angle in range(100, 151, 10))
@@ -688,7 +760,7 @@ def make_figure(summary: list[dict], path: Path) -> dict[str, float]:
         for angle in angles:
             rows = [
                 r for r in summary
-                if r["scan"] == "angle"
+                if r["scan"] == "robustness_angle"
                 and r["method"] == method
                 and r["angle"] == angle
             ]
@@ -717,7 +789,14 @@ def make_figure(summary: list[dict], path: Path) -> dict[str, float]:
         ylabel="Constraint satisfaction rate (%)",
     )
 
-    handles, labels = axes[0, 0].get_legend_handles_labels()
+    handles = []
+    labels = []
+    for legend_axis in (axes[0, 0], axes[1, 2]):
+        axis_handles, axis_labels = legend_axis.get_legend_handles_labels()
+        for handle, label in zip(axis_handles, axis_labels, strict=True):
+            if label not in labels:
+                handles.append(handle)
+                labels.append(label)
     fig.legend(
         handles,
         labels,
@@ -760,19 +839,19 @@ def findings(summary: list[dict], extras: dict[str, float]) -> dict:
 
     angle_rows = [
         row for row in summary
-        if row["scan"] == "angle" and row["method"] == "Subspace-ZO-UCB"
+        if row["scan"] == "angle" and row["method"] == "Subspace-ZO"
     ]
     null = pick(
         scan="uncertainty_null", method="Subspace-ZO-UCB",
-        sigma=0.001, repeats=20, delta=0.05,
+        sigma=0.5, repeats=20, delta=0.05,
     )
     power = pick(
         scan="uncertainty_power", method="Subspace-ZO-UCB",
-        sigma=0.001, repeats=20, delta=0.05,
+        sigma=0.5, repeats=20, delta=0.05,
     )
     robust_power = pick(
         scan="uncertainty_power", method="Robust-ZO-UCB",
-        sigma=0.001, repeats=20, delta=0.05,
+        sigma=0.5, repeats=20, delta=0.05,
     )
     coverage_rows = [
         row for row in summary
@@ -790,7 +869,7 @@ def findings(summary: list[dict], extras: dict[str, float]) -> dict:
     return {
         **DEFAULTS,
         **extras,
-        "angle_scan_ucb_detection": {
+        "angle_scan_conflict_detection": {
             str(int(row["angle"])): row["correct_detection_mean"] for row in angle_rows
         },
         "null_false_projection_rate_delta_005": null["false_projection_mean"],
@@ -842,6 +921,7 @@ def main() -> None:
     write_csv(args.output_dir / "summary.csv", summary)
     extras = make_figure(summary, args.figure)
     report = findings(summary, extras)
+    report["seeds"] = args.seeds
     report["case_count"] = len(cases)
     report["seed_level_rows"] = len(records)
     report["figure"] = str(args.figure)
