@@ -249,6 +249,7 @@ def _run_b2(
         "B4": ("history", "point", "ucb"),
         "B5": ("history", "robust", "mean"),
     }
+    anchor_delta = config.getfloat("tip", "anchor_delta", fallback=0.0)
     basis_mode, correction_mode, gate_mode = variants[exp_type]
     log_phase(
         logger,
@@ -273,6 +274,7 @@ def _run_b2(
         basis_mode=basis_mode,
         correction_mode=correction_mode,
         gate_mode=gate_mode,
+        anchor_delta=anchor_delta,
     )
 
     return joint_model

@@ -579,6 +579,32 @@ class JointModel(nn.Module):
             "fallback": fallback,
         }
 
+    @staticmethod
+    def _robust_cone_margin(
+        coordinates: torch.Tensor,
+        coordinate_samples: torch.Tensor,
+        delta: float,
+    ) -> float:
+        """Value of the robust cone constraint at ``coordinates``.
+
+        Mirrors the constraint used by :meth:`_robust_subspace_projection`, so
+        the task anchor can be backtracked until it stays inside the cone
+        instead of silently leaving the feasible set.
+        """
+        if coordinate_samples.ndim != 2 or coordinate_samples.shape[0] < 2:
+            return 0.0
+        trial = coordinates.detach().double().cpu().numpy()
+        samples = coordinate_samples.detach().double().cpu().numpy()
+        rank = samples.shape[1]
+        mean = np.mean(samples, axis=0)
+        covariance = np.cov(samples, rowvar=False, ddof=1) / samples.shape[0]
+        covariance = np.atleast_2d(covariance)
+        ridge = max(float(np.trace(covariance)) / max(rank, 1) * 1e-8, 1e-12)
+        covariance = covariance + ridge * np.eye(rank)
+        beta = float(student_t.ppf(1.0 - delta, df=samples.shape[0] - 1))
+        variance = max(float(trial @ covariance @ trial), 0.0)
+        return float(mean @ trial - beta * math.sqrt(variance))
+
     def _sync_first_moment_to_applied_update(
         self,
         parameters: list[torch.nn.Parameter],
@@ -1476,7 +1502,7 @@ class JointModel(nn.Module):
         self, data_loader, phase_name, num_epoch, subspace_rank=4,
         epsilon=1e-3, confidence_delta=0.05, accum_steps=None,
         on_epoch_end=None, basis_mode="history", correction_mode="robust",
-        gate_mode="ucb",
+        gate_mode="ucb", anchor_delta=0.0,
     ):
         if subspace_rank < 2:
             raise ValueError("subspace_rank must be at least 2")
@@ -1484,6 +1510,8 @@ class JointModel(nn.Module):
             raise ValueError("epsilon must be positive")
         if not 0.0 < confidence_delta < 1.0:
             raise ValueError("confidence_delta must lie in (0, 1)")
+        if anchor_delta < 0.0:
+            raise ValueError("anchor_delta must be non-negative")
         if basis_mode not in {"history", "random"}:
             raise ValueError("basis_mode must be 'history' or 'random'")
         if correction_mode not in {"robust", "point"}:
@@ -1659,6 +1687,28 @@ class JointModel(nn.Module):
                         "margin": 0.0,
                         "fallback": 0.0,
                     }
+            if project and anchor_delta > 0.0 and gp_norm.item() > 1e-12:
+                # Task anchor.  The minimum-change projection lands exactly on
+                # the boundary g_P^T d = 0, so it can only stop the forecast
+                # loss from rising -- it can never push it down.  A step of
+                # fixed magnitude along the forecast-gradient direction makes
+                # the first-order change strictly negative, and because the
+                # magnitude does not scale with the current proposal it
+                # survives as the proposal shrinks (the projection alone does
+                # not: it is positively homogeneous in the proposal).
+                direction = prediction_coordinates / gp_norm
+                for _ in range(6):
+                    anchored = candidate_coordinates + anchor_delta * direction
+                    if (
+                        correction_mode != "robust"
+                        or model._robust_cone_margin(
+                            anchored, coordinate_samples, confidence_delta
+                        )
+                        >= 0.0
+                    ):
+                        candidate_coordinates = anchored
+                        break
+                    anchor_delta *= 0.5  # backtrack to stay inside the cone
             candidate = g_i + basis @ (
                 candidate_coordinates - update_coordinates
             )

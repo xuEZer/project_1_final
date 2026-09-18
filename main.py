@@ -93,6 +93,13 @@ def selected_config_payload(config: ConfigParser) -> dict[str, str]:
     if exp_type in {"B2", "B3", "B4", "B5", "RQ3", "RQ4"}:
         for key in ("subspace_rank", "epsilon", "confidence_delta"):
             add("tip", key)
+        # The task anchor changes the method, so it joins the identity only when
+        # it is switched on; default runs keep their names and stay detected as
+        # completed.
+        if config.has_option("tip", "anchor_delta") and config.getfloat(
+            "tip", "anchor_delta"
+        ) > 0.0:
+            add("tip", "anchor_delta")
         if exp_type == "RQ4":
             for key in ("rq4_ranks", "rq4_epsilons", "rq4_gate_deltas"):
                 add("tip", key)
