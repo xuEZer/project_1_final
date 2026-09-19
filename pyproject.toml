@@ -26,4 +26,4 @@ dependencies = [
 # Batch completes at all -- cold-start measurement, host-pressure shedding --
 # so a silent move would change how the experiments run, not just their numbers.
 # Bump the hash when expman's behaviour changes.
-expman = { git = "https://github.com/xuEZer/expman.git", rev = "b33e75b8722e88beb9975644e215088871558790" }
+expman = { git = "https://github.com/xuEZer/expman.git", rev = "acaecbf7652b4de2f667372f27087ec2195af1de" }
