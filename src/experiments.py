@@ -20,11 +20,12 @@ from src.models.jointModel import JointModel
 
 
 class EpochMonitor:
-    """Track the best imputer checkpoint and log losses on train/val splits.
+    """Track the best imputer checkpoint by validation forecast loss.
 
-    At every epoch end the monitor computes imputation and prediction MSE
-    on the training and validation splits, logs a single concise line, and
-    writes scalars to TensorBoard. Supports early stopping.
+    At every epoch end the monitor evaluates the validation split and logs both
+    the imputation and the prediction loss. Model selection and early stopping
+    use the prediction loss, so the retained checkpoint is the one that
+    forecasts best rather than the one that reconstructs best.
 
     Parameters
     ----------
@@ -44,7 +45,6 @@ class EpochMonitor:
         patience: int,
         min_delta: float,
         logger: logging.Logger,
-        selection: str = "imputation",
     ) -> None:
         self._model = joint_model
         self._val_loader = val_loader
@@ -53,11 +53,6 @@ class EpochMonitor:
         self._checkpoint_enabled = patience > 0
         self._min_delta = min_delta
         self._logger = logger
-        if selection not in {"imputation", "prediction"}:
-            raise ValueError(
-                "model selection must be 'imputation' or 'prediction'"
-            )
-        self._selection = selection
         self._best_val_pred = float("inf")
         self._best_value = float("inf")
         self._best_epoch = 0
@@ -85,16 +80,16 @@ class EpochMonitor:
             if math.isfinite(val_pred_current):
                 parts.append(f"val_pred_loss={val_pred_current:.6f}")
                 tb.add_scalar("loss/val_pred_loss", val_pred_current, epoch)
-        if self._selection == "prediction":
-            val_current = val_pred_current
-
         self._logger.info("Epoch %03d/%d | %s", epoch, self._num_epoch, " | ".join(parts))
 
         # ``patience <= 0`` is the fixed-horizon mode: validation is still
         # logged, but neither early stopping nor best-checkpoint selection is
         # allowed to replace the final-epoch state.
-        if self._selection == "prediction":
-            self._best_val_pred = min(self._best_val_pred, val_pred_current)
+        self._best_val_pred = min(self._best_val_pred, val_pred_current)
+        # Selection and early stopping always follow the task metric: the
+        # checkpoint kept is the one that forecasts best on validation, not the
+        # one that reconstructs best.
+        val_current = val_pred_current
         if self._checkpoint_enabled and self._val_loader is not None:
             # A non-finite val loss is an invalid observation (e.g. a split
             # with no observed target): neither count it as an improvement
@@ -133,13 +128,9 @@ class EpochMonitor:
             return
         self._model.imputer.load_state_dict(self._best_state)
         self._model.to(self._model.device)
-        metric = (
-            "val_imp_loss" if self._selection == "imputation"
-            else "val_pred_loss"
-        )
         self._logger.info(
-            "Restored best val checkpoint: epoch=%03d, %s=%.6f",
-            self._best_epoch, metric, self._best_value,
+            "Restored best val checkpoint: epoch=%03d, val_pred_loss=%.6f",
+            self._best_epoch, self._best_value,
         )
 
 
@@ -179,9 +170,6 @@ def run_experiment(
         patience=patience,
         min_delta=min_delta,
         logger=logger,
-        selection=config.get(
-            "training", "model_selection", fallback="imputation"
-        ),
     )
     on_epoch_end = epoch_monitor.on_epoch_end
 
