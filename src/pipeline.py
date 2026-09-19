@@ -13,6 +13,8 @@ and disappears once the internals read the run dictionary directly.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 from collections.abc import Mapping, Sequence
 from configparser import ConfigParser, ExtendedInterpolation
@@ -87,8 +89,22 @@ def build_config(run: dict, **runtime: dict) -> ConfigParser:
     return parser
 
 
+def _plain(value):
+    """Unwrap expman's frozen containers into plain Python values."""
+    if isinstance(value, Mapping):
+        return {key: _plain(item) for key, item in value.items()}
+    if isinstance(value, Sequence) and not isinstance(value, str):
+        return [_plain(item) for item in value]
+    return value
+
+
 def run_tag(run: dict) -> str:
-    """Stable, filesystem-safe identifier for one run configuration."""
+    """Stable, filesystem-safe identifier for one run configuration.
+
+    The readable prefix names the matrix cell; the digest suffix guarantees that
+    configurations differing only in a sweep field (rq4 vs rq4_timing vary the
+    epsilon and delta lists alone) do not share one artifact directory.
+    """
     parts = [
         _scalar(run["stage"]),
         _scalar(run["dataset"]["name"]),
@@ -96,7 +112,9 @@ def run_tag(run: dict) -> str:
         _scalar(run["predictor"]["name"]),
         f"seed{_scalar(run['seed'])}",
     ]
-    return "_".join(parts)
+    payload = json.dumps(_plain(run), sort_keys=True, separators=(",", ":"))
+    digest = hashlib.blake2b(payload.encode("utf-8"), digest_size=4).hexdigest()
+    return "_".join(parts) + f"__{digest}"
 
 
 class PrepareData(Stage):
