@@ -12,6 +12,35 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from src.rng import numpy_rng
 
+_logger = logging.getLogger(__name__)
+
+
+def _cached_snapshot(repo_id: str, allow_patterns: str) -> str:
+    """Resolve a dataset snapshot from the local cache, downloading only if needed.
+
+    ``revision="main"`` has to be resolved against the Hub, which is a network
+    round trip on every call -- and the Hub is not always reachable, in which
+    case the client waits out its timeout and retries.  A machine that already
+    holds the snapshot should not pay that: the local cache is tried first, and
+    the network is used only when it does not have this revision.
+    """
+    try:
+        return snapshot_download(
+            repo_id=repo_id,
+            repo_type="dataset",
+            revision="main",
+            allow_patterns=allow_patterns,
+            local_files_only=True,
+        )
+    except Exception as error:  # noqa: BLE001 - any miss means "fetch it"
+        _logger.info("snapshot %s not in the local cache (%s); fetching", repo_id, error)
+        return snapshot_download(
+            repo_id=repo_id,
+            repo_type="dataset",
+            revision="main",
+            allow_patterns=allow_patterns,
+        )
+
 
 def preprocess_dataset(
     source: str,
@@ -114,11 +143,8 @@ def load_raw_series(
 ) -> np.ndarray:
     """Load one univariate series from a supported Hugging Face layout."""
     if source == "huggingface":
-        snapshot_dir = snapshot_download(
-            repo_id=repo_name,
-            repo_type="dataset",
-            revision="main",
-            allow_patterns=f"{dataset_name}/{frequency}/*",
+        snapshot_dir = _cached_snapshot(
+            repo_name, f"{dataset_name}/{frequency}/*"
         )
         dataset = load_from_disk(f"{snapshot_dir}/{dataset_name}/{frequency}")
         filtered = dataset.filter(lambda x: x["item_id"] == item_id)
