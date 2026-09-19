@@ -1697,8 +1697,9 @@ class JointModel(nn.Module):
                 # survives as the proposal shrinks (the projection alone does
                 # not: it is positively homogeneous in the proposal).
                 direction = prediction_coordinates / gp_norm
+                realized = anchor_delta
                 for _ in range(6):
-                    anchored = candidate_coordinates + anchor_delta * direction
+                    anchored = candidate_coordinates + realized * direction
                     if (
                         correction_mode != "robust"
                         or model._robust_cone_margin(
@@ -1708,7 +1709,7 @@ class JointModel(nn.Module):
                     ):
                         candidate_coordinates = anchored
                         break
-                    anchor_delta *= 0.5  # backtrack to stay inside the cone
+                    realized *= 0.5  # backtrack to stay inside the cone
             candidate = g_i + basis @ (
                 candidate_coordinates - update_coordinates
             )
