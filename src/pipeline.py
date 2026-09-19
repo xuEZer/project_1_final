@@ -14,7 +14,7 @@ and disappears once the internals read the run dictionary directly.
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from configparser import ConfigParser, ExtendedInterpolation
 from pathlib import Path
 
@@ -49,6 +49,11 @@ def build_config(run: dict, **runtime: dict) -> ConfigParser:
     here explicitly instead.
     """
     parser = ConfigParser(interpolation=ExtendedInterpolation())
+    # Declared once: the old code reads these without a fallback, and setting
+    # them inside the field loop would let a later scalar wipe an earlier value.
+    parser.add_section(_SCALAR_SECTION)
+    for blank, default in _REQUIRED_BLANK.items():
+        parser.set(_SCALAR_SECTION, blank, default)
     for key, value in run.items():
         # expman freezes nested nodes into FrozenDict, which is a Mapping but
         # not a dict; testing for dict would silently flatten every section.
@@ -60,17 +65,17 @@ def build_config(run: dict, **runtime: dict) -> ConfigParser:
             fields = {key: value}
         if not parser.has_section(section):
             parser.add_section(section)
-        if section == _SCALAR_SECTION:
-            for blank, default in _REQUIRED_BLANK.items():
-                parser.set(section, blank, default)
         for field, field_value in fields.items():
             parser.set(
                 section, _SCALAR_ALIAS.get(field, field), _scalar(field_value)
             )
     # expman forbids .get()/in on ctx.cfg, so every field read here must be
     # declared by the experiment YAML; a missing one is a loud KeyError.
+    # expman freezes lists into FrozenList, which is a Sequence but not a list;
+    # testing for list silently skipped this branch and left [training] device
+    # unset, which the imputer builders read as config["training"]["device"].
     resources = run["device"]
-    if isinstance(resources, (list, tuple)):
+    if isinstance(resources, Sequence) and not isinstance(resources, str):
         parser.set("training", "device", "cuda" if len(resources) else "cpu")
     dataset = run["dataset"]
     parser.set("data", "dataset", _scalar(dataset["name"]))
