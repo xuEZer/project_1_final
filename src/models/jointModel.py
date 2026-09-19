@@ -861,6 +861,11 @@ class JointModel(nn.Module):
                                 self.global_optim_step + 1,
                                 base_step_seconds,
                             )
+                            self.record_metric(
+                                "timing/base_step_seconds",
+                                base_step_seconds,
+                                self.global_optim_step + 1,
+                            )
                         raw_adamw_update = torch.cat([
                             (before - after).flatten()
                             for before, after in zip(
@@ -1081,6 +1086,9 @@ class JointModel(nn.Module):
                     epoch_number,
                     epoch_seconds,
                 )
+                self.record_metric(
+                    "timing/epoch_seconds", epoch_seconds, epoch_number
+                )
 
             if should_stop:
                 break
@@ -1267,8 +1275,23 @@ class JointModel(nn.Module):
             step = self.global_optim_step + 1
             raw_delta = pred_loss_after_raw - pred_loss_before
             denominator = max(abs(pred_loss_before), 1e-12)
+
+            def record(variant, *, delta, conflict, projected, gain):
+                """Persist one variant's numbers; the log line is for humans."""
+                path = f"rq3/{variant}"
+                for name, number in (
+                    ("pred_loss_before", pred_loss_before),
+                    ("candidate_pred_loss_delta", delta),
+                    ("conflict", conflict),
+                    ("projected", projected),
+                    ("gain_vs_raw", gain),
+                    ("relative_gain", gain / denominator),
+                ):
+                    self.record_metric(f"{path}/{name}", number, step)
+
+            record("B1", delta=raw_delta, conflict=0, projected=0, gain=0.0)
             self.logger.info(
-                "RQ3 counterfactual step: step=%d | variant=B1 | "
+                "RQ3 counterfactual step: step=%d | variant=B1 |"
                 "pred_loss_before=%.9g | candidate_pred_loss_delta=%.9g | "
                 "conflict=0 | projected=0 | gain_vs_raw=0 | relative_gain=0",
                 step, pred_loss_before, raw_delta,
@@ -1280,6 +1303,13 @@ class JointModel(nn.Module):
                 candidate_delta = candidate_loss - pred_loss_before
                 gain = pred_loss_after_raw - candidate_loss
                 metadata = step_metadata[stage]
+                record(
+                    stage,
+                    delta=candidate_delta,
+                    conflict=int(metadata["conflict"]),
+                    projected=int(metadata["projected"]),
+                    gain=gain,
+                )
                 self.logger.info(
                     "RQ3 counterfactual step: step=%d | variant=%s | "
                     "pred_loss_before=%.9g | candidate_pred_loss_delta=%.9g | "
@@ -1445,13 +1475,21 @@ class JointModel(nn.Module):
                 rank_started = time.perf_counter()
                 evaluate_variant(f"rank={rank}", rank, base_epsilon, cone_delta)
                 model._synchronize_for_timing()
+                rank_seconds = time.perf_counter() - rank_started
                 self.logger.info(
                     "RQ4 TIP timing: epoch=%d | step=%d | rank=%d | "
                     "wall_seconds=%.9f",
                     self.global_epoch + 1,
                     self.global_optim_step + 1,
                     rank,
-                    time.perf_counter() - rank_started,
+                    rank_seconds,
+                )
+                # One rank per key: several ranks share a step, so the rank
+                # belongs in the metric path or the last one would win.
+                self.record_metric(
+                    f"timing/tip_seconds/rank{rank}",
+                    rank_seconds,
+                    self.global_optim_step + 1,
                 )
             for epsilon in epsilons:
                 evaluate_variant(
@@ -2138,6 +2176,9 @@ class JointModel(nn.Module):
                     prediction_change_stats["projected_observed"],
                 )
                 tb_values = {
+                    # The rates below are counts over this; without it the
+                    # counts cannot be recovered from the store.
+                    "steps": float(steps),
                     "raw_conflict_rate": stats["raw"] / steps,
                     "ucb_conflict_rate": stats["ucb_conflict"] / steps,
                     "projection_rate": stats["projected"] / steps,
