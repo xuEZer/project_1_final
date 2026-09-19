@@ -98,8 +98,21 @@ def preprocess_dataset(
         column_index=column_index,
     )
 
+    # A complete dataset is asked to impute block missing where it is measured:
+    # the synthetic natural mask is laid down over the test range only, so the
+    # training and validation splits carry the artificial mask alone.  A dataset
+    # that brings its own NaNs keeps them everywhere -- those are real.
+    bounds = split_boundaries(
+        len(data), lookback_len, pred_len, val_ratio, test_ratio, ett_boundaries
+    )
     data, N_data, NA_data, N_mask, A_mask, NA_mask = generate_missing(
-        data, missing_rate, artificial_missing_rate, block_size, random_seed, logger
+        data,
+        missing_rate,
+        artificial_missing_rate,
+        block_size,
+        random_seed,
+        logger,
+        natural_span=(bounds[4], bounds[5]),
     )
 
     train_data, val_data, test_data = split_data(
@@ -207,6 +220,7 @@ def generate_missing(
     block_size: int,
     random_seed: int,
     logger: logging.Logger,
+    natural_span: tuple[int, int] | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Inject natural and artificial missing values and return masks.
 
@@ -217,6 +231,12 @@ def generate_missing(
         block_size: Block size used to sample natural missing intervals.
         random_seed: Seed for random mask generation.
         logger: Logger for missing-data diagnostics.
+        natural_span: Half-open range the synthetic natural blocks are confined
+            to.  A complete dataset gets its block missing only where it will be
+            measured -- the test split -- so training and validation carry the
+            artificial mask alone.  ``None`` spreads the blocks over the whole
+            series, which is what a dataset with no splits of its own still
+            needs.  Natural NaNs already present in the data are never moved.
 
     Returns:
         Tuple containing complete data, natural-missing data, incomplete data, and
@@ -236,11 +256,16 @@ def generate_missing(
         natural_missing_data = data.copy()
     else:
         complete_data = data.copy()
+        natural_mask = np.zeros(data.shape, dtype=bool)
+        start, end = (0, len(data)) if natural_span is None else natural_span
+        span = end - start
+        block_count = int(np.ceil(span / block_size))
         natural_mask_block = (
-            natural_rng.random((int(np.ceil(len(data) / block_size)), data.shape[1]))
-            < missing_rate
+            natural_rng.random((block_count, data.shape[1])) < missing_rate
         )
-        natural_mask = np.repeat(natural_mask_block, block_size, axis=0)[: len(data)]
+        natural_mask[start:end] = np.repeat(natural_mask_block, block_size, axis=0)[
+            :span
+        ]
         natural_missing_data = data.copy()
         natural_missing_data[natural_mask] = np.nan
 
@@ -279,6 +304,68 @@ def generate_missing(
         natural_mask,
         artificial_mask,
         missing_mask,
+    )
+
+
+def split_boundaries(
+    len_data: int,
+    lookback_len: int,
+    pred_len: int,
+    val_ratio: float,
+    test_ratio: float,
+    fixed_boundaries: tuple[int, int, int] | None = None,
+) -> tuple[int, int, int, int, int, int]:
+    """Return the train/val/test slice bounds of one raw series.
+
+    Masking needs the test range before the splits exist, so that a complete
+    dataset's synthetic block missing can be placed only where it is measured.
+    """
+    if fixed_boundaries is not None:
+        train_end, val_end, test_end = fixed_boundaries
+        if not (0 < train_end < val_end < test_end <= len_data):
+            raise ValueError(
+                f"Invalid fixed split boundaries {fixed_boundaries} for "
+                f"series length {len_data}."
+            )
+        train_start = 0
+        val_start = train_end - lookback_len
+        test_start = val_end - lookback_len
+        if val_start < 0 or test_start < 0:
+            raise ValueError("Lookback is too long for the fixed split boundaries.")
+        return train_start, train_end, val_start, val_end, test_start, test_end
+
+    if val_ratio < 0 or test_ratio <= 0 or val_ratio + test_ratio >= 1:
+        raise ValueError(
+            "Expected val_ratio >= 0, test_ratio > 0, "
+            "and val_ratio + test_ratio < 1."
+        )
+
+    overhead = lookback_len + pred_len - 1
+    min_len = overhead + 1
+    num_splits = 2 if val_ratio == 0 else 3
+    if len_data < num_splits * min_len:
+        raise ValueError(
+            f"Time series too short ({len_data}) to create non-overlapping "
+            f"splits with lookback={lookback_len}, pred={pred_len}."
+        )
+
+    total_windows = len_data - num_splits * overhead
+    train_windows = int(total_windows * (1 - val_ratio - test_ratio))
+    val_windows = int(total_windows * val_ratio)
+    train_raw_len = train_windows + overhead
+    val_raw_len = val_windows + overhead if val_ratio > 0 else 0
+
+    train_start = 0
+    train_end = train_raw_len
+    val_start = train_end
+    val_end = val_start + val_raw_len
+    return (
+        train_start,
+        train_end,
+        val_start,
+        val_end,
+        val_end if val_ratio > 0 else train_end,
+        len_data,
     )
 
 
@@ -325,46 +412,16 @@ def split_data(
 
     """
     len_data = len(N_data)
-    if fixed_boundaries is not None:
-        train_end, val_end, test_end = fixed_boundaries
-        if not (0 < train_end < val_end < test_end <= len_data):
-            raise ValueError(
-                f"Invalid fixed split boundaries {fixed_boundaries} for "
-                f"series length {len_data}."
-            )
-        train_start = 0
-        val_start = train_end - lookback_len
-        test_start = val_end - lookback_len
-        if val_start < 0 or test_start < 0:
-            raise ValueError("Lookback is too long for the fixed split boundaries.")
-    elif val_ratio < 0 or test_ratio <= 0 or val_ratio + test_ratio >= 1:
-        raise ValueError(
-            "Expected val_ratio >= 0, test_ratio > 0, "
-            "and val_ratio + test_ratio < 1."
-        )
-
-    if fixed_boundaries is None:
-        overhead = lookback_len + pred_len - 1
-        min_len = overhead + 1
-        num_splits = 2 if val_ratio == 0 else 3
-        if len_data < num_splits * min_len:
-            raise ValueError(
-                f"Time series too short ({len_data}) to create non-overlapping "
-                f"splits with lookback={lookback_len}, pred={pred_len}."
-            )
-
-        total_windows = len_data - num_splits * overhead
-        train_windows = int(total_windows * (1 - val_ratio - test_ratio))
-        val_windows = int(total_windows * val_ratio)
-        train_raw_len = train_windows + overhead
-        val_raw_len = val_windows + overhead if val_ratio > 0 else 0
-
-        train_start = 0
-        train_end = train_raw_len
-        val_start = train_end
-        val_end = val_start + val_raw_len
-        test_start = val_end if val_ratio > 0 else train_end
-        test_end = len_data
+    (
+        train_start,
+        train_end,
+        val_start,
+        val_end,
+        test_start,
+        test_end,
+    ) = split_boundaries(
+        len_data, lookback_len, pred_len, val_ratio, test_ratio, fixed_boundaries
+    )
 
     def _make_split(start: int, end: int) -> dict[str, np.ndarray | None]:
         return {
