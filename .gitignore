@@ -18,3 +18,4 @@ cache/
 logs/*
 results/
 paper/
+*-backup/

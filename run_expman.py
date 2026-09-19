@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run the impute-then-forecast matrix through expman.
 
-Replaces scripts/run_main.py: the matrix comes from configs/experiment.yaml,
+The matrix comes from a YAML,
 scheduling and resume come from expman.Batch, and each run lives in its own
 output directory with per-stage snapshots.
 

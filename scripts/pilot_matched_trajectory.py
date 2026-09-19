@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import logging
 import sys
 from pathlib import Path
@@ -41,7 +42,8 @@ sys.path.insert(0, str(ROOT))
 import torch  # noqa: E402
 from torch.utils.tensorboard import SummaryWriter  # noqa: E402
 
-from main import config_from_overrides  # noqa: E402
+from expman import load_configs  # noqa: E402
+
 from src.build import (  # noqa: E402
     build_dataloaders, configure_deterministic_runtime, init_joint_model,
     parse_column_index,
@@ -50,6 +52,9 @@ from src.data_loader import load_h5, preprocess_dataset  # noqa: E402
 from src.evaluator import evaluate  # noqa: E402
 from src.experiments import _run_b1, _run_b2  # noqa: E402
 from src.logger import setup_logger  # noqa: E402
+from src.pipeline import (  # noqa: E402
+    build_config, run_tag, runtime_from_dataset,
+)
 
 
 class LimitedLoader:
@@ -75,66 +80,38 @@ class LimitedLoader:
         return base if self._limit is None else min(base, self._limit)
 
 
-def overrides(args: argparse.Namespace, dataset: str) -> list[str]:
-    """Same fixed protocol as configs/main_exp.json, plus pilot-only knobs."""
-    values = [
-        ("--experiment.type", "B1"),
-        ("--experiment.seed", str(args.seed)),
-        ("--data.dataset", args.dataset),
-        ("--imputer.model", args.imputer),
-        ("--predictor.model", args.predictor),
-        ("--training.lr", "0.001"),
-        ("--training.max_epochs", str(args.epochs)),
-        # patience <= 0 is the fixed-horizon mode: the built-in monitor may not
-        # early-stop, and we never return True from our own callback either.
-        ("--training.patience", "0"),
-        ("--loader.batch_size", "256"),
-        ("--loader.micro_batch", str(args.micro_batch)),
-        ("--data.missing_rate", "0.2"),
-        ("--data.artificial_missing_rate", "0.2"),
-        ("--data.block_size", "32"),
-        ("--data.lookback", "512"),
-        ("--data.pred_len", "16"),
-        ("--tip.subspace_rank", str(args.rank)),
-        ("--tip.epsilon", "0.001"),
-        ("--tip.confidence_delta", "0.1"),
-        ("--tip.anchor_delta", str(args.anchor_delta)),
-    ]
-    out: list[str] = []
-    for key, value in values:
-        out += [key, value]
-    return out
-
-
 def build(args: argparse.Namespace, logger: logging.Logger, tb):
-    """Fresh model + dataloaders, identical for both arms (same seed)."""
-    cfg = config_from_overrides(overrides(args, args.dataset))
-    text = cfg.get("dataset", "source")
+    """Fresh model + dataloaders from one run of the experiment YAML.
+
+    Both arms are rebuilt from the same run dictionary, so they share the
+    initialization seed, the data order and the whole protocol.
+    """
+    run = load_configs(args.config)[args.index]
+    run = json.loads(json.dumps(run))          # unfreeze into a plain dict
+    run["training"]["max_epochs"] = args.epochs
+    # patience <= 0 is the fixed-horizon mode: neither the built-in monitor nor
+    # our own callback may early-stop, so both arms stay step-aligned.
+    run["training"]["patience"] = 0
+    if args.anchor_delta:
+        run["tip"]["anchor_delta"] = args.anchor_delta
+
+    ds = run["dataset"]
     folder = preprocess_dataset(
-        source=text,
-        repo_name=cfg.get("dataset", "repo_name"),
-        dataset_name=cfg.get("dataset", "dataset_name"),
-        frequency=cfg.get("dataset", "frequency"),
-        item_id=cfg.get("dataset", "item_id"),
-        column_index=parse_column_index(cfg.get("dataset", "column_index")),
-        missing_rate=cfg.getfloat("data", "missing_rate"),
-        artificial_missing_rate=cfg.getfloat("data", "artificial_missing_rate"),
-        block_size=cfg.getint("data", "block_size"),
-        lookback_len=cfg.getint("data", "lookback"),
-        pred_len=cfg.getint("data", "pred_len"),
-        val_ratio=cfg.getfloat("data", "val_ratio"),
-        test_ratio=cfg.getfloat("data", "test_ratio"),
-        random_seed=cfg.getint("experiment", "seed"),
-        logger=logger,
-        save_path=Path(cfg.get("paths", "cache_dir")) / "data",
+        source=ds["source"], repo_name=ds["repo_name"],
+        dataset_name=ds["dataset_name"], frequency=ds["frequency"],
+        item_id=ds["item_id"], column_index=parse_column_index(str(ds["column_index"])),
+        missing_rate=run["data"]["missing_rate"],
+        artificial_missing_rate=run["data"]["artificial_missing_rate"],
+        block_size=run["data"]["block_size"], lookback_len=run["data"]["lookback"],
+        pred_len=run["data"]["pred_len"], val_ratio=run["data"]["val_ratio"],
+        test_ratio=run["data"]["test_ratio"], random_seed=run.get("missing_seed", run["seed"]),
+        logger=logger, save_path=Path(run["paths"]["cache_dir"]) / "data",
     )
     dataset = load_h5(folder / "dataset.h5")
-    cfg.set("data", "d_feature", str(dataset["train"]["X_N"].shape[2]))
-    cfg.set("data", "lookback", str(dataset["train"]["X_N"].shape[1]))
-
+    cfg = build_config(run, data=runtime_from_dataset(dataset))
     model = init_joint_model(cfg, logger, tb)
     train_loader, test_loader, no_gt = build_dataloaders(
-        config=cfg, seed=args.seed, dataset=dataset,
+        config=cfg, seed=run["seed"], dataset=dataset,
         joint_model=model, logger=logger,
     )
     return cfg, model, train_loader, test_loader, no_gt
@@ -142,17 +119,15 @@ def build(args: argparse.Namespace, logger: logging.Logger, tb):
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--dataset", default="azure2019_I_5T")
-    ap.add_argument("--imputer", default="SAITS")
-    ap.add_argument("--predictor", default="Toto2")
-    ap.add_argument("--rank", type=int, default=4)
-    ap.add_argument("--micro-batch", type=int, default=64)
+    ap.add_argument("--config", default=str(ROOT / "configs" / "experiment.yaml"),
+                    help="experiment YAML the run is taken from")
+    ap.add_argument("--index", type=int, default=0,
+                    help="which expanded run of that YAML to use")
     ap.add_argument("--epochs", type=int, default=20)
     ap.add_argument("--eval-every", type=int, default=2,
                     help="evaluate val+test every K epochs")
     ap.add_argument("--eval-batches", type=int, default=0,
                     help="cap evaluation batches per split (0 = all)")
-    ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--arms", nargs="+", default=["B1", "B2"])
     ap.add_argument("--anchor-delta", type=float, default=0.0,
                     help="task-anchor magnitude in displacement units (0 = off)")
@@ -160,8 +135,8 @@ def main() -> int:
     args = ap.parse_args()
 
     args.out.mkdir(parents=True, exist_ok=True)
-    tag = (f"{args.dataset}_{args.imputer}_{args.predictor}_r{args.rank}"
-           f"_mb{args.micro_batch}_a{args.anchor_delta:g}")
+    run0 = load_configs(args.config)[args.index]
+    tag = f"{run_tag(run0)}_ep{args.epochs}_a{args.anchor_delta:g}"
     logger = setup_logger(args.out / f"{tag}.log", log_name=f"pilot_{tag}")
     configure_deterministic_runtime(args.seed, logger)
     limit = args.eval_batches or None
