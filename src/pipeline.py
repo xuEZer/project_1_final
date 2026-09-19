@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 from collections.abc import Mapping, Sequence
 from configparser import ConfigParser, ExtendedInterpolation
 from pathlib import Path
@@ -205,16 +206,44 @@ class Train(Stage):
         writer = SummaryWriter(log_dir=out / "tb")
         try:
             model = init_joint_model(cfg, logger, writer)
+            if "imputer" in ctx.state:
+                # Resuming: expman restored the state written by the last
+                # successful checkpoint.save, so training continues rather
+                # than restarting from the initial weights.
+                model.imputer.load_state_dict(ctx.state["imputer"])
+                logger.info(
+                    "resumed imputer state saved at epoch %s",
+                    ctx.state.get("next_epoch"),
+                )
             train_loader, eval_loader, no_gt = build_dataloaders(
                 config=cfg, seed=seed, dataset=dataset,
                 joint_model=model, logger=logger,
             )
+
+            def on_epoch(epoch, monitor):
+                """Forward each epoch to expman and snapshot the weights."""
+                for name, value in monitor.last_metrics.items():
+                    if value is not None and math.isfinite(float(value)):
+                        ctx.report_metric(name, float(value), step=epoch)
+                ctx.state["imputer"] = {
+                    key: value.detach().cpu()
+                    for key, value in model.imputer.state_dict().items()
+                }
+                ctx.state["next_epoch"] = epoch
+                try:
+                    ctx.checkpoint.save(step=epoch)
+                except RuntimeError:
+                    # --checkpoint requires a stage driven by Batch or
+                    # Experiment; a bare Pipeline.run has no checkpoint store.
+                    pass
+
             model = run_experiment(
                 exp_type=cfg.get("experiment", "type"),
                 joint_model=model,
                 train_loader=train_loader,
                 config=cfg,
                 logger=logger,
+                on_epoch=on_epoch,
             )
         finally:
             writer.close()

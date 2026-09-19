@@ -54,6 +54,8 @@ class EpochMonitor:
         self._min_delta = min_delta
         self._logger = logger
         self._best_val_pred = float("inf")
+        # Last epoch's metrics, for the observer that forwards them to expman.
+        self.last_metrics: dict[str, float | None] = {}
         self._best_value = float("inf")
         self._best_epoch = 0
         self._best_state: dict[str, torch.Tensor] | None = None
@@ -85,6 +87,11 @@ class EpochMonitor:
         # ``patience <= 0`` is the fixed-horizon mode: validation is still
         # logged, but neither early stopping nor best-checkpoint selection is
         # allowed to replace the final-epoch state.
+        self.last_metrics = {
+            "train_loss": train_loss,
+            "val_imp_loss": val_current,
+            "val_pred_loss": val_pred_current,
+        }
         self._best_val_pred = min(self._best_val_pred, val_pred_current)
         # Selection and early stopping always follow the task metric: the
         # checkpoint kept is the one that forecasts best on validation, not the
@@ -140,6 +147,7 @@ def run_experiment(
     train_loader: dict[str, DataLoader],
     config: ConfigParser,
     logger: logging.Logger,
+    on_epoch=None,
 ) -> JointModel:
     """Run the configured experiment type.
 
@@ -171,7 +179,14 @@ def run_experiment(
         min_delta=min_delta,
         logger=logger,
     )
-    on_epoch_end = epoch_monitor.on_epoch_end
+    base_on_epoch_end = epoch_monitor.on_epoch_end
+
+    def on_epoch_end(epoch, train_loss, model):
+        """Monitor first, then hand the epoch to the caller's observer."""
+        should_stop = base_on_epoch_end(epoch, train_loss, model)
+        if on_epoch is not None:
+            on_epoch(epoch, epoch_monitor)
+        return should_stop
 
     if exp_type == "B1":
         trained_model = _run_b1(joint_model, train_loader, config, logger, on_epoch_end)
