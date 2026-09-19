@@ -31,6 +31,10 @@ predictor:
     - Sundial
     - TimesFM3
 
+# GPU resource list for expman's scheduler; [training] device is derived
+# from it by src.pipeline.build_config.
+device: [0]
+
 seed: 42
 
 paths:
@@ -56,7 +60,6 @@ loader:
 training:
   optimizer: AdamW
   lr: 0.001
-  device: cuda
   max_epochs: 50
   patience: 5
   min_delta: 1.0e-4

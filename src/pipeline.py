@@ -14,10 +14,13 @@ and disappears once the internals read the run dictionary directly.
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from configparser import ConfigParser, ExtendedInterpolation
 from pathlib import Path
 
 from expman import Pipeline, Stage
+
+from src.logger import setup_logger
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -47,7 +50,9 @@ def build_config(run: dict, **runtime: dict) -> ConfigParser:
     """
     parser = ConfigParser(interpolation=ExtendedInterpolation())
     for key, value in run.items():
-        if isinstance(value, dict):
+        # expman freezes nested nodes into FrozenDict, which is a Mapping but
+        # not a dict; testing for dict would silently flatten every section.
+        if isinstance(value, Mapping):
             section = key
             fields = value
         else:
@@ -62,9 +67,13 @@ def build_config(run: dict, **runtime: dict) -> ConfigParser:
             parser.set(
                 section, _SCALAR_ALIAS.get(field, field), _scalar(field_value)
             )
-    dataset = run.get("dataset")
-    if isinstance(dataset, dict) and "name" in dataset:
-        parser.set("data", "dataset", _scalar(dataset["name"]))
+    # expman forbids .get()/in on ctx.cfg, so every field read here must be
+    # declared by the experiment YAML; a missing one is a loud KeyError.
+    resources = run["device"]
+    if isinstance(resources, (list, tuple)):
+        parser.set("training", "device", "cuda" if len(resources) else "cpu")
+    dataset = run["dataset"]
+    parser.set("data", "dataset", _scalar(dataset["name"]))
     for section, fields in runtime.items():
         if not parser.has_section(section):
             parser.add_section(section)
@@ -76,11 +85,11 @@ def build_config(run: dict, **runtime: dict) -> ConfigParser:
 def run_tag(run: dict) -> str:
     """Stable, filesystem-safe identifier for one run configuration."""
     parts = [
-        _scalar(run.get("stage")),
+        _scalar(run["stage"]),
         _scalar(run["dataset"]["name"]),
         _scalar(run["imputer"]["name"]),
         _scalar(run["predictor"]["name"]),
-        f"seed{_scalar(run.get('seed'))}",
+        f"seed{_scalar(run['seed'])}",
     ]
     return "_".join(parts)
 
@@ -116,21 +125,146 @@ class PrepareData(Stage):
         return {"cache_dir": str(folder)}
 
 
+def artifact_dir(ctx) -> Path:
+    """Per-run artifact directory, keyed by the run's own configuration."""
+    root = Path(_scalar(ctx.cfg["paths"]["cache_dir"])) / "expman" / run_tag(ctx.cfg)
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def make_logger(ctx) -> logging.Logger:
+    """One log file per run; appended on a retry so earlier attempts survive."""
+    mode = "w" if getattr(ctx, "attempt", 1) <= 1 else "a"
+    return setup_logger(
+        artifact_dir(ctx) / "run.log",
+        log_name=f"expman_{run_tag(ctx.cfg)}",
+        mode=mode,
+    )
+
+
+def runtime_from_dataset(dataset: dict) -> dict:
+    """Shape the loader discovers, which main() used to write back into cfg."""
+    return {
+        "d_feature": str(dataset["train"]["X_N"].shape[2]),
+        "lookback": str(dataset["train"]["X_N"].shape[1]),
+    }
+
+
 class Train(Stage):
-    """Build the imputer plus frozen forecaster, train, and save the result."""
+    """Build the imputer plus frozen forecaster, train it, and save the result.
+
+    The model lives only inside this stage: expman snapshots every stage return
+    value, so an ``nn.Module`` cannot cross the boundary.  What crosses is the
+    path to the saved imputer state dict.
+    """
 
     def process(self, data, ctx):
-        raise NotImplementedError(
-            "S2 in progress: this stage wires init_joint_model, "
-            "build_dataloaders and run_experiment for both B1 and B2."
+        import torch
+        from torch.utils.tensorboard import SummaryWriter
+
+        from main import (
+            build_dataloaders,
+            configure_deterministic_runtime,
+            init_joint_model,
         )
+        from src.data_loader import load_h5
+        from src.experiments import run_experiment
+
+        dataset = load_h5(Path(data["cache_dir"]) / "dataset.h5")
+        runtime = runtime_from_dataset(dataset)
+        cfg = build_config(ctx.cfg, data=runtime)
+        seed = cfg.getint("experiment", "seed")
+        logger = make_logger(ctx)
+        configure_deterministic_runtime(seed, logger)
+        logger.info("expman train start: %s", run_tag(ctx.cfg))
+
+        out = artifact_dir(ctx)
+        writer = SummaryWriter(log_dir=out / "tb")
+        try:
+            model = init_joint_model(cfg, logger, writer)
+            train_loader, eval_loader, no_gt = build_dataloaders(
+                config=cfg, seed=seed, dataset=dataset,
+                joint_model=model, logger=logger,
+            )
+            model = run_experiment(
+                exp_type=cfg.get("experiment", "type"),
+                joint_model=model,
+                train_loader=train_loader,
+                config=cfg,
+                logger=logger,
+            )
+        finally:
+            writer.close()
+
+        checkpoint = out / "imputer.pt"
+        torch.save(model.imputer.state_dict(), checkpoint)
+        ctx.report_metric("train_done", 1)
+        logger.info("expman train done, checkpoint=%s", checkpoint)
+        return {
+            "checkpoint": str(checkpoint),
+            "cache_dir": data["cache_dir"],
+            **runtime,
+        }
 
 
 class Evaluate(Stage):
     """Rebuild the imputer from the saved state dict and score every split."""
 
+    SPLITS = ("train", "val", "test")
+
     def process(self, data, ctx):
-        raise NotImplementedError("S2 in progress: wraps src.evaluator.evaluate.")
+        import torch
+        from torch.utils.tensorboard import SummaryWriter
+
+        from main import (
+            build_dataloaders,
+            configure_deterministic_runtime,
+            init_joint_model,
+        )
+        from src.data_loader import load_h5
+        from src.evaluator import evaluate
+        from src.rng import torch_seed_scope
+
+        runtime = {"d_feature": data["d_feature"], "lookback": data["lookback"]}
+        cfg = build_config(ctx.cfg, data=runtime)
+        seed = cfg.getint("experiment", "seed")
+        logger = make_logger(ctx)
+        configure_deterministic_runtime(seed, logger)
+
+        writer = SummaryWriter(log_dir=artifact_dir(ctx) / "tb_eval")
+        try:
+            model = init_joint_model(cfg, logger, writer)
+        finally:
+            writer.close()
+        model.imputer.load_state_dict(
+            torch.load(data["checkpoint"], map_location=cfg.get("training", "device"))
+        )
+        train_loader, eval_loader, _no_gt = build_dataloaders(
+            config=cfg, seed=seed,
+            dataset=load_h5(Path(data["cache_dir"]) / "dataset.h5"),
+            joint_model=model, logger=logger,
+        )
+        loaders = {
+            "train": train_loader.get("train_eval"),
+            "val": train_loader.get("val"),
+            "test": eval_loader,
+        }
+        results: dict[str, dict] = {}
+        for split in self.SPLITS:
+            loader = loaders[split]
+            if loader is None:
+                continue
+            with torch_seed_scope(seed, f"{split}_evaluation"):
+                metrics = evaluate(
+                    cfg, model, loader, getattr(loader, "no_gt", False),
+                    logger, split_name=split,
+                )
+            results[split] = metrics
+            for name, value in metrics.items():
+                if value is not None:
+                    ctx.report_metric(f"{split}_{name}", float(value))
+            logger.info("expman evaluate %s: %s", split, metrics)
+        return results
 
 
 def build_pipeline() -> Pipeline:
@@ -144,4 +278,5 @@ __all__ = [
     "build_config",
     "build_pipeline",
     "run_tag",
+    "runtime_from_dataset",
 ]
