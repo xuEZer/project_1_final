@@ -5,19 +5,19 @@ Three Stage boundaries.  :class:`PrepareData` returns the prepared tensors,
 scores every split with the frozen forecaster.
 
 Training and scoring are separate Stages so that each one declares only what it
-reads.  A ``B1`` run trains the imputer against the reconstruction loss alone,
-so its result is reusable by every predictor that shares the imputer, and the
-:class:`Train` declaration says exactly that; a ``B2`` run projects against the
-predictor gradient and therefore declares the predictor too.  Scoring, which
-always runs the predictor, declares it unconditionally.
+reads.  Both training branches evaluate the frozen predictor around every
+optimizer step -- B1 to record what the reconstruction update does to the
+prediction loss, the TIP branches to measure the projection against it -- so
+:class:`Train` names the predictor, and the TIP branches additionally name the
+``tip`` section.  :class:`Evaluate`, which runs the predictor for every metric,
+names it unconditionally.
 
 :class:`Evaluate` rebuilds the tensors from the configuration instead of
 receiving them from :class:`PrepareData`.  expman snapshots every Stage's return
 value, so passing the dataset through :class:`Train` would store a full copy of
-it once per (dataset, imputer, [+ predictor]) group instead of once per dataset.
-Preprocessing is a fraction of a second against the cached raw series and the
-mask streams are derived from ``missing_seed``, so the rebuild is deterministic
-and cheap.
+it once per training group instead of once per dataset.  Preprocessing is a
+fraction of a second against the cached raw series and the mask streams are
+derived from ``missing_seed``, so the rebuild is deterministic and cheap.
 
 The model code still expects a ``ConfigParser``; :func:`build_config`
 materialises one run dictionary into that shape.  This bridge is transitional
@@ -249,15 +249,11 @@ def runtime_from_dataset(dataset: dict) -> dict:
 class Train(Stage):
     """Train the imputer for the configured branch and return its weights.
 
-    Only the trained imputer state leaves this Stage.  That is what makes the
-    declaration below useful: a ``B1`` run trains against the reconstruction
-    loss alone, so every predictor sharing the imputer reuses one training; a
-    ``B2`` run projects the update against the predictor gradient, so it
-    declares the predictor and trains separately for each of them.
-
-    The per-epoch validation losses are logged and the imputer state is written
-    to ``ctx.state`` and to a checkpoint so an interrupted attempt resumes
-    instead of restarting.
+    Only the trained imputer state leaves this Stage.  The declaration names
+    every configuration path the training and its per-step diagnostics read:
+    both branches evaluate the frozen predictor around each optimizer step, so
+    the recorded prediction losses -- and hence this Stage's output -- depend on
+    the predictor, and only the TIP branches read the ``tip`` section.
     """
 
     @classmethod
@@ -265,13 +261,13 @@ class Train(Stage):
         declaration = {
             "stage": True,
             "imputer": True,
+            "predictor": True,
             "loader": True,
             "training": True,
             "device": True,
             "seed": True,
         }
         if _scalar(cfg["stage"]) != "B1":
-            declaration["predictor"] = True
             declaration["tip"] = True
         return declaration
 

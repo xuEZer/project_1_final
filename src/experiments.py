@@ -19,17 +19,20 @@ from src.models.jointModel import JointModel
 
 
 class EpochMonitor:
-    """Log both validation losses at the end of every epoch.
+    """Log the imputation and prediction loss on both splits every epoch.
 
     Training runs to a fixed horizon: there is no early stopping and no
     best-checkpoint selection, so the state left by the last epoch is the one
-    that gets evaluated.  The monitor still computes the imputation and the
-    prediction validation loss every epoch so both are recorded in expman's
-    metric store.
+    that gets evaluated.  Both splits are measured with the same pair of
+    helpers on the same training-format loaders, so ``train_*`` and ``val_*``
+    are directly comparable; the loader also carries the artificial masks that
+    make the imputation loss well defined.
 
     Parameters
     ----------
     joint_model : JointModel
+    train_loader : DataLoader or None
+        Unshuffled view of the training split, in the training tensor layout.
     val_loader : DataLoader or None
     num_epoch : int
     logger : logging.Logger
@@ -38,39 +41,52 @@ class EpochMonitor:
     def __init__(
         self,
         joint_model: JointModel,
+        train_loader: DataLoader | None,
         val_loader: DataLoader | None,
         num_epoch: int,
         logger: logging.Logger,
     ) -> None:
         self._model = joint_model
+        self._train_loader = train_loader
         self._val_loader = val_loader
         self._num_epoch = num_epoch
         self._logger = logger
         # Last epoch's metrics, for the observer that forwards them to expman.
         self.last_metrics: dict[str, float | None] = {}
 
+    @staticmethod
+    def _losses(model: JointModel, loader: DataLoader | None) -> tuple[float, float]:
+        """Imputation and prediction loss on one split, same convention for both."""
+        if loader is None:
+            return float("inf"), float("inf")
+        return (
+            model.compute_val_loss(loader),
+            model.compute_val_prediction_loss(loader),
+        )
+
     def on_epoch_end(
         self, epoch: int, train_loss: float, model: JointModel
     ) -> None:
-        """Log train/val loss for one finished epoch."""
-        parts = [f"train_loss={train_loss:.6f}"]
+        """Log the four losses for one finished epoch."""
+        train_imp, train_pred = self._losses(model, self._train_loader)
+        val_imp, val_pred = self._losses(model, self._val_loader)
 
-        val_current = model.compute_val_loss(self._val_loader)
-        val_pred_current = (
-            model.compute_val_prediction_loss(self._val_loader)
-            if self._val_loader is not None
-            else float("inf")
-        )
-        if self._val_loader is not None:
-            parts.append(f"val_loss={val_current:.6f}")
-            if math.isfinite(val_pred_current):
-                parts.append(f"val_pred_loss={val_pred_current:.6f}")
+        parts = [f"train_loss={train_loss:.6f}"]
+        for name, value in (
+            ("train_imp_loss", train_imp),
+            ("train_pred_loss", train_pred),
+            ("val_imp_loss", val_imp),
+            ("val_pred_loss", val_pred),
+        ):
+            if math.isfinite(value):
+                parts.append(f"{name}={value:.6f}")
         self._logger.info("Epoch %03d/%d | %s", epoch, self._num_epoch, " | ".join(parts))
 
         self.last_metrics = {
-            "train_loss": train_loss,
-            "val_imp_loss": val_current,
-            "val_pred_loss": val_pred_current,
+            "train_imp_loss": train_imp,
+            "train_pred_loss": train_pred,
+            "val_imp_loss": val_imp,
+            "val_pred_loss": val_pred,
         }
 
 
@@ -104,6 +120,7 @@ def run_experiment(
 
     epoch_monitor = EpochMonitor(
         joint_model,
+        train_loader=train_loader.get("train_eval"),
         val_loader=train_loader.get("val"),
         num_epoch=num_epoch,
         logger=logger,
@@ -160,20 +177,35 @@ def _run_b1(
 ) -> JointModel:
     """B1: Two-stage baseline — train imputer only with reconstruction loss.
 
-    The predictor is never consulted.  That is what the ``Train`` Stage relies
-    on when it declares a B1 run independent of the predictor, so every
-    predictor sharing an imputer reuses one training; the per-step prediction
-    diagnostics belong to the TIP branches, which do read the predictor.
+    The predictor takes no part in the update, but it is evaluated before and
+    after every optimizer step so the reconstruction-only trajectory carries the
+    same one-step prediction-loss record the TIP branches do.  Its third
+    argument repeats ``pred_loss_after_raw_adamw`` because B1 applies the raw
+    update unchanged, so ``tip_projection_gain`` is zero on every step by
+    construction and the non-increase rate is read off
+    ``prediction_step/raw_adamw_pred_loss_delta``.
     """
     num_epoch = config.getint("training", "max_epochs")
 
     log_phase(logger, "B1 — Standard Imputer Training", num_epoch)
+
+    def observe_optimizer_step(
+        pred_loss_before: float,
+        pred_loss_after_raw_adamw: float,
+        pred_loss_after_applied_update: float,
+    ) -> None:
+        joint_model.record_prediction_optimizer_step(
+            pred_loss_before=pred_loss_before,
+            pred_loss_after_raw_adamw=pred_loss_after_raw_adamw,
+            pred_loss_after_applied_update=pred_loss_after_applied_update,
+        )
 
     joint_model.fit(
         data_loader=train_loader,
         phase_name="b1",
         num_epoch=num_epoch,
         on_epoch_end=on_epoch_end,
+        optimizer_step_observer=observe_optimizer_step,
     )
 
     return joint_model

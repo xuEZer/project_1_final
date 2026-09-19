@@ -139,9 +139,21 @@ def configure_deterministic_runtime(seed: int, logger: logging.Logger) -> None:
 def init_joint_model(
     config: ConfigParser, logger: logging.Logger, record_metric=None
 ) -> JointModel:
+    """Build the imputer and the frozen predictor for one run.
+
+    The predictor is constructed inside a seed scope because the HuggingFace
+    loaders build their modules from the global Torch RNG: without the scope the
+    stream that training draws from -- and therefore the training DataLoader's
+    shuffle order -- would depend on which predictor is loaded.  The imputer is
+    built first and outside the scope, so its initialisation keeps drawing from
+    the Stage's own stream and is identical for every run of a given seed.
+    """
+    from src.rng import torch_seed_scope
+
     base_seed = config.getint("experiment", "seed")
     imputer_model = imputator(config.get("imputer", "model"), config)
-    predictor_model = predictor(config.get("predictor", "model"), config)
+    with torch_seed_scope(base_seed, "predictor_load"):
+        predictor_model = predictor(config.get("predictor", "model"), config)
 
     joint_model = JointModel(
         imputer=imputer_model,

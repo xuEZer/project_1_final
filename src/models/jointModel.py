@@ -467,6 +467,7 @@ class JointModel(nn.Module):
         pred_loss_before: float,
         pred_loss_after_raw_adamw: float,
         pred_loss_after_applied_update: float,
+        projection_applied: bool = False,
     ) -> None:
         step = self.global_optim_step + 1
         denominator = max(abs(pred_loss_before), 1e-12)
@@ -484,6 +485,10 @@ class JointModel(nn.Module):
             "raw_adamw_pred_loss_decrease": -raw_delta,
             "raw_adamw_pred_loss_relative_delta": raw_delta / denominator,
             "tip_projection_gain": projection_gain,
+            # The gate's decision, not ``tip_projection_gain != 0``: a
+            # projection that changes nothing numerically is still a step the
+            # gate selected, and the per-projection statistics need it.
+            "projection_applied": float(projection_applied),
         }
         for name, value in values.items():
             self.record_metric(f"prediction_step/{name}", value, step)
@@ -491,7 +496,7 @@ class JointModel(nn.Module):
             "Prediction optimizer step: step=%d | "
             "pred_loss_before=%.9g | raw_adamw_pred_loss_delta=%.9g | "
             "pred_loss_delta=%.9g | pred_loss_relative_delta=%.9g | "
-            "tip_projection_gain=%.9g | "
+            "tip_projection_gain=%.9g | projection_applied=%d | "
             "pred_loss_decrease=%.9g | raw_adamw_pred_loss_decrease=%.9g",
             step,
             pred_loss_before,
@@ -499,6 +504,7 @@ class JointModel(nn.Module):
             applied_delta,
             applied_delta / denominator,
             projection_gain,
+            int(projection_applied),
             -applied_delta,
             -raw_delta,
         )
@@ -1068,14 +1074,10 @@ class JointModel(nn.Module):
             avg_train_loss = total_loss / max(1, num_optim_steps)
             final_train_loss = avg_train_loss
 
-            if on_epoch_end is not None:
-                on_epoch_end(
-                    self.global_epoch + 1,
-                    avg_train_loss,
-                    self,
-                )
-
             if measure_wall_clock:
+                # Before the epoch observer: the observer scores both splits
+                # with the predictor, and that work is not part of the training
+                # pass this metric is meant to time.
                 self._synchronize_for_timing()
                 epoch_seconds = time.perf_counter() - epoch_started
                 self.logger.info(
@@ -1086,6 +1088,13 @@ class JointModel(nn.Module):
                 )
                 self.record_metric(
                     "timing/epoch_seconds", epoch_seconds, epoch_number
+                )
+
+            if on_epoch_end is not None:
+                on_epoch_end(
+                    self.global_epoch + 1,
+                    avg_train_loss,
+                    self,
                 )
 
             self.phase_epoch += 1
@@ -1865,6 +1874,7 @@ class JointModel(nn.Module):
                 pred_loss_before=pred_loss_before,
                 pred_loss_after_raw_adamw=pred_loss_after_raw_adamw,
                 pred_loss_after_applied_update=pred_loss_after_tip_adamw,
+                projection_applied=last_step_projected,
             )
             denominator = max(abs(pred_loss_before), 1e-12)
             raw_adamw_delta = pred_loss_after_raw_adamw - pred_loss_before
