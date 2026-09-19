@@ -15,7 +15,6 @@ dependencies = [
     "scikit-learn",
     "scipy",
     "setuptools",
-    "tensorboard",
     "torch>=2.12.1",
     "timesfm[torch]>=3.0.1",
     "toto-models>=1.0.0",
@@ -27,4 +26,4 @@ dependencies = [
 # Batch completes at all -- cold-start measurement, host-pressure shedding --
 # so a silent move would change how the experiments run, not just their numbers.
 # Bump the hash when expman's behaviour changes.
-expman = { git = "https://github.com/xuEZer/expman.git", rev = "f29219f99e11e2de647664c49ffa65a75b2e461e" }
+expman = { git = "https://github.com/xuEZer/expman.git", rev = "b33e75b8722e88beb9975644e215088871558790" }
