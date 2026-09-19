@@ -1,0 +1,3 @@
+model: FITS
+cut_freq: 16
+individual: false

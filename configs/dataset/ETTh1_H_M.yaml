@@ -1,0 +1,7 @@
+source: huggingface_table
+repo_name: 'thuml/Time-Series-Library'
+dataset_name: ETTh1
+frequency: H
+item_id: all
+column_index: all
+split_protocol: ett_fixed_12_4_4

@@ -1,0 +1,3 @@
+model: TimesFM3
+model_name: 'google/timesfm-3.0-pytorch'
+per_core_batch_size: 16

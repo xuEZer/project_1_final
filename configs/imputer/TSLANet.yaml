@@ -1,0 +1,8 @@
+model: TSLANet
+n_layers: 2
+patch_size: 16
+d_embedding: 64
+dropout: 0.1
+adaptive_filter: true
+apply_icb: true
+apply_asb: true

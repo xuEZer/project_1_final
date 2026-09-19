@@ -1,0 +1,6 @@
+source: huggingface
+repo_name: 'Real-TSF/TIME'
+dataset_name: Australia_Solar
+frequency: H
+item_id: item0
+column_index: 1

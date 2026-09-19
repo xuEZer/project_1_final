@@ -1,0 +1,3 @@
+model: Chronos
+model_name: 'amazon/chronos-2'
+num_samples: 20

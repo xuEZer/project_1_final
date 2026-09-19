@@ -1,0 +1,4 @@
+model: Sundial
+model_name: 'thuml/sundial-base-128m'
+num_samples: 20
+sample_aggregation: mean

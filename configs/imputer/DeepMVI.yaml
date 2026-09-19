@@ -1,0 +1,6 @@
+model: DeepMVI
+kernel_size: 10
+block_size: 5
+n_head: 2
+use_context: true
+use_local: true

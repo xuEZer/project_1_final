@@ -1,0 +1,9 @@
+model: TimesNet
+d_model: 128
+d_ff: 512
+top_k: 3
+num_kernels: 4
+e_layers: 2
+dropout: 0.1
+embed: fixed
+freq: h

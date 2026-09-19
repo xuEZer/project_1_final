@@ -1,0 +1,52 @@
+# Main experiment matrix.
+#
+# Equivalent to the former configs/main_exp.json (160 runs = 2 stages x 4
+# datasets x 5 imputers x 4 predictors) with the same fixed protocol.
+#
+# `name:` selects defaults from configs/<field path>/<name>.yaml, which is
+# where the former configs/template/{dataset,imputer,predictor}/*.ini now live.
+
+experiment: !choice [B1, B2]
+
+dataset:
+  name: !choice
+    - azure2019_I_5T
+    - EWELD_Load_15T
+    - Coastal_T_S_15T
+    - MetroPT-3_5T
+
+imputer:
+  name: !choice
+    - SAITS
+    - DeepMVI
+    - ModernTCN
+    - TimesNet
+    - TSLANet
+
+predictor:
+  name: !choice
+    - Toto2
+    - Chronos
+    - Sundial
+    - TimesFM3
+
+seed: 42
+
+training:
+  lr: 0.001
+  batch_size: 256
+  micro_batch: 64
+  max_epochs: 50
+  patience: 5
+
+data:
+  missing_rate: 0.2
+  artificial_missing_rate: 0.2
+  block_size: 32
+  lookback: 512
+  pred_len: 16
+
+tip:
+  subspace_rank: 4
+  epsilon: 0.001
+  confidence_delta: 0.1

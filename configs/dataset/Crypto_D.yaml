@@ -1,0 +1,6 @@
+source: huggingface
+repo_name: 'Real-TSF/TIME'
+dataset_name: Crypto
+frequency: D
+item_id: cryptocurrencies_d
+column_index: 0

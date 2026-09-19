@@ -1,0 +1,11 @@
+model: SAITS
+n_groups: 2
+n_group_inner_layers: 1
+d_model: 128
+d_inner: 64
+n_head: 2
+d_k: 32
+d_v: 32
+dropout: 0.1
+param_sharing_strategy: inner_group
+diagonal_attention_mask: true
