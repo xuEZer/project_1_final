@@ -486,7 +486,7 @@ wheels = [
 [[package]]
 name = "expman"
 version = "0.1.0"
-source = { git = "https://github.com/xuEZer/expman.git?rev=acaecbf7652b4de2f667372f27087ec2195af1de#acaecbf7652b4de2f667372f27087ec2195af1de" }
+source = { git = "https://github.com/xuEZer/expman.git?rev=0e8c2bb1a33f212aaa61cb828a6930ec27195f60#0e8c2bb1a33f212aaa61cb828a6930ec27195f60" }
 dependencies = [
     { name = "numpy" },
     { name = "pyyaml" },
@@ -1586,7 +1586,7 @@ dependencies = [
 requires-dist = [
     { name = "chronos-forecasting", specifier = ">=2.0" },
     { name = "datasets" },
-    { name = "expman", git = "https://github.com/xuEZer/expman.git?rev=acaecbf7652b4de2f667372f27087ec2195af1de" },
+    { name = "expman", git = "https://github.com/xuEZer/expman.git?rev=0e8c2bb1a33f212aaa61cb828a6930ec27195f60" },
     { name = "h5py" },
     { name = "huggingface-hub", specifier = ">=0.19.3,<1.0" },
     { name = "joblib" },
