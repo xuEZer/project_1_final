@@ -60,11 +60,12 @@ loader:
 training:
   optimizer: AdamW
   lr: 0.001
-  max_epochs: 50
-  patience: 5
-  min_delta: 1.0e-4
+  # Fixed horizon: every run trains exactly this many epochs.  There is no early
+  # stopping and no best-checkpoint selection, so the final epoch state is the
+  # one that gets evaluated.
+  max_epochs: 10
 
 tip:
-  subspace_rank: 4
+  subspace_rank: 3
   epsilon: 0.001
   confidence_delta: 0.1

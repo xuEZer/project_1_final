@@ -185,8 +185,8 @@ class JointModel(nn.Module):
 
         Same weighting convention as :meth:`compute_val_loss` (batch sizes, and
         here the number of observed targets), so the last partial batch cannot
-        distort the metric.  Used when model selection and early stopping follow
-        the task metric rather than the reconstruction metric.
+        distort the metric.  It reports how well the frozen forecaster does on
+        the current imputer state.
         """
         if val_loader is None:
             return float("inf")
@@ -220,8 +220,7 @@ class JointModel(nn.Module):
         """Average imputation loss on the validation set.
 
         Losses are weighted by batch size so the last (potentially
-        smaller) batch does not distort the validation metric used for
-        early stopping and checkpoint selection.
+        smaller) batch does not distort the validation metric.
         """
         if val_loader is None:
             return float("inf")
@@ -1069,9 +1068,8 @@ class JointModel(nn.Module):
             avg_train_loss = total_loss / max(1, num_optim_steps)
             final_train_loss = avg_train_loss
 
-            should_stop = False
             if on_epoch_end is not None:
-                should_stop = on_epoch_end(
+                on_epoch_end(
                     self.global_epoch + 1,
                     avg_train_loss,
                     self,
@@ -1089,9 +1087,6 @@ class JointModel(nn.Module):
                 self.record_metric(
                     "timing/epoch_seconds", epoch_seconds, epoch_number
                 )
-
-            if should_stop:
-                break
 
             self.phase_epoch += 1
             self.global_epoch += 1
@@ -2206,7 +2201,8 @@ class JointModel(nn.Module):
                     "projected_raw_adamw_nonincrease",
                     "projected_tip_adamw_nonincrease",
                 } else 0.0
-            return on_epoch_end(epoch, train_loss, model) if on_epoch_end else False
+            if on_epoch_end is not None:
+                on_epoch_end(epoch, train_loss, model)
 
         return self.fit(
             data_loader, phase_name, num_epoch, accum_steps=accum_steps,

@@ -87,9 +87,6 @@ def build(args: argparse.Namespace, logger: logging.Logger):
     run = load_configs(args.config)[args.index]
     run = json.loads(json.dumps(run))          # unfreeze into a plain dict
     run["training"]["max_epochs"] = args.epochs
-    # patience <= 0 is the fixed-horizon mode: neither the built-in monitor nor
-    # our own callback may early-stop, so both arms stay step-aligned.
-    run["training"]["patience"] = 0
     if args.anchor_delta:
         run["tip"]["anchor_delta"] = args.anchor_delta
 

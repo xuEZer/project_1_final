@@ -767,7 +767,7 @@ def get_tensor_data_loader(
         return loader, split_no_gt
 
     if "val" in dataset:
-        # Validation for early stopping must keep artificial masks and the
+        # The validation loader must keep artificial masks and the
         # corresponding observed ground truth, even when the public eval split
         # has no complete natural-missing ground truth.
         data_loader["val"] = build_train_loader(dataset["val"], shuffle=False)

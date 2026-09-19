@@ -1,11 +1,23 @@
 """expman pipeline for the impute-then-forecast experiments.
 
-Two Stage boundaries.  :class:`PrepareData` returns the prepared tensors, and
-:class:`TrainEvaluate` trains the imputer and scores every split in one process.
-The dataset therefore crosses exactly one boundary: expman snapshots every
-Stage's return value, so a third Stage would store this dataset again for every
-run, and a separate scoring Stage would rebuild the model and reload the data
-only because it runs in another process.
+Three Stage boundaries.  :class:`PrepareData` returns the prepared tensors,
+:class:`Train` fits the imputer and returns its weights, and :class:`Evaluate`
+scores every split with the frozen forecaster.
+
+Training and scoring are separate Stages so that each one declares only what it
+reads.  A ``B1`` run trains the imputer against the reconstruction loss alone,
+so its result is reusable by every predictor that shares the imputer, and the
+:class:`Train` declaration says exactly that; a ``B2`` run projects against the
+predictor gradient and therefore declares the predictor too.  Scoring, which
+always runs the predictor, declares it unconditionally.
+
+:class:`Evaluate` rebuilds the tensors from the configuration instead of
+receiving them from :class:`PrepareData`.  expman snapshots every Stage's return
+value, so passing the dataset through :class:`Train` would store a full copy of
+it once per (dataset, imputer, [+ predictor]) group instead of once per dataset.
+Preprocessing is a fraction of a second against the cached raw series and the
+mask streams are derived from ``missing_seed``, so the rebuild is deterministic
+and cheap.
 
 The model code still expects a ``ConfigParser``; :func:`build_config`
 materialises one run dictionary into that shape.  This bridge is transitional
@@ -117,6 +129,39 @@ def run_tag(run: dict) -> str:
     return "_".join(parts) + f"__{digest}"
 
 
+def prepare_dataset(run: dict) -> dict:
+    """Build the windowed tensors for one run configuration.
+
+    Shared by :class:`PrepareData` and :class:`Evaluate`.  Both the raw-series
+    lookup and the mask streams are deterministic in the configuration -- the
+    natural and artificial masks come from RNG streams derived from
+    ``missing_seed`` -- so calling this twice for the same run returns identical
+    tensors.
+    """
+    from src.build import parse_column_index, resolve_missing_seed
+    from src.data_loader import preprocess_dataset
+
+    cfg = build_config(run)
+    dataset_cfg = run["dataset"]
+    return preprocess_dataset(
+        source=dataset_cfg["source"],
+        repo_name=dataset_cfg["repo_name"],
+        dataset_name=dataset_cfg["dataset_name"],
+        frequency=dataset_cfg["frequency"],
+        item_id=dataset_cfg["item_id"],
+        column_index=parse_column_index(_scalar(dataset_cfg["column_index"])),
+        missing_rate=cfg.getfloat("data", "missing_rate"),
+        artificial_missing_rate=cfg.getfloat("data", "artificial_missing_rate"),
+        block_size=cfg.getint("data", "block_size"),
+        lookback_len=cfg.getint("data", "lookback"),
+        pred_len=cfg.getint("data", "pred_len"),
+        val_ratio=cfg.getfloat("data", "val_ratio"),
+        test_ratio=cfg.getfloat("data", "test_ratio"),
+        random_seed=resolve_missing_seed(cfg),
+        logger=logging.getLogger("expman.pipeline"),
+    )
+
+
 class PrepareData(Stage):
     """Preprocess the dataset and return the tensors.
 
@@ -139,28 +184,7 @@ class PrepareData(Stage):
         }
 
     def process(self, data, ctx):
-        from src.build import parse_column_index, resolve_missing_seed
-        from src.data_loader import preprocess_dataset
-
-        cfg = build_config(ctx.cfg)
-        dataset_cfg = ctx.cfg["dataset"]
-        dataset = preprocess_dataset(
-            source=dataset_cfg["source"],
-            repo_name=dataset_cfg["repo_name"],
-            dataset_name=dataset_cfg["dataset_name"],
-            frequency=dataset_cfg["frequency"],
-            item_id=dataset_cfg["item_id"],
-            column_index=parse_column_index(_scalar(dataset_cfg["column_index"])),
-            missing_rate=cfg.getfloat("data", "missing_rate"),
-            artificial_missing_rate=cfg.getfloat("data", "artificial_missing_rate"),
-            block_size=cfg.getint("data", "block_size"),
-            lookback_len=cfg.getint("data", "lookback"),
-            pred_len=cfg.getint("data", "pred_len"),
-            val_ratio=cfg.getfloat("data", "val_ratio"),
-            test_ratio=cfg.getfloat("data", "test_ratio"),
-            random_seed=resolve_missing_seed(cfg),
-            logger=logging.getLogger("expman.pipeline"),
-        )
+        dataset = prepare_dataset(ctx.cfg)
         ctx.log_metrics({"data_ready": 1})
         return dataset
 
@@ -222,28 +246,34 @@ def runtime_from_dataset(dataset: dict) -> dict:
     }
 
 
-class TrainEvaluate(Stage):
-    """Train the imputer plus frozen forecaster, then score every split.
+class Train(Stage):
+    """Train the imputer for the configured branch and return its weights.
 
-    Both halves live in one process because the prepared tensors arrive as this
-    Stage's input.  Scoring in a separate Stage would mean returning them from
-    here so the next Stage could read them: expman snapshots every return value,
-    so that dataset would be stored once per run instead of once per dataset --
-    and the scoring half would rebuild the model and reload the data purely
-    because it runs in another process.
+    Only the trained imputer state leaves this Stage.  That is what makes the
+    declaration below useful: a ``B1`` run trains against the reconstruction
+    loss alone, so every predictor sharing the imputer reuses one training; a
+    ``B2`` run projects the update against the predictor gradient, so it
+    declares the predictor and trains separately for each of them.
 
-    No dependency declaration: both branches read the predictor.  Even B1 only
-    trains the imputer, but its early stopping and best-checkpoint selection
-    follow the validation *prediction* loss, so which imputer state is kept
-    depends on the predictor.  That makes the branch-specific declaration expman
-    documents (``B1`` names the imputer, ``B2`` adds the predictor) collapse to
-    the whole configuration here, which is what the default already declares.
-    Keep the default rather than listing the fields: a later field that this
-    Stage reads would otherwise be missing from the list and silently reuse
-    another run's result.
+    The per-epoch validation losses are logged and the imputer state is written
+    to ``ctx.state`` and to a checkpoint so an interrupted attempt resumes
+    instead of restarting.
     """
 
-    SPLITS = ("train", "val", "test")
+    @classmethod
+    def config_dependencies(cls, cfg):
+        declaration = {
+            "stage": True,
+            "imputer": True,
+            "loader": True,
+            "training": True,
+            "device": True,
+            "seed": True,
+        }
+        if _scalar(cfg["stage"]) != "B1":
+            declaration["predictor"] = True
+            declaration["tip"] = True
+        return declaration
 
     def process(self, dataset, ctx):
         from src.build import (
@@ -251,7 +281,6 @@ class TrainEvaluate(Stage):
             configure_deterministic_runtime,
             init_joint_model,
         )
-        from src.evaluator import evaluate
         from src.experiments import run_experiment
 
         runtime = runtime_from_dataset(dataset)
@@ -272,7 +301,7 @@ class TrainEvaluate(Stage):
                 "resumed imputer state saved at epoch %s",
                 ctx.state.get("next_epoch"),
             )
-        train_loader, eval_loader, _no_gt = build_dataloaders(
+        train_loader, _eval_loader, _no_gt = build_dataloaders(
             config=cfg, dataset=dataset, joint_model=model, logger=logger,
         )
 
@@ -308,6 +337,63 @@ class TrainEvaluate(Stage):
         flush_metrics()
         logger.info("expman train done")
 
+        state = {
+            key: value.detach().cpu()
+            for key, value in model.imputer.state_dict().items()
+        }
+        return {"imputer": state}
+
+
+class Evaluate(Stage):
+    """Score train, validation and test with the trained imputer.
+
+    The tensors are rebuilt here rather than received from :class:`PrepareData`,
+    because expman snapshots every Stage's return value and a dataset crossing
+    the :class:`Train` boundary would be stored once per training group instead
+    of once per dataset.  Both the raw-series reader and the mask generator are
+    deterministic in the configuration, so the rebuild reproduces exactly the
+    tensors the training Stage consumed.
+    """
+
+    SPLITS = ("train", "val", "test")
+
+    @classmethod
+    def config_dependencies(cls, cfg):
+        return {
+            "dataset": True,
+            "data": True,
+            "missing_seed": True,
+            "imputer": True,
+            "predictor": True,
+            "loader": True,
+            "training": True,
+            "device": True,
+            "seed": True,
+            "paths": {"cache_dir": True},
+        }
+
+    def process(self, trained, ctx):
+        from src.build import (
+            build_dataloaders,
+            configure_deterministic_runtime,
+            init_joint_model,
+        )
+        from src.evaluator import evaluate
+
+        dataset = prepare_dataset(ctx.cfg)
+        runtime = runtime_from_dataset(dataset)
+        cfg = build_config(ctx.cfg, data=runtime)
+        seed = cfg.getint("experiment", "seed")
+        logger = configure_logging()
+        configure_deterministic_runtime(seed, logger)
+        logger.info("expman evaluate start: %s", run_tag(ctx.cfg))
+
+        model = init_joint_model(cfg, logger)
+        model.imputer.load_state_dict(trained["imputer"])
+        train_loader, eval_loader, _no_gt = build_dataloaders(
+            config=cfg, dataset=dataset, joint_model=model, logger=logger,
+        )
+
         loaders = {
             "train": train_loader.get("train_eval"),
             "val": train_loader.get("val"),
@@ -338,15 +424,17 @@ class TrainEvaluate(Stage):
 
 def build_pipeline() -> Pipeline:
     return Pipeline(
-        [PrepareData, TrainEvaluate], name="impute-then-forecast"
+        [PrepareData, Train, Evaluate], name="impute-then-forecast"
     )
 
 
 __all__ = [
+    "Evaluate",
     "PrepareData",
-    "TrainEvaluate",
+    "Train",
     "build_config",
     "build_pipeline",
+    "prepare_dataset",
     "run_tag",
     "runtime_from_dataset",
 ]

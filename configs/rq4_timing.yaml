@@ -37,9 +37,7 @@ loader:
 training:
   optimizer: AdamW
   lr: 0.001
-  max_epochs: 50
-  patience: 5
-  min_delta: 1.0e-4
+  max_epochs: 10
 
 tip:
   subspace_rank: 8

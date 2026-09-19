@@ -13,27 +13,25 @@ import logging
 import math
 from configparser import ConfigParser
 
-import torch
 from torch.utils.data import DataLoader
 
 from src.models.jointModel import JointModel
 
 
 class EpochMonitor:
-    """Track the best imputer checkpoint by validation forecast loss.
+    """Log both validation losses at the end of every epoch.
 
-    At every epoch end the monitor evaluates the validation split and logs both
-    the imputation and the prediction loss. Model selection and early stopping
-    use the prediction loss, so the retained checkpoint is the one that
-    forecasts best rather than the one that reconstructs best.
+    Training runs to a fixed horizon: there is no early stopping and no
+    best-checkpoint selection, so the state left by the last epoch is the one
+    that gets evaluated.  The monitor still computes the imputation and the
+    prediction validation loss every epoch so both are recorded in expman's
+    metric store.
 
     Parameters
     ----------
     joint_model : JointModel
     val_loader : DataLoader or None
     num_epoch : int
-    patience : int
-    min_delta : float
     logger : logging.Logger
     """
 
@@ -42,35 +40,25 @@ class EpochMonitor:
         joint_model: JointModel,
         val_loader: DataLoader | None,
         num_epoch: int,
-        patience: int,
-        min_delta: float,
         logger: logging.Logger,
     ) -> None:
         self._model = joint_model
         self._val_loader = val_loader
         self._num_epoch = num_epoch
-        self._patience = patience
-        self._checkpoint_enabled = patience > 0
-        self._min_delta = min_delta
         self._logger = logger
-        self._best_val_pred = float("inf")
         # Last epoch's metrics, for the observer that forwards them to expman.
         self.last_metrics: dict[str, float | None] = {}
-        self._best_value = float("inf")
-        self._best_epoch = 0
-        self._best_state: dict[str, torch.Tensor] | None = None
-        self._no_improve = 0
 
     def on_epoch_end(
         self, epoch: int, train_loss: float, model: JointModel
-    ) -> bool:
-        """Log train/val loss, checkpoint. Returns True if should stop."""
+    ) -> None:
+        """Log train/val loss for one finished epoch."""
         parts = [f"train_loss={train_loss:.6f}"]
 
         val_current = model.compute_val_loss(self._val_loader)
         val_pred_current = (
             model.compute_val_prediction_loss(self._val_loader)
-            if (self._val_loader is not None and self._checkpoint_enabled)
+            if self._val_loader is not None
             else float("inf")
         )
         if self._val_loader is not None:
@@ -79,61 +67,11 @@ class EpochMonitor:
                 parts.append(f"val_pred_loss={val_pred_current:.6f}")
         self._logger.info("Epoch %03d/%d | %s", epoch, self._num_epoch, " | ".join(parts))
 
-        # ``patience <= 0`` is the fixed-horizon mode: validation is still
-        # logged, but neither early stopping nor best-checkpoint selection is
-        # allowed to replace the final-epoch state.
         self.last_metrics = {
             "train_loss": train_loss,
             "val_imp_loss": val_current,
             "val_pred_loss": val_pred_current,
         }
-        self._best_val_pred = min(self._best_val_pred, val_pred_current)
-        # Selection and early stopping always follow the task metric: the
-        # checkpoint kept is the one that forecasts best on validation, not the
-        # one that reconstructs best.
-        val_current = val_pred_current
-        if self._checkpoint_enabled and self._val_loader is not None:
-            # A non-finite val loss is an invalid observation (e.g. a split
-            # with no observed target): neither count it as an improvement
-            # nor as a no-improvement, so it cannot trigger early stopping
-            # or poison the best checkpoint.
-            if math.isfinite(val_current):
-                if self._best_value - val_current > self._min_delta:
-                    self._best_value = val_current
-                    self._best_epoch = epoch
-                    self._best_state = {
-                        k: v.detach().cpu().clone()
-                        for k, v in model.imputer.state_dict().items()
-                    }
-                    self._no_improve = 0
-                else:
-                    self._no_improve += 1
-
-        if self._checkpoint_enabled and self._no_improve >= self._patience:
-            self._logger.info(
-                "Early stopping at epoch %03d (no improvement for %d epochs)",
-                epoch, self._no_improve,
-            )
-            return True
-        return False
-
-    def restore_best(self) -> None:
-        """Load the best imputer state back into the model."""
-        if not self._checkpoint_enabled:
-            self._logger.info(
-                "Early stopping and best-checkpoint selection disabled "
-                "(patience=%d); keeping final epoch state.",
-                self._patience,
-            )
-            return
-        if self._best_state is None:
-            return
-        self._model.imputer.load_state_dict(self._best_state)
-        self._model.to(self._model.device)
-        self._logger.info(
-            "Restored best val checkpoint: epoch=%03d, val_pred_loss=%.6f",
-            self._best_epoch, self._best_value,
-        )
 
 
 def run_experiment(
@@ -161,8 +99,6 @@ def run_experiment(
         ValueError: If ``exp_type`` is not recognised.
     """
     num_epoch = config.getint("training", "max_epochs")
-    patience = config.getint("training", "patience")
-    min_delta = config.getfloat("training", "min_delta")
 
     logger.info("Initial imputer state hash: %s", imputer_state_hash(joint_model))
 
@@ -170,18 +106,15 @@ def run_experiment(
         joint_model,
         val_loader=train_loader.get("val"),
         num_epoch=num_epoch,
-        patience=patience,
-        min_delta=min_delta,
         logger=logger,
     )
     base_on_epoch_end = epoch_monitor.on_epoch_end
 
     def on_epoch_end(epoch, train_loss, model):
         """Monitor first, then hand the epoch to the caller's observer."""
-        should_stop = base_on_epoch_end(epoch, train_loss, model)
+        base_on_epoch_end(epoch, train_loss, model)
         if on_epoch is not None:
             on_epoch(epoch, epoch_monitor)
-        return should_stop
 
     if exp_type == "B1":
         trained_model = _run_b1(joint_model, train_loader, config, logger, on_epoch_end)
@@ -204,7 +137,6 @@ def run_experiment(
             "Available types: B1, B2, B3, B4, B5, RQ3, RQ4"
         )
 
-    epoch_monitor.restore_best()
     logger.info("Final imputer state hash: %s", imputer_state_hash(trained_model))
 
     return trained_model
@@ -226,28 +158,22 @@ def _run_b1(
     logger: logging.Logger,
     on_epoch_end=None,
 ) -> JointModel:
-    """B1: Two-stage baseline — train imputer only with reconstruction loss."""
+    """B1: Two-stage baseline — train imputer only with reconstruction loss.
+
+    The predictor is never consulted.  That is what the ``Train`` Stage relies
+    on when it declares a B1 run independent of the predictor, so every
+    predictor sharing an imputer reuses one training; the per-step prediction
+    diagnostics belong to the TIP branches, which do read the predictor.
+    """
     num_epoch = config.getint("training", "max_epochs")
 
     log_phase(logger, "B1 — Standard Imputer Training", num_epoch)
-
-    def observe_optimizer_step(
-        pred_loss_before: float,
-        pred_loss_after_raw_adamw: float,
-        pred_loss_after_applied_update: float,
-    ) -> None:
-        joint_model.record_prediction_optimizer_step(
-            pred_loss_before=pred_loss_before,
-            pred_loss_after_raw_adamw=pred_loss_after_raw_adamw,
-            pred_loss_after_applied_update=pred_loss_after_applied_update,
-        )
 
     joint_model.fit(
         data_loader=train_loader,
         phase_name="b1",
         num_epoch=num_epoch,
         on_epoch_end=on_epoch_end,
-        optimizer_step_observer=observe_optimizer_step,
     )
 
     return joint_model
