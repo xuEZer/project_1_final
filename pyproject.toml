@@ -7,6 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "chronos-forecasting>=2.0",
     "datasets",
+    "expman",
     "h5py",
     "huggingface-hub>=0.19.3,<1.0",
     "joblib",
@@ -20,3 +21,10 @@ dependencies = [
     "toto-models>=1.0.0",
     "transformers>=4.41,<4.42",
 ]
+
+[tool.uv.sources]
+# Pinned to a commit rather than a branch: expman's scheduler decides whether a
+# Batch completes at all -- cold-start measurement, host-pressure shedding --
+# so a silent move would change how the experiments run, not just their numbers.
+# Bump the hash when expman's behaviour changes.
+expman = { git = "https://github.com/xuEZer/expman.git", rev = "f29219f99e11e2de647664c49ffa65a75b2e461e" }
