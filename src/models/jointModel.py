@@ -2176,9 +2176,6 @@ class JointModel(nn.Module):
                     prediction_change_stats["projected_observed"],
                 )
                 tb_values = {
-                    # The rates below are counts over this; without it the
-                    # counts cannot be recovered from the store.
-                    "steps": float(steps),
                     "raw_conflict_rate": stats["raw"] / steps,
                     "ucb_conflict_rate": stats["ucb_conflict"] / steps,
                     "projection_rate": stats["projected"] / steps,
