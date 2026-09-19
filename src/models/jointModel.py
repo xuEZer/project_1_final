@@ -183,6 +183,42 @@ class JointModel(nn.Module):
         }
 
     @torch.no_grad()
+    def compute_val_prediction_loss(self, val_loader: DataLoader) -> float:
+        """Average prediction loss on the validation set.
+
+        Same weighting convention as :meth:`compute_val_loss` (batch sizes, and
+        here the number of observed targets), so the last partial batch cannot
+        distort the metric.  Used when model selection and early stopping follow
+        the task metric rather than the reconstruction metric.
+        """
+        if val_loader is None:
+            return float("inf")
+        was_training = self.imputer.training
+        self.imputer.eval()
+        weighted = 0.0
+        count = 0.0
+        try:
+            with torch.no_grad():
+                for batch in val_loader:
+                    (
+                        X_N, X_NA, X_NA_mask, X_A_mask, Y_N, Y_N_mask,
+                    ) = self._move_batch_to_device(batch)
+                    output = self.forward(
+                        X_NA, X_NA_mask, X_N, X_A_mask, Y_N, Y_N_mask,
+                        run_predictor=True,
+                    )
+                    if output["pred_loss"] is None:
+                        continue
+                    n = (
+                        float((1.0 - Y_N_mask).sum())
+                        if Y_N_mask is not None else float(Y_N.numel())
+                    )
+                    weighted += output["pred_loss"].item() * n
+                    count += n
+        finally:
+            self.imputer.train(was_training)
+        return weighted / max(count, 1.0)
+
     def compute_val_loss(self, val_loader: DataLoader) -> float:
         """Average imputation loss on the validation set.
 

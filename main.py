@@ -82,6 +82,13 @@ def selected_config_payload(config: ConfigParser) -> dict[str, str]:
 
     for key in ("optimizer", "lr", "max_epochs", "patience", "min_delta"):
         add("training", key)
+    # Selection metric is part of the identity only when it is not the default,
+    # so every existing run keeps its name.
+    if (
+        config.has_option("training", "model_selection")
+        and config.get("training", "model_selection").strip() != "imputation"
+    ):
+        add("training", "model_selection")
 
     # ``batch_size`` defines the effective optimization batch and therefore
     # the experiment.  ``auto_batch`` and ``micro_batch`` only choose how that

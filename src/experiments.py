@@ -44,6 +44,7 @@ class EpochMonitor:
         patience: int,
         min_delta: float,
         logger: logging.Logger,
+        selection: str = "imputation",
     ) -> None:
         self._model = joint_model
         self._val_loader = val_loader
@@ -52,6 +53,12 @@ class EpochMonitor:
         self._checkpoint_enabled = patience > 0
         self._min_delta = min_delta
         self._logger = logger
+        if selection not in {"imputation", "prediction"}:
+            raise ValueError(
+                "model selection must be 'imputation' or 'prediction'"
+            )
+        self._selection = selection
+        self._best_val_pred = float("inf")
         self._best_value = float("inf")
         self._best_epoch = 0
         self._best_state: dict[str, torch.Tensor] | None = None
@@ -67,15 +74,27 @@ class EpochMonitor:
         parts = [f"train_loss={train_loss:.6f}"]
 
         val_current = model.compute_val_loss(self._val_loader)
+        val_pred_current = (
+            model.compute_val_prediction_loss(self._val_loader)
+            if (self._val_loader is not None and self._checkpoint_enabled)
+            else float("inf")
+        )
         if self._val_loader is not None:
             parts.append(f"val_loss={val_current:.6f}")
             tb.add_scalar("loss/val_loss", val_current, epoch)
+            if math.isfinite(val_pred_current):
+                parts.append(f"val_pred_loss={val_pred_current:.6f}")
+                tb.add_scalar("loss/val_pred_loss", val_pred_current, epoch)
+        if self._selection == "prediction":
+            val_current = val_pred_current
 
         self._logger.info("Epoch %03d/%d | %s", epoch, self._num_epoch, " | ".join(parts))
 
         # ``patience <= 0`` is the fixed-horizon mode: validation is still
         # logged, but neither early stopping nor best-checkpoint selection is
         # allowed to replace the final-epoch state.
+        if self._selection == "prediction":
+            self._best_val_pred = min(self._best_val_pred, val_pred_current)
         if self._checkpoint_enabled and self._val_loader is not None:
             # A non-finite val loss is an invalid observation (e.g. a split
             # with no observed target): neither count it as an improvement
@@ -114,9 +133,13 @@ class EpochMonitor:
             return
         self._model.imputer.load_state_dict(self._best_state)
         self._model.to(self._model.device)
+        metric = (
+            "val_imp_loss" if self._selection == "imputation"
+            else "val_pred_loss"
+        )
         self._logger.info(
-            "Restored best val checkpoint: epoch=%03d, imp_loss=%.6f",
-            self._best_epoch, self._best_value,
+            "Restored best val checkpoint: epoch=%03d, %s=%.6f",
+            self._best_epoch, metric, self._best_value,
         )
 
 
@@ -156,6 +179,9 @@ def run_experiment(
         patience=patience,
         min_delta=min_delta,
         logger=logger,
+        selection=config.get(
+            "training", "model_selection", fallback="imputation"
+        ),
     )
     on_epoch_end = epoch_monitor.on_epoch_end
 
