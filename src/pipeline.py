@@ -121,7 +121,7 @@ class PrepareData(Stage):
     """Preprocess the dataset and report where the tensors landed."""
 
     def process(self, data, ctx):
-        from main import parse_column_index
+        from src.build import parse_column_index
         from src.data_loader import preprocess_dataset
 
         cfg = build_config(ctx.cfg)
@@ -185,7 +185,7 @@ class Train(Stage):
         import torch
         from torch.utils.tensorboard import SummaryWriter
 
-        from main import (
+        from src.build import (
             build_dataloaders,
             configure_deterministic_runtime,
             init_joint_model,
@@ -239,7 +239,7 @@ class Evaluate(Stage):
         import torch
         from torch.utils.tensorboard import SummaryWriter
 
-        from main import (
+        from src.build import (
             build_dataloaders,
             configure_deterministic_runtime,
             init_joint_model,

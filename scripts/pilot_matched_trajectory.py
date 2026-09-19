@@ -41,9 +41,11 @@ sys.path.insert(0, str(ROOT))
 import torch  # noqa: E402
 from torch.utils.tensorboard import SummaryWriter  # noqa: E402
 
-from main import (config_from_overrides, init_joint_model,  # noqa: E402
-                  parse_column_index, configure_deterministic_runtime)
-from main import build_dataloaders  # noqa: E402
+from main import config_from_overrides  # noqa: E402
+from src.build import (  # noqa: E402
+    build_dataloaders, configure_deterministic_runtime, init_joint_model,
+    parse_column_index,
+)
 from src.data_loader import load_h5, preprocess_dataset  # noqa: E402
 from src.evaluator import evaluate  # noqa: E402
 from src.experiments import _run_b1, _run_b2  # noqa: E402
