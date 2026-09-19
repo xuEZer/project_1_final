@@ -1,10 +1,11 @@
 """expman pipeline for the impute-then-forecast experiments.
 
-Stage boundaries are drawn so that only picklable descriptions cross them: the
-model object is built, trained and checkpointed inside :class:`Train`, and
-:class:`Evaluate` rebuilds the imputer from the run configuration and the saved
-state dict.  Nothing holds a live ``DataLoader`` or ``nn.Module`` across a
-boundary, because expman snapshots every stage's return value.
+Two Stage boundaries.  :class:`PrepareData` returns the prepared tensors, and
+:class:`TrainEvaluate` trains the imputer and scores every split in one process.
+The dataset therefore crosses exactly one boundary: expman snapshots every
+Stage's return value, so a third Stage would store this dataset again for every
+run, and a separate scoring Stage would rebuild the model and reload the data
+only because it runs in another process.
 
 The model code still expects a ``ConfigParser``; :func:`build_config`
 materialises one run dictionary into that shape.  This bridge is transitional
@@ -22,8 +23,6 @@ from configparser import ConfigParser, ExtendedInterpolation
 from pathlib import Path
 
 from expman import Pipeline, Stage
-
-from src.logger import setup_logger
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -119,15 +118,33 @@ def run_tag(run: dict) -> str:
 
 
 class PrepareData(Stage):
-    """Preprocess the dataset and report where the tensors landed."""
+    """Preprocess the dataset and return the tensors.
+
+    Nothing is written to disk: expman snapshots this Stage's return value, and
+    that snapshot is what later runs reuse.  The declaration below names exactly
+    the paths this reads, so two runs whose values match share one realization
+    of the data -- the B1 and B2 branches, and every imputer/predictor pair, all
+    see the same tensors.  It reads nothing else, in particular not ``stage``,
+    the models or the training settings, which is what lets the scheduler run it
+    once per dataset instead of once per run.
+    """
+
+    @classmethod
+    def config_dependencies(cls, cfg):
+        return {
+            "dataset": True,
+            "data": True,
+            "paths": {"cache_dir": True},
+            "missing_seed": True,
+        }
 
     def process(self, data, ctx):
-        from src.build import parse_column_index
+        from src.build import parse_column_index, resolve_missing_seed
         from src.data_loader import preprocess_dataset
 
         cfg = build_config(ctx.cfg)
         dataset_cfg = ctx.cfg["dataset"]
-        folder = preprocess_dataset(
+        dataset = preprocess_dataset(
             source=dataset_cfg["source"],
             repo_name=dataset_cfg["repo_name"],
             dataset_name=dataset_cfg["dataset_name"],
@@ -141,29 +158,60 @@ class PrepareData(Stage):
             pred_len=cfg.getint("data", "pred_len"),
             val_ratio=cfg.getfloat("data", "val_ratio"),
             test_ratio=cfg.getfloat("data", "test_ratio"),
-            random_seed=cfg.getint("experiment", "seed"),
+            random_seed=resolve_missing_seed(cfg),
             logger=logging.getLogger("expman.pipeline"),
-            save_path=Path(cfg.get("paths", "cache_dir")) / "data",
         )
-        ctx.report_metric("cache_ready", 1)
-        return {"cache_dir": str(folder)}
+        ctx.log_metrics({"data_ready": 1})
+        return dataset
 
 
-def artifact_dir(ctx) -> Path:
-    """Per-run artifact directory, keyed by the run's own configuration."""
-    root = Path(_scalar(ctx.cfg["paths"]["cache_dir"])) / "expman" / run_tag(ctx.cfg)
-    root.mkdir(parents=True, exist_ok=True)
-    return root
+def configure_logging() -> logging.Logger:
+    """Send this process's log records to stdout, which expman captures.
 
-
-def make_logger(ctx) -> logging.Logger:
-    """One log file per run; appended on a retry so earlier attempts survive."""
-    mode = "w" if getattr(ctx, "attempt", 1) <= 1 else "a"
-    return setup_logger(
-        artifact_dir(ctx) / "run.log",
-        log_name=f"expman_{run_tag(ctx.cfg)}",
-        mode=mode,
+    Every attempt runs in its own worker whose stdout and stderr expman redirects
+    into ``attempts/stage-<n>/<attempt>/output.log``; a second log file written by
+    this code would only duplicate that.
+    """
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        force=True,
     )
+    return logging.getLogger("expman.pipeline")
+
+
+def metric_sink(ctx):
+    """Forward a model's scalar diagnostics into expman's metric store.
+
+    Returns ``(record, flush)``.  ``record(name, value, step)`` nests the
+    slash-separated name, and the buffered rows are written when the step
+    changes and by ``flush`` at the end.  expman pays a transaction per call, so
+    reporting each of a step's scalars separately would spend more time in
+    SQLite than in the optimizer.  Non-finite samples -- a ratio whose
+    denominator was empty -- are dropped rather than refused.
+    """
+    pending: dict = {"step": None, "rows": {}}
+
+    def flush() -> None:
+        if pending["rows"]:
+            ctx.log_metrics(pending["rows"], step=pending["step"])
+            pending["rows"] = {}
+
+    def record(name: str, value: float, step: int) -> None:
+        number = float(value)
+        if not math.isfinite(number):
+            return
+        if step != pending["step"]:
+            flush()
+            pending["step"] = step
+        node = pending["rows"]
+        parts = name.split("/")
+        for part in parts[:-1]:
+            node = node.setdefault(part, {})
+        node[parts[-1]] = number
+
+    return record, flush
 
 
 def runtime_from_dataset(dataset: dict) -> dict:
@@ -174,128 +222,92 @@ def runtime_from_dataset(dataset: dict) -> dict:
     }
 
 
-class Train(Stage):
-    """Build the imputer plus frozen forecaster, train it, and save the result.
+class TrainEvaluate(Stage):
+    """Train the imputer plus frozen forecaster, then score every split.
 
-    The model lives only inside this stage: expman snapshots every stage return
-    value, so an ``nn.Module`` cannot cross the boundary.  What crosses is the
-    path to the saved imputer state dict.
+    Both halves live in one process because the prepared tensors arrive as this
+    Stage's input.  Scoring in a separate Stage would mean returning them from
+    here so the next Stage could read them: expman snapshots every return value,
+    so that dataset would be stored once per run instead of once per dataset --
+    and the scoring half would rebuild the model and reload the data purely
+    because it runs in another process.
+
+    No dependency declaration: both branches read the predictor.  Even B1 only
+    trains the imputer, but its early stopping and best-checkpoint selection
+    follow the validation *prediction* loss, so which imputer state is kept
+    depends on the predictor.  That makes the branch-specific declaration expman
+    documents (``B1`` names the imputer, ``B2`` adds the predictor) collapse to
+    the whole configuration here, which is what the default already declares.
+    Keep the default rather than listing the fields: a later field that this
+    Stage reads would otherwise be missing from the list and silently reuse
+    another run's result.
     """
-
-    def process(self, data, ctx):
-        import torch
-        from torch.utils.tensorboard import SummaryWriter
-
-        from src.build import (
-            build_dataloaders,
-            configure_deterministic_runtime,
-            init_joint_model,
-        )
-        from src.data_loader import load_h5
-        from src.experiments import run_experiment
-
-        dataset = load_h5(Path(data["cache_dir"]) / "dataset.h5")
-        runtime = runtime_from_dataset(dataset)
-        cfg = build_config(ctx.cfg, data=runtime)
-        seed = cfg.getint("experiment", "seed")
-        logger = make_logger(ctx)
-        configure_deterministic_runtime(seed, logger)
-        logger.info("expman train start: %s", run_tag(ctx.cfg))
-
-        out = artifact_dir(ctx)
-        writer = SummaryWriter(log_dir=out / "tb")
-        try:
-            model = init_joint_model(cfg, logger, writer)
-            if "imputer" in ctx.state:
-                # Resuming: expman restored the state written by the last
-                # successful checkpoint.save, so training continues rather
-                # than restarting from the initial weights.
-                model.imputer.load_state_dict(ctx.state["imputer"])
-                logger.info(
-                    "resumed imputer state saved at epoch %s",
-                    ctx.state.get("next_epoch"),
-                )
-            train_loader, eval_loader, no_gt = build_dataloaders(
-                config=cfg, seed=seed, dataset=dataset,
-                joint_model=model, logger=logger,
-            )
-
-            def on_epoch(epoch, monitor):
-                """Forward each epoch to expman and snapshot the weights."""
-                for name, value in monitor.last_metrics.items():
-                    if value is not None and math.isfinite(float(value)):
-                        ctx.report_metric(name, float(value), step=epoch)
-                ctx.state["imputer"] = {
-                    key: value.detach().cpu()
-                    for key, value in model.imputer.state_dict().items()
-                }
-                ctx.state["next_epoch"] = epoch
-                try:
-                    ctx.checkpoint.save(step=epoch)
-                except RuntimeError:
-                    # --checkpoint requires a stage driven by Batch or
-                    # Experiment; a bare Pipeline.run has no checkpoint store.
-                    pass
-
-            model = run_experiment(
-                exp_type=cfg.get("experiment", "type"),
-                joint_model=model,
-                train_loader=train_loader,
-                config=cfg,
-                logger=logger,
-                on_epoch=on_epoch,
-            )
-        finally:
-            writer.close()
-
-        checkpoint = out / "imputer.pt"
-        torch.save(model.imputer.state_dict(), checkpoint)
-        ctx.report_metric("train_done", 1)
-        logger.info("expman train done, checkpoint=%s", checkpoint)
-        return {
-            "checkpoint": str(checkpoint),
-            "cache_dir": data["cache_dir"],
-            **runtime,
-        }
-
-
-class Evaluate(Stage):
-    """Rebuild the imputer from the saved state dict and score every split."""
 
     SPLITS = ("train", "val", "test")
 
-    def process(self, data, ctx):
-        import torch
-        from torch.utils.tensorboard import SummaryWriter
-
+    def process(self, dataset, ctx):
         from src.build import (
             build_dataloaders,
             configure_deterministic_runtime,
             init_joint_model,
         )
-        from src.data_loader import load_h5
         from src.evaluator import evaluate
-        from src.rng import torch_seed_scope
+        from src.experiments import run_experiment
 
-        runtime = {"d_feature": data["d_feature"], "lookback": data["lookback"]}
+        runtime = runtime_from_dataset(dataset)
         cfg = build_config(ctx.cfg, data=runtime)
         seed = cfg.getint("experiment", "seed")
-        logger = make_logger(ctx)
+        logger = configure_logging()
         configure_deterministic_runtime(seed, logger)
+        logger.info("expman train start: %s", run_tag(ctx.cfg))
 
-        writer = SummaryWriter(log_dir=artifact_dir(ctx) / "tb_eval")
-        try:
-            model = init_joint_model(cfg, logger, writer)
-        finally:
-            writer.close()
-        model.imputer.load_state_dict(
-            torch.load(data["checkpoint"], map_location=cfg.get("training", "device"))
-        )
+        record_metric, flush_metrics = metric_sink(ctx)
+        model = init_joint_model(cfg, logger, record_metric)
+        if "imputer" in ctx.state:
+            # Resuming: expman restored the state written by the last
+            # successful checkpoint.save, so training continues rather
+            # than restarting from the initial weights.
+            model.imputer.load_state_dict(ctx.state["imputer"])
+            logger.info(
+                "resumed imputer state saved at epoch %s",
+                ctx.state.get("next_epoch"),
+            )
         train_loader, eval_loader, _no_gt = build_dataloaders(
-            config=cfg, seed=seed,
-            dataset=load_h5(Path(data["cache_dir"]) / "dataset.h5"),
-            joint_model=model, logger=logger,
+            config=cfg, dataset=dataset, joint_model=model, logger=logger,
         )
+
+        def on_epoch(epoch, monitor):
+            """Record each epoch in expman's metric store and snapshot."""
+            metrics = {
+                key: float(value)
+                for key, value in monitor.last_metrics.items()
+                if value is not None and math.isfinite(float(value))
+            }
+            if metrics:
+                ctx.log_metrics({"loss": metrics}, step=epoch)
+            ctx.state["imputer"] = {
+                key: value.detach().cpu()
+                for key, value in model.imputer.state_dict().items()
+            }
+            ctx.state["next_epoch"] = epoch
+            try:
+                ctx.checkpoint.save(step=epoch)
+            except RuntimeError:
+                # --checkpoint requires a stage driven by Batch or
+                # Experiment; a bare Pipeline.run has no checkpoint store.
+                pass
+
+        model = run_experiment(
+            exp_type=cfg.get("experiment", "type"),
+            joint_model=model,
+            train_loader=train_loader,
+            config=cfg,
+            logger=logger,
+            on_epoch=on_epoch,
+        )
+        flush_metrics()
+        logger.info("expman train done")
+
         loaders = {
             "train": train_loader.get("train_eval"),
             "val": train_loader.get("val"),
@@ -306,27 +318,33 @@ class Evaluate(Stage):
             loader = loaders[split]
             if loader is None:
                 continue
-            with torch_seed_scope(seed, f"{split}_evaluation"):
-                metrics = evaluate(
-                    cfg, model, loader, getattr(loader, "no_gt", False),
-                    logger, split_name=split,
-                )
+            metrics = evaluate(
+                cfg, model, loader, getattr(loader, "no_gt", False),
+                logger, split_name=split,
+            )
             results[split] = metrics
-            for name, value in metrics.items():
-                if value is not None:
-                    ctx.report_metric(f"{split}_{name}", float(value))
+            measured = {
+                name: float(value)
+                for name, value in metrics.items()
+                if value is not None and math.isfinite(float(value))
+            }
+            if measured:
+                ctx.log_metrics({split: measured})
             logger.info("expman evaluate %s: %s", split, metrics)
+
+        ctx.log_metrics({"train_done": 1})
         return results
 
 
 def build_pipeline() -> Pipeline:
-    return Pipeline([PrepareData, Train, Evaluate], name="impute-then-forecast")
+    return Pipeline(
+        [PrepareData, TrainEvaluate], name="impute-then-forecast"
+    )
 
 
 __all__ = [
-    "Evaluate",
     "PrepareData",
-    "Train",
+    "TrainEvaluate",
     "build_config",
     "build_pipeline",
     "run_tag",

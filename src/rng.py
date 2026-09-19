@@ -1,9 +1,11 @@
 """Deterministic, per-process RNG utilities.
 
-Training stochasticity is rooted at ``experiment.seed``. Missing-mask
-generation may use a separately resolved seed, while every consumer still
-derives a named local seed via ``derive_seed`` so the processes remain
-independent of one another.
+Training stochasticity comes from the process-global generator, which expman
+seeds from ``experiment.seed`` and restores at every Stage boundary.  What is
+left here are the two places that need to be independent of that stream: the
+missing-mask generation, whose seed is its own ``missing_seed`` parameter, and
+the per-step random bases, which must reproduce the same basis at a given
+optimizer step without consuming the shared stream.
 """
 
 from __future__ import annotations
@@ -35,16 +37,6 @@ def derive_seed(base_seed: int, *parts: Any) -> int:
 
 def numpy_rng(base_seed: int, *parts: Any) -> np.random.Generator:
     return np.random.default_rng(derive_seed(base_seed, *parts))
-
-
-def torch_generator(base_seed: int, *parts: Any, device: str = "cpu") -> torch.Generator:
-    generator_device = device if str(device).startswith("cuda") else "cpu"
-    try:
-        generator = torch.Generator(device=generator_device)
-    except RuntimeError:
-        generator = torch.Generator()
-    generator.manual_seed(derive_seed(base_seed, *parts))
-    return generator
 
 
 @contextlib.contextmanager

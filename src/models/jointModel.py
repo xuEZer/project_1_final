@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import collections.abc
 import logging
+from collections.abc import Callable
 import math
 import time
 
@@ -18,7 +19,6 @@ from scipy.stats import t as student_t
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
 
 from src.rng import derive_seed, torch_seed_scope
 
@@ -28,6 +28,10 @@ optimizer_dict = {
     "AdamW": torch.optim.AdamW,
     "SGD": torch.optim.SGD,
 }
+
+
+def _discard_metric(name: str, value: float, step: int) -> None:
+    """Default sink for callers that do not collect scalar diagnostics."""
 
 
 class JointModel(nn.Module):
@@ -40,7 +44,7 @@ class JointModel(nn.Module):
         optimizer_name: str,
         lr: float,
         device: str,
-        tb_summary_writer: SummaryWriter,
+        record_metric: Callable[[str, float, int], None] | None,
         logger: logging.Logger,
     ) -> None:
         """Initialize the joint model and optimizer state.
@@ -52,13 +56,15 @@ class JointModel(nn.Module):
                 ``optimizer_dict``).
             lr: Learning rate.
             device: Torch device string.
-            tb_summary_writer: TensorBoard writer.
+            record_metric: Sink for scalar diagnostics, called as
+                ``(name, value, step)``.  ``None`` drops them, which is what the
+                auto batch-size probe wants.
             logger: Logger instance.
         """
         super().__init__()
         self.imputer = imputer
         self.predictor = predictor
-        self.tb_summary_writer = tb_summary_writer
+        self.record_metric = record_metric or _discard_metric
         self.logger = logger
         self.device = device
         self.optimizer_name = optimizer_name
@@ -69,8 +75,6 @@ class JointModel(nn.Module):
         self.micro_batch_size = 1
         self.non_blocking_transfer = str(device).startswith("cuda")
         self.base_seed = 0
-        self.training_stochastic_seed = derive_seed(0, "training_stochastic_default")
-        self.training_stochastic_seed_applied = False
 
         # Only the imputer is trained — predictor is frozen
         self.optimizer = optimizer_dict[optimizer_name](
@@ -91,23 +95,16 @@ class JointModel(nn.Module):
             p.requires_grad = False
         self.predictor.eval()
 
-    def configure_random_generators(self, base_seed: int) -> None:
-        self.base_seed = int(base_seed)
-        self.training_stochastic_seed = derive_seed(base_seed, "training_stochastic")
-        self.training_stochastic_seed_applied = False
-        self.logger.info(
-            "Configured independent RNG: training_stochastic_seed=%d",
-            self.training_stochastic_seed,
-        )
+    def configure_base_seed(self, base_seed: int) -> None:
+        """Record the experiment seed for the deterministic per-step bases.
 
-    def _seed_training_stochastic_ops(self) -> None:
-        """Seed global Torch RNG only for ops without generator support."""
-        if self.training_stochastic_seed_applied:
-            return
-        torch.manual_seed(self.training_stochastic_seed)
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed_all(self.training_stochastic_seed)
-        self.training_stochastic_seed_applied = True
+        Training randomness comes from the process-global generator that expman
+        seeds and restores around every Stage, so nothing is seeded here.  The
+        ablations that need the *same* random basis at a given step build it
+        from an explicit ``torch.Generator`` keyed on this seed instead of
+        consuming the shared stream.
+        """
+        self.base_seed = int(base_seed)
 
     def _synchronize_for_timing(self) -> None:
         """Wait for queued accelerator work before reading a wall-clock timer."""
@@ -490,9 +487,7 @@ class JointModel(nn.Module):
             "tip_projection_gain": projection_gain,
         }
         for name, value in values.items():
-            self.tb_summary_writer.add_scalar(
-                f"prediction_step/{name}", value, step
-            )
+            self.record_metric(f"prediction_step/{name}", value, step)
         self.logger.info(
             "Prediction optimizer step: step=%d | "
             "pred_loss_before=%.9g | raw_adamw_pred_loss_delta=%.9g | "
@@ -752,8 +747,6 @@ class JointModel(nn.Module):
         """
         if accum_steps is None:
             accum_steps = getattr(self, "accum_steps", 1)
-
-        self._seed_training_stochastic_ops()
 
         train_loader = data_loader["train"]
         final_train_loss = float("inf")
@@ -1484,6 +1477,21 @@ class JointModel(nn.Module):
             step = self.global_optim_step + 1
             denominator = max(abs(pred_loss_before), 1e-12)
             raw_delta = pred_loss_after_raw - pred_loss_before
+
+            def record(sweep, value, *, delta, conflict, projected, gain):
+                """Persist one candidate's numbers; the log line is for humans."""
+                path = f"rq4/{sweep}/{value}"
+                for name, number in (
+                    ("pred_loss_before", pred_loss_before),
+                    ("candidate_pred_loss_delta", delta),
+                    ("conflict", conflict),
+                    ("projected", projected),
+                    ("gain_vs_raw", gain),
+                    ("relative_gain", gain / denominator),
+                ):
+                    self.record_metric(f"{path}/{name}", number, step)
+
+            record("B1", "base", delta=raw_delta, conflict=0, projected=0, gain=0.0)
             self.logger.info(
                 "RQ4 counterfactual step: step=%d | sweep=B1 | value=base | "
                 "pred_loss_before=%.9g | candidate_pred_loss_delta=%.9g | "
@@ -1497,6 +1505,14 @@ class JointModel(nn.Module):
                 candidate_delta = candidate_loss - pred_loss_before
                 gain = pred_loss_after_raw - candidate_loss
                 metadata = step_metadata[name]
+                record(
+                    sweep,
+                    value,
+                    delta=candidate_delta,
+                    conflict=int(metadata["conflict"]),
+                    projected=int(metadata["projected"]),
+                    gain=gain,
+                )
                 self.logger.info(
                     "RQ4 counterfactual step: step=%d | sweep=%s | value=%s | "
                     "pred_loss_before=%.9g | candidate_pred_loss_delta=%.9g | "
@@ -2140,9 +2156,7 @@ class JointModel(nn.Module):
                     ),
                 }
                 for name, value in tb_values.items():
-                    model.tb_summary_writer.add_scalar(
-                        f"tip/{phase_name}/{name}", value, epoch
-                    )
+                    model.record_metric(f"tip/{phase_name}/{name}", value, epoch)
             for key in stats:
                 stats[key] = 0 if key in {
                     "steps", "raw", "ucb_conflict", "projected"

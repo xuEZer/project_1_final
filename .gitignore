@@ -19,3 +19,4 @@ logs/*
 results/
 paper/
 *-backup/
+runs/

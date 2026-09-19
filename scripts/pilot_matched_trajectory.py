@@ -40,7 +40,6 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 import torch  # noqa: E402
-from torch.utils.tensorboard import SummaryWriter  # noqa: E402
 
 from expman import load_configs  # noqa: E402
 
@@ -48,10 +47,9 @@ from src.build import (  # noqa: E402
     build_dataloaders, configure_deterministic_runtime, init_joint_model,
     parse_column_index,
 )
-from src.data_loader import load_h5, preprocess_dataset  # noqa: E402
+from src.data_loader import preprocess_dataset  # noqa: E402
 from src.evaluator import evaluate  # noqa: E402
 from src.experiments import _run_b1, _run_b2  # noqa: E402
-from src.logger import setup_logger  # noqa: E402
 from src.pipeline import (  # noqa: E402
     build_config, run_tag, runtime_from_dataset,
 )
@@ -80,7 +78,7 @@ class LimitedLoader:
         return base if self._limit is None else min(base, self._limit)
 
 
-def build(args: argparse.Namespace, logger: logging.Logger, tb):
+def build(args: argparse.Namespace, logger: logging.Logger):
     """Fresh model + dataloaders from one run of the experiment YAML.
 
     Both arms are rebuilt from the same run dictionary, so they share the
@@ -96,7 +94,7 @@ def build(args: argparse.Namespace, logger: logging.Logger, tb):
         run["tip"]["anchor_delta"] = args.anchor_delta
 
     ds = run["dataset"]
-    folder = preprocess_dataset(
+    dataset = preprocess_dataset(
         source=ds["source"], repo_name=ds["repo_name"],
         dataset_name=ds["dataset_name"], frequency=ds["frequency"],
         item_id=ds["item_id"], column_index=parse_column_index(str(ds["column_index"])),
@@ -105,14 +103,12 @@ def build(args: argparse.Namespace, logger: logging.Logger, tb):
         block_size=run["data"]["block_size"], lookback_len=run["data"]["lookback"],
         pred_len=run["data"]["pred_len"], val_ratio=run["data"]["val_ratio"],
         test_ratio=run["data"]["test_ratio"], random_seed=run.get("missing_seed", run["seed"]),
-        logger=logger, save_path=Path(run["paths"]["cache_dir"]) / "data",
+        logger=logger,
     )
-    dataset = load_h5(folder / "dataset.h5")
     cfg = build_config(run, data=runtime_from_dataset(dataset))
-    model = init_joint_model(cfg, logger, tb)
+    model = init_joint_model(cfg, logger)
     train_loader, test_loader, no_gt = build_dataloaders(
-        config=cfg, seed=run["seed"], dataset=dataset,
-        joint_model=model, logger=logger,
+        config=cfg, dataset=dataset, joint_model=model, logger=logger,
     )
     return cfg, model, train_loader, test_loader, no_gt
 
@@ -137,7 +133,13 @@ def main() -> int:
     args.out.mkdir(parents=True, exist_ok=True)
     run0 = load_configs(args.config)[args.index]
     tag = f"{run_tag(run0)}_ep{args.epochs}_a{args.anchor_delta:g}"
-    logger = setup_logger(args.out / f"{tag}.log", log_name=f"pilot_{tag}")
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        force=True,
+    )
+    logger = logging.getLogger(f"pilot_{tag}")
     configure_deterministic_runtime(args.seed, logger)
     limit = args.eval_batches or None
 
@@ -146,12 +148,11 @@ def main() -> int:
         logger.info("=" * 70)
         logger.info("ARM %s  (%s)", arm, tag)
         logger.info("=" * 70)
-        tb = SummaryWriter(log_dir=args.out / f"tb_{arm}")
-        cfg, model, train_loader, test_loader, no_gt = build(args, logger, tb)
+        cfg, model, train_loader, test_loader, no_gt = build(args, logger)
         val_loader = train_loader.get("val")
         train_eval_loader = train_loader.get("train_eval")
 
-        def on_epoch_end(epoch, train_loss, m, _arm=arm, _tb=tb):
+        def on_epoch_end(epoch, train_loss, m, _arm=arm):
             rec = {"arm": _arm, "epoch": epoch, "step": m.global_optim_step,
                    "train_loss": train_loss}
             if epoch % args.eval_every == 0:
@@ -169,9 +170,6 @@ def main() -> int:
                              no_gt=no_gt, logger=logger, split_name="test")
                 rec["test_imp_mse"] = t.get("imp_mse")
                 rec["test_pred_mse"] = t.get("pred_mse")
-                for k in ("val_pred_mse", "test_pred_mse"):
-                    if rec.get(k) is not None:
-                        _tb.add_scalar(f"{k}", rec[k], epoch)
                 logger.info("[%s] epoch=%d step=%d val_pred=%s test_pred=%s",
                             _arm, epoch, m.global_optim_step,
                             rec.get("val_pred_mse"), rec.get("test_pred_mse"))

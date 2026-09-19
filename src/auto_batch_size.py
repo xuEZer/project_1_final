@@ -106,10 +106,10 @@ def _worker(
         optimizer_name=config.get("training", "optimizer"),
         lr=config.getfloat("training", "lr"),
         device=device,
-        tb_summary_writer=None,
+        record_metric=None,
         logger=logger,
     )
-    joint_model.configure_random_generators(base_seed)
+    joint_model.configure_base_seed(base_seed)
     joint_model.to(device)
 
     X_N, X_NA, X_NA_mask, X_A_mask = sample_tensors[:4]

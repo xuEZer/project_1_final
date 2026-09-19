@@ -1,15 +1,9 @@
 """Data preprocessing and dataloader construction utilities."""
 
-import contextlib
-import hashlib
-import json
 import logging
-import time
 from pathlib import Path
 from typing import Any
 
-import h5py
-import joblib
 import numpy as np
 import torch
 from datasets import load_dataset, load_from_disk
@@ -35,9 +29,12 @@ def preprocess_dataset(
     test_ratio: float,
     random_seed: int,
     logger: logging.Logger,
-    save_path: Path,
-) -> Path:
-    """Preprocess raw data and persist reusable artifacts on disk.
+) -> dict[str, dict[str, Any]]:
+    """Preprocess raw data and return the windowed tensors.
+
+    Nothing is written to disk.  The caller's Stage returns this dictionary, and
+    expman's snapshot of that return value is what every other run reuses; a
+    second store here would only duplicate it.
 
     Args:
         source: Dataset storage format (``huggingface`` or
@@ -56,107 +53,54 @@ def preprocess_dataset(
         test_ratio: Test split ratio.
         random_seed: Random seed for reproducible preprocessing.
         logger: Logger used to report preprocessing progress.
-        save_path: Root folder used to store cached preprocessing artifacts.
 
     Returns:
-        Folder path containing the serialized dataset and scaler.
+        ``{"train": ..., "val": ..., "test": ...}``, the split dictionaries
+        :func:`get_tensor_data_loader` consumes.
 
     """
     ett_boundaries = get_ett_split_boundaries(dataset_name)
-    split_protocol = "ett_fixed_12_4_4" if ett_boundaries is not None else "ratio"
-    uid = generate_preprocess_uid(
-        {
-            "source": source,
-            "repo_name": repo_name,
-            "dataset_name": dataset_name,
-            "frequency": frequency,
-            "item_id": item_id,
-            "column_index": column_index,
-            "missing_rate": missing_rate,
-            "artificial_missing_rate": artificial_missing_rate,
-            "block_size": block_size,
-            "lookback_len": lookback_len,
-            "pred_len": pred_len,
-            "val_ratio": val_ratio,
-            "test_ratio": test_ratio,
-            "split_protocol": split_protocol,
-            "random_seed": random_seed,
-        }
+    data = load_raw_series(
+        source=source,
+        repo_name=repo_name,
+        dataset_name=dataset_name,
+        frequency=frequency,
+        item_id=item_id,
+        column_index=column_index,
     )
-    logger.info(f"Generated preprocess UID: {uid}")
 
-    save_folder = save_path / uid
-    if check_if_data_preprocessed(save_folder):
-        logger.info(f"Data already preprocessed. Loading from {save_folder}")
-        return save_folder
+    data, N_data, NA_data, N_mask, A_mask, NA_mask = generate_missing(
+        data, missing_rate, artificial_missing_rate, block_size, random_seed, logger
+    )
 
-    lock_folder = save_path / f"{uid}.lock"
-    lock_acquired = False
-    while not lock_acquired:
-        try:
-            lock_folder.mkdir(parents=True, exist_ok=False)
-            lock_acquired = True
-        except FileExistsError:
-            logger.info(f"Waiting for preprocessing lock: {lock_folder}")
-            time.sleep(5)
-            if check_if_data_preprocessed(save_folder):
-                logger.info(f"Data already preprocessed. Loading from {save_folder}")
-                return save_folder
+    train_data, val_data, test_data = split_data(
+        data,
+        N_data,
+        NA_data,
+        N_mask,
+        A_mask,
+        NA_mask,
+        lookback_len,
+        pred_len,
+        val_ratio,
+        test_ratio,
+        fixed_boundaries=ett_boundaries,
+    )
 
-    try:
-        if check_if_data_preprocessed(save_folder):
-            logger.info(f"Data already preprocessed. Loading from {save_folder}")
-            return save_folder
+    train_data, val_data, test_data, scaler = standardize_data(
+        train_data, val_data, test_data
+    )
 
-        save_folder.mkdir(parents=True, exist_ok=True)
+    train_data, val_data, test_data = white_nan_with_zero(
+        train_data, val_data, test_data
+    )
 
-        data = load_raw_series(
-            source=source,
-            repo_name=repo_name,
-            dataset_name=dataset_name,
-            frequency=frequency,
-            item_id=item_id,
-            column_index=column_index,
-        )
+    train_set, val_set, test_set = truncate_data(
+        train_data, val_data, test_data, lookback_len, pred_len
+    )
 
-        data, N_data, NA_data, N_mask, A_mask, NA_mask = generate_missing(
-            data, missing_rate, artificial_missing_rate, block_size, random_seed, logger
-        )
-
-        train_data, val_data, test_data = split_data(
-            data,
-            N_data,
-            NA_data,
-            N_mask,
-            A_mask,
-            NA_mask,
-            lookback_len,
-            pred_len,
-            val_ratio,
-            test_ratio,
-            fixed_boundaries=ett_boundaries,
-        )
-
-        train_data, val_data, test_data, scaler = standardize_data(
-            train_data, val_data, test_data
-        )
-
-        train_data, val_data, test_data = white_nan_with_zero(
-            train_data, val_data, test_data
-        )
-
-        train_set, val_set, test_set = truncate_data(
-            train_data, val_data, test_data, lookback_len, pred_len
-        )
-
-        save_h5(train_set, val_set, test_set, save_folder / "dataset.h5")
-        joblib.dump(scaler, save_folder / "scaler.pkl")
-
-        logger.info(f"Preprocessed data saved to {save_folder}")
-        return save_folder
-    finally:
-        with contextlib.suppress(FileNotFoundError):
-            lock_folder.rmdir()
+    logger.info("Preprocessed data ready")
+    return {"train": train_set, "val": val_set, "test": test_set}
 
 
 def load_raw_series(
@@ -228,57 +172,6 @@ def get_ett_split_boundaries(dataset_name: str) -> tuple[int, int, int] | None:
         16 * points_per_month,
         20 * points_per_month,
     )
-
-
-def generate_preprocess_uid(
-    preprocess_params: dict[str, float | int | str | list | dict],
-) -> str:
-    """Create a stable hash identifier for preprocessing parameters.
-
-    Args:
-        preprocess_params: Parameters that uniquely define preprocessing behavior.
-
-    Returns:
-        A deterministic short hash string for the provided parameters.
-
-    """
-
-    def _normalize_uid_value(
-        value: float | int | str | Path | dict | list | tuple,
-    ) -> float | int | str | dict | list:
-        if isinstance(value, float):
-            return format(value, ".12g")
-        if isinstance(value, Path):
-            return str(value.resolve())
-        if isinstance(value, dict):
-            return {k: _normalize_uid_value(v) for k, v in sorted(value.items())}
-        if isinstance(value, (list, tuple)):
-            return [_normalize_uid_value(v) for v in value]
-        return value
-
-    normalized_params = _normalize_uid_value(preprocess_params)
-    params_payload = json.dumps(
-        normalized_params,
-        sort_keys=True,
-        ensure_ascii=True,
-        separators=(",", ":"),
-    )
-    return hashlib.sha256(params_payload.encode("utf-8")).hexdigest()[:16]
-
-
-def check_if_data_preprocessed(save_folder: Path) -> bool:
-    """Check whether preprocessing artifacts already exist in the target folder.
-
-    Args:
-        save_folder: Folder expected to contain serialized preprocessing artifacts.
-
-    Returns:
-        True if both dataset and scaler files exist, otherwise False.
-
-    """
-    dataset_path = save_folder / "dataset.h5"
-    scaler_path = save_folder / "scaler.pkl"
-    return dataset_path.exists() and scaler_path.exists()
 
 
 def generate_missing(
@@ -704,45 +597,6 @@ def truncate_data(
                 f"{name}: {key} values out of [0,1]"
 
     return train_set, val_set, test_set
-
-
-def save_h5(
-    train_set: dict[str, np.ndarray],
-    val_set: dict[str, np.ndarray] | None,
-    test_set: dict[str, np.ndarray],
-    h5_path: Path,
-) -> None:
-    """Persist train/val/test dictionaries into an HDF5 file."""
-    with h5py.File(h5_path, "w") as h5f:
-        for grp_name, dset in [
-            ("train", train_set), ("val", val_set), ("test", test_set),
-        ]:
-            if dset is None:
-                continue
-            grp = h5f.create_group(grp_name)
-            for key, value in dset.items():
-                if value is not None:
-                    grp.create_dataset(key, data=value)
-
-
-def load_h5(h5_path: Path) -> dict[str, Any]:
-    """Load dataset splits from an HDF5 file.
-
-    Returns:
-        Dictionary with ``"train"``, ``"val"`` (if present), and
-        ``"test"`` split mappings.
-
-    """
-    if not Path(h5_path).exists():
-        raise FileNotFoundError(f"HDF5 file not found: {h5_path}")
-
-    data: dict[str, Any] = {}
-    with h5py.File(h5_path, "r") as h5f:
-        for grp_name in ("train", "val", "test"):
-            if grp_name not in h5f:
-                continue
-            data[grp_name] = {key: h5f[grp_name][key][()] for key in h5f[grp_name]}
-    return data
 
 
 def get_tensor_data_loader(

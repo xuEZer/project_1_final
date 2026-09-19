@@ -14,22 +14,13 @@ from pathlib import Path
 
 import torch
 from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
 
 from src.auto_batch_size import find_max_batch_size
-from src.data_loader import (
-    get_tensor_data_loader,
-    load_h5,
-    preprocess_dataset,
-)
+from src.data_loader import get_tensor_data_loader
 from src.models.imputators import imputator
 from src.models.jointModel import JointModel
 from src.models.predictors import predictor
-from src.rng import (
-    configure_deterministic_backend,
-    torch_generator,
-    torch_seed_scope,
-)
+from src.rng import configure_deterministic_backend
 
 _NUMERIC_RE = re.compile(r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$")
 
@@ -53,7 +44,6 @@ def resolve_missing_seed(config: ConfigParser) -> int:
 def resolve_batch_size(
     *,
     config: ConfigParser,
-    seed: int,
     effective_batch_size: int,
     dataset: dict,
     joint_model: JointModel,
@@ -77,17 +67,9 @@ def resolve_batch_size(
         "loader", "auto_batch"
     )
     if auto_batch and effective_batch_size > 1:
-        auto_probe_generator = torch_generator(
-            seed, "auto_batch_probe_loader_shuffle"
-        )
-        logger.info(
-            "Independent RNG: auto_batch_probe_loader_shuffle_seed=%d",
-            auto_probe_generator.initial_seed(),
-        )
         sample_loader, _, _ = get_tensor_data_loader(
             dataset,
             batch_size=effective_batch_size,
-            train_generator=auto_probe_generator,
             **loader_kwargs,
         )
         sample_batch = next(iter(sample_loader["train"]))
@@ -114,7 +96,6 @@ def resolve_batch_size(
 
 def build_dataloaders(
     config: ConfigParser,
-    seed: int,
     dataset: dict,
     joint_model: JointModel,
     logger: logging.Logger,
@@ -130,7 +111,6 @@ def build_dataloaders(
 
     micro_batch_size, accum_steps = resolve_batch_size(
         config=config,
-        seed=seed,
         effective_batch_size=effective_batch_size,
         dataset=dataset,
         joint_model=joint_model,
@@ -140,46 +120,28 @@ def build_dataloaders(
     joint_model.accum_steps = accum_steps
     joint_model.micro_batch_size = micro_batch_size
 
-    train_shuffle_generator = torch_generator(seed, "train_loader_shuffle")
-    logger.info(
-        "Independent RNG: train_loader_shuffle_seed=%d",
-        train_shuffle_generator.initial_seed(),
-    )
     train_loader, eval_loader, no_gt = get_tensor_data_loader(
         dataset,
         batch_size=micro_batch_size,
-        train_generator=train_shuffle_generator,
         **loader_kwargs,
     )
     return train_loader, eval_loader, no_gt
 
 def configure_deterministic_runtime(seed: int, logger: logging.Logger) -> None:
-    """Configure deterministic backends without sharing one global RNG stream."""
+    """Select the deterministic kernels; the RNG stream belongs to expman."""
     configure_deterministic_backend()
     logger.info(
-        "Base random seed set to %d; stochastic processes derive independent RNGs.",
+        "Base random seed %d; expman owns the process RNG stream and restores it "
+        "at every Stage boundary.",
         seed,
     )
 
 def init_joint_model(
-    config: ConfigParser, logger: logging.Logger, tb_summary_writer: SummaryWriter
+    config: ConfigParser, logger: logging.Logger, record_metric=None
 ) -> JointModel:
     base_seed = config.getint("experiment", "seed")
-    with torch_seed_scope(
-        base_seed,
-        "imputer_init",
-        config.get("imputer", "model"),
-    ) as imputer_seed:
-        logger.info("Independent RNG: imputer_init_seed=%d", imputer_seed)
-        imputer_model = imputator(config.get("imputer", "model"), config)
-
-    with torch_seed_scope(
-        base_seed,
-        "predictor_init",
-        config.get("predictor", "model"),
-    ) as predictor_seed:
-        logger.info("Independent RNG: predictor_init_seed=%d", predictor_seed)
-        predictor_model = predictor(config.get("predictor", "model"), config)
+    imputer_model = imputator(config.get("imputer", "model"), config)
+    predictor_model = predictor(config.get("predictor", "model"), config)
 
     joint_model = JointModel(
         imputer=imputer_model,
@@ -187,10 +149,10 @@ def init_joint_model(
         optimizer_name=config.get("training", "optimizer"),
         lr=config.getfloat("training", "lr"),
         device=config.get("training", "device"),
-        tb_summary_writer=tb_summary_writer,
+        record_metric=record_metric,
         logger=logger,
     )
-    joint_model.configure_random_generators(base_seed)
+    joint_model.configure_base_seed(base_seed)
 
     device = config.get("training", "device")
     joint_model.to(device)

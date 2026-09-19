@@ -65,9 +65,6 @@ class EpochMonitor:
         self, epoch: int, train_loss: float, model: JointModel
     ) -> bool:
         """Log train/val loss, checkpoint. Returns True if should stop."""
-        tb = model.tb_summary_writer
-
-        tb.add_scalar("loss/train_loss", train_loss, epoch)
         parts = [f"train_loss={train_loss:.6f}"]
 
         val_current = model.compute_val_loss(self._val_loader)
@@ -78,10 +75,8 @@ class EpochMonitor:
         )
         if self._val_loader is not None:
             parts.append(f"val_loss={val_current:.6f}")
-            tb.add_scalar("loss/val_loss", val_current, epoch)
             if math.isfinite(val_pred_current):
                 parts.append(f"val_pred_loss={val_pred_current:.6f}")
-                tb.add_scalar("loss/val_pred_loss", val_pred_current, epoch)
         self._logger.info("Epoch %03d/%d | %s", epoch, self._num_epoch, " | ".join(parts))
 
         # ``patience <= 0`` is the fixed-horizon mode: validation is still
