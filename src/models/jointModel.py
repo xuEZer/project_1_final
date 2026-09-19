@@ -1535,6 +1535,9 @@ class JointModel(nn.Module):
         history: list[torch.Tensor] = []
         stats = {
             "steps": 0,
+            "anchor_applied": 0.0,
+            "anchor_requested": 0.0,
+            "anchor_backtrack": 0,
             "raw": 0,
             "ucb_conflict": 0,
             "projected": 0,
@@ -1697,6 +1700,7 @@ class JointModel(nn.Module):
                 # survives as the proposal shrinks (the projection alone does
                 # not: it is positively homogeneous in the proposal).
                 direction = prediction_coordinates / gp_norm
+                pre_anchor = candidate_coordinates.clone()
                 realized = anchor_delta
                 for _ in range(6):
                     anchored = candidate_coordinates + realized * direction
@@ -1710,6 +1714,11 @@ class JointModel(nn.Module):
                         candidate_coordinates = anchored
                         break
                     realized *= 0.5  # backtrack to stay inside the cone
+                    stats["anchor_backtrack"] += 1
+                stats["anchor_requested"] += float(anchor_delta)
+                stats["anchor_applied"] += float(
+                    (candidate_coordinates - pre_anchor).norm().item()
+                )
             candidate = g_i + basis @ (
                 candidate_coordinates - update_coordinates
             )
@@ -1857,6 +1866,20 @@ class JointModel(nn.Module):
                     averages["ucb"], averages["z_mean"], averages["z_std"],
                     averages["z_sem"], averages["coordinate_variation"],
                     averages["q_center"],
+                )
+                anchor_requests = float(stats.get("anchor_requested", 0.0))
+                model.logger.info(
+                    "TIP anchor: delta=%.6g | fired_requests=%d | "
+                    "requested_norm=%.6g | applied_norm=%.6g | "
+                    "applied_ratio=%.6g | backtracks=%d",
+                    anchor_delta,
+                    int(round(anchor_requests / anchor_delta))
+                    if anchor_delta > 0 else 0,
+                    anchor_requests,
+                    float(stats.get("anchor_applied", 0.0)),
+                    float(stats.get("anchor_applied", 0.0)) / anchor_requests
+                    if anchor_requests > 0 else float("nan"),
+                    int(stats.get("anchor_backtrack", 0)),
                 )
                 model.logger.info(
                     "TIP geometry: adamw_update_norm=%.6g | "

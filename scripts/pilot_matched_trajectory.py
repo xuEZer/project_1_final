@@ -172,10 +172,17 @@ def main() -> int:
         tb = SummaryWriter(log_dir=args.out / f"tb_{arm}")
         cfg, model, train_loader, test_loader, no_gt = build(args, logger, tb)
         val_loader = train_loader.get("val")
+        train_eval_loader = train_loader.get("train_eval")
 
         def on_epoch_end(epoch, train_loss, m, _arm=arm, _tb=tb):
             rec = {"arm": _arm, "epoch": epoch, "step": m.global_optim_step,
                    "train_loss": train_loss}
+            if epoch % args.eval_every == 0:
+                if train_eval_loader is not None:
+                    tr = evaluate(cfg, m, LimitedLoader(train_eval_loader, limit),
+                                  no_gt=False, logger=logger, split_name="train")
+                    rec["train_imp_mse"] = tr.get("imp_mse")
+                    rec["train_pred_mse"] = tr.get("pred_mse")
             if val_loader is not None and epoch % args.eval_every == 0:
                 v = evaluate(cfg, m, LimitedLoader(val_loader, limit),
                              no_gt=False, logger=logger, split_name="val")
@@ -204,6 +211,7 @@ def main() -> int:
     csv_path = args.out / f"{tag}.csv"
     with csv_path.open("w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=["arm", "epoch", "step", "train_loss",
+                                           "train_imp_mse", "train_pred_mse",
                                            "val_imp_mse", "val_pred_mse",
                                            "test_imp_mse", "test_pred_mse"])
         w.writeheader()
@@ -211,9 +219,10 @@ def main() -> int:
 
     # ---- matched-step comparison ----------------------------------------
     print(f"\nwrote {csv_path}")
-    print(f"\n{'epoch':>6} {'step':>6} | {'B1 test_pred':>13} {'B2 test_pred':>13} "
-          f"{'B2/B1-1':>9} | {'B1 val_pred':>12} {'B2 val_pred':>12}")
-    print("-" * 86)
+    print(f"\n{'epoch':>6} {'step':>6} | {'B1 tr_pred':>11} {'B2 tr_pred':>11} {'Δtr':>8}"
+          f" | {'B1 te_pred':>11} {'B2 te_pred':>11} {'Δte':>8}"
+          f" | {'B1 va_pred':>11} {'B2 va_pred':>11} {'Δva':>8}")
+    print("-" * 118)
     by = {}
     for r in rows:
         by.setdefault((r["arm"], r["epoch"]), r)
@@ -221,13 +230,15 @@ def main() -> int:
         if arm != "B1":
             continue
         o = by.get(("B2", epoch))
-        if not o or r.get("test_pred_mse") is None or o.get("test_pred_mse") is None:
+        if not o:
             continue
-        d = 100 * (o["test_pred_mse"] / r["test_pred_mse"] - 1)
-        print(f"{epoch:>6} {r['step']:>6} | {r['test_pred_mse']:>13.4f} "
-              f"{o['test_pred_mse']:>13.4f} {d:>8.2f}% | "
-              f"{(r.get('val_pred_mse') or float('nan')):>12.4f} "
-              f"{(o.get('val_pred_mse') or float('nan')):>12.4f}")
+        def pair(key):
+            a, b = r.get(key), o.get(key)
+            if a is None or b is None:
+                return f"{'--':>11} {'--':>11} {'--':>8}"
+            return f"{a:>11.4f} {b:>11.4f} {100*(b/a-1):>7.2f}%"
+        print(f"{epoch:>6} {r['step']:>6} | {pair('train_pred_mse')}"
+              f" | {pair('test_pred_mse')} | {pair('val_pred_mse')}")
     return 0
 
 
