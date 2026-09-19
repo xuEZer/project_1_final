@@ -1,12 +1,13 @@
 # Main experiment matrix.
 #
-# Equivalent to the former configs/main_exp.json (160 runs = 2 stages x 4
-# datasets x 5 imputers x 4 predictors) with the same fixed protocol.
+# Equivalent to the former configs/main_exp.json + configs/global.ini pair:
+# 160 runs = 2 stages x 4 datasets x 5 imputers x 4 predictors, with the same
+# fixed protocol.  Everything the old global.ini supplied implicitly is now an
+# explicit field, so a run's identity covers its whole configuration.
 #
-# `name:` selects defaults from configs/<field path>/<name>.yaml, which is
-# where the former configs/template/{dataset,imputer,predictor}/*.ini now live.
+# `name:` selects defaults from configs/<field path>/<name>.yaml.
 
-experiment: !choice [B1, B2]
+stage: !choice [B1, B2]
 
 dataset:
   name: !choice
@@ -32,12 +33,9 @@ predictor:
 
 seed: 42
 
-training:
-  lr: 0.001
-  batch_size: 256
-  micro_batch: 64
-  max_epochs: 50
-  patience: 5
+paths:
+  cache_dir: ./cache
+  log_dir: ./logs
 
 data:
   missing_rate: 0.2
@@ -45,6 +43,23 @@ data:
   block_size: 32
   lookback: 512
   pred_len: 16
+  val_ratio: 0.1
+  test_ratio: 0.2
+
+loader:
+  batch_size: 256
+  micro_batch: 64
+  auto_batch: false
+  num_workers: 0
+  pin_memory: true
+
+training:
+  optimizer: AdamW
+  lr: 0.001
+  device: cuda
+  max_epochs: 50
+  patience: 5
+  min_delta: 1.0e-4
 
 tip:
   subspace_rank: 4
