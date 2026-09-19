@@ -1,0 +1,47 @@
+# rq3 matrix, migrated from configs/rq3_exp.json.
+# One dataset/imputer/predictor; the three seeds are the only choice.
+
+stage: RQ3
+
+dataset:
+  name: azure2019_I_5T
+imputer:
+  name: SAITS
+predictor:
+  name: Toto2
+
+device: [0]
+seed: !choice [42, 43, 44]
+missing_seed: 42
+
+paths:
+  cache_dir: ./cache
+  log_dir: ./logs
+
+data:
+  missing_rate: 0.2
+  artificial_missing_rate: 0.2
+  block_size: 32
+  lookback: 512
+  pred_len: 16
+  val_ratio: 0.1
+  test_ratio: 0.2
+
+loader:
+  batch_size: 256
+  micro_batch: 64
+  auto_batch: false
+  num_workers: 0
+  pin_memory: true
+
+training:
+  optimizer: AdamW
+  lr: 0.001
+  max_epochs: 50
+  patience: 5
+  min_delta: 1.0e-4
+
+tip:
+  subspace_rank: 8
+  epsilon: 0.001
+  confidence_delta: 0.1
