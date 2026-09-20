@@ -1072,12 +1072,21 @@ class JointModel(nn.Module):
                             self._sync_first_moment_to_applied_update(
                                 parameters, parameters_before, final_update
                             )
-                        pred_loss_after_tip_adamw = (
-                            self._prediction_loss_on_microbatches(
-                                accum_microbatches,
-                                rng_namespace="prediction_step_monitor",
+                        if torch.equal(final_update, raw_adamw_update):
+                            # The applied parameters are exactly the already
+                            # evaluated raw AdamW parameters, so another
+                            # predictor forward would duplicate the same CRN
+                            # measurement.
+                            pred_loss_after_tip_adamw = (
+                                pred_loss_after_raw_adamw
                             )
-                        )
+                        else:
+                            pred_loss_after_tip_adamw = (
+                                self._prediction_loss_on_microbatches(
+                                    accum_microbatches,
+                                    rng_namespace="prediction_step_monitor",
+                                )
+                            )
                         if (
                             optimizer_step_observer is not None
                             and pred_loss_before is not None
