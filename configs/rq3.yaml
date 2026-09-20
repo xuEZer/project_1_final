@@ -42,4 +42,4 @@ training:
 tip:
   subspace_rank: 8
   epsilon: 0.001
-  confidence_delta: 0.05
+  confidence_delta: 0.1

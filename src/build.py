@@ -20,7 +20,7 @@ from src.data_loader import get_tensor_data_loader
 from src.models.imputators import imputator
 from src.models.jointModel import JointModel
 from src.models.predictors import predictor
-from src.rng import configure_deterministic_backend
+from src.rng import configure_deterministic_backend, derive_seed
 
 _NUMERIC_RE = re.compile(r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$")
 
@@ -120,9 +120,20 @@ def build_dataloaders(
     joint_model.accum_steps = accum_steps
     joint_model.micro_batch_size = micro_batch_size
 
+    # B1 and B2 must see the same shuffled batches.  Keep the loader RNG
+    # independent of the ambient Stage stream and of any extra TIP forwards;
+    # the namespace is deliberately fixed and contains no branch/stage label.
+    shuffle_seed = derive_seed(
+        config.getint("experiment", "seed"), "train_loader_shuffle"
+    )
+    train_generator = torch.Generator(device="cpu")
+    train_generator.manual_seed(shuffle_seed)
+    logger.info("Training DataLoader shuffle seed: %d", shuffle_seed)
+
     train_loader, eval_loader, no_gt = get_tensor_data_loader(
         dataset,
         batch_size=micro_batch_size,
+        train_generator=train_generator,
         **loader_kwargs,
     )
     return train_loader, eval_loader, no_gt

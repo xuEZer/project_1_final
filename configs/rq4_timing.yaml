@@ -42,7 +42,7 @@ training:
 tip:
   subspace_rank: 8
   epsilon: 0.001
-  confidence_delta: 0.05
+  confidence_delta: 0.1
   rq4_ranks: "2,4,8,16"
   rq4_epsilons: "0.001"
   rq4_gate_deltas: "0.1"
