@@ -1723,6 +1723,7 @@ class JointModel(nn.Module):
             "projected_tip_adamw_delta": 0.0,
             "projected_tip_adamw_relative_delta": 0.0,
             "projected_tip_adamw_nonincrease": 0,
+            "projected_tip_improved_over_raw": 0,
             "projected_gain_ratio": 0.0,
             "projected_gain_ratio_sq": 0.0,
         }
@@ -1985,6 +1986,9 @@ class JointModel(nn.Module):
                     "projected_tip_adamw_nonincrease"
                 ] += int(tip_adamw_delta <= 0.0)
                 prediction_change_stats[
+                    "projected_tip_improved_over_raw"
+                ] += int(tip_adamw_delta < raw_adamw_delta)
+                prediction_change_stats[
                     "projected_gain_ratio"
                 ] += projection_gain_ratio
                 prediction_change_stats[
@@ -2153,7 +2157,7 @@ class JointModel(nn.Module):
                 prediction_change_values[
                     "projected_tip_improvement_rate"
                 ] = (
-                    prediction_change_stats["projected_tip_adamw_nonincrease"]
+                    prediction_change_stats["projected_tip_improved_over_raw"]
                     / projected_count
                     if projected_count
                     else float("nan")
@@ -2267,6 +2271,7 @@ class JointModel(nn.Module):
                     "tip_adamw_nonincrease", "projected_observed",
                     "projected_raw_adamw_nonincrease",
                     "projected_tip_adamw_nonincrease",
+                    "projected_tip_improved_over_raw",
                 } else 0.0
             if on_epoch_end is not None:
                 on_epoch_end(epoch, train_loss, model)
