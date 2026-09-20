@@ -1,7 +1,8 @@
-# rq3 matrix, migrated from configs/rq3_exp.json.
-# One dataset/imputer/predictor; the three seeds are the only choice.
+# RQ3 component ablation.  Every branch follows its own realised training
+# trajectory; branches share only the seed-controlled initialisation and batch
+# order, just as the paired B1/B2 runs in the main experiment do.
 
-stage: RQ3
+stage: !choice [B1, B2, B3, B4, B5]
 
 dataset:
   name: azure2019_I_5T

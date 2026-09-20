@@ -339,17 +339,6 @@ def _run_rq3(
     return joint_model
 
 
-def _csv_values(config: ConfigParser, key: str, cast):
-    values = [
-        cast(value.strip())
-        for value in config.get("tip", key).split(",")
-        if value.strip()
-    ]
-    if not values:
-        raise ValueError(f"tip.{key} must contain at least one value")
-    return values
-
-
 def _run_rq4(
     joint_model: JointModel,
     train_loader: dict[str, DataLoader],
@@ -357,26 +346,52 @@ def _run_rq4(
     logger: logging.Logger,
     on_epoch_end=None,
 ) -> JointModel:
-    """Train B1 once and evaluate all RQ4 sensitivity candidates per step."""
+    """Train one independently realised RQ4 sensitivity configuration."""
     num_epoch = config.getint("training", "max_epochs")
-    base_rank = config.getint("tip", "subspace_rank")
-    base_epsilon = config.getfloat("tip", "epsilon")
-    base_delta = config.getfloat("tip", "confidence_delta")
-    ranks = _csv_values(config, "rq4_ranks", int)
-    epsilons = _csv_values(config, "rq4_epsilons", float)
-    gate_deltas = _csv_values(config, "rq4_gate_deltas", float)
-    log_phase(logger, "RQ4 — shared B1 sensitivity trajectory", num_epoch)
-    joint_model.fit_rq4_counterfactual(
+    variant = config.get("experiment", "rq4_variant")
+
+    if variant == "B1":
+        return _run_b1(
+            joint_model, train_loader, config, logger, on_epoch_end
+        )
+
+    rank = config.getint("tip", "subspace_rank")
+    epsilon = config.getfloat("tip", "epsilon")
+    confidence_delta = config.getfloat("tip", "confidence_delta")
+    if variant == "base":
+        pass
+    elif variant.startswith("rank="):
+        rank = int(variant.split("=", 1)[1])
+    elif variant.startswith("epsilon="):
+        epsilon = float(variant.split("=", 1)[1])
+    elif variant.startswith("gate_delta="):
+        confidence_delta = float(variant.split("=", 1)[1])
+    else:
+        raise ValueError(f"Unknown RQ4 variant: {variant}")
+
+    if rank < 2:
+        raise ValueError("RQ4 rank must be at least 2")
+    if epsilon <= 0:
+        raise ValueError("RQ4 epsilon must be positive")
+    if not 0.0 < confidence_delta < 1.0:
+        raise ValueError("RQ4 gate delta must lie in (0, 1)")
+
+    log_phase(logger, f"RQ4 — independent TIP training ({variant})", num_epoch)
+    logger.info(
+        "  variant=%s, subspace_rank=%d, epsilon=%g, confidence_delta=%g",
+        variant, rank, epsilon, confidence_delta,
+    )
+    joint_model.fit_tip(
         data_loader=train_loader,
         phase_name="rq4",
         num_epoch=num_epoch,
         on_epoch_end=on_epoch_end,
-        base_rank=base_rank,
-        base_epsilon=base_epsilon,
-        cone_delta=base_delta,
-        ranks=ranks,
-        epsilons=epsilons,
-        gate_deltas=gate_deltas,
+        subspace_rank=rank,
+        epsilon=epsilon,
+        confidence_delta=confidence_delta,
+        basis_mode="history",
+        correction_mode="robust",
+        gate_mode="ucb",
     )
     return joint_model
 

@@ -269,6 +269,8 @@ class Train(Stage):
         }
         if _scalar(cfg["stage"]) != "B1":
             declaration["tip"] = True
+        if _scalar(cfg["stage"]) == "RQ4":
+            declaration["rq4_variant"] = True
         return declaration
 
     def process(self, dataset, ctx):
