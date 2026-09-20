@@ -11,7 +11,7 @@ predictor:
   name: Toto2
 
 device: [0]
-seed: !choice [42, 43, 44, 45, 46]
+seed: !choice [42, 43, 44, 45, 46, 47, 48, 49, 50, 51]
 # Keep the missingness realization fixed across training seeds.
 missing_seed: 42
 
