@@ -793,11 +793,10 @@ class JointModel(nn.Module):
                 accumulated micro-batches, and the actual optimizer update vector
                 ``theta_before - theta_after``. It returns the update vector
                 that will be applied to the parameters.
-            optimizer_step_observer: Optional callback receiving the complete
-                training-set prediction loss before the update, after the raw
-                optimizer proposal, and after the TIP-projected update.
-                Enabling it adds three full training-loader evaluations per
-                optimizer step.
+            optimizer_step_observer: Optional callback receiving the current
+                optimizer batch's prediction loss before the update,
+                after the raw optimizer proposal, and after the TIP-projected
+                update.
             counterfactual_update_generator: Optional callback that returns a
                 mapping of named candidate updates. Every candidate is
                 evaluated from the same pre-step parameters, while only the
@@ -810,7 +809,6 @@ class JointModel(nn.Module):
             accum_steps = getattr(self, "accum_steps", 1)
 
         train_loader = data_loader["train"]
-        prediction_evaluation_loader = data_loader.get("train_eval", train_loader)
         final_train_loss = float("inf")
         self.phase_epoch = 0
         measure_wall_clock = phase_name == "rq4"
@@ -888,8 +886,8 @@ class JointModel(nn.Module):
                             parameter.detach().clone()
                             for parameter in parameters
                         ]
-                        pred_loss_before = self._prediction_loss_on_loader(
-                            prediction_evaluation_loader,
+                        pred_loss_before = self._prediction_loss_on_microbatches(
+                            accum_microbatches,
                             rng_namespace="prediction_step_monitor",
                         )
                         if measure_wall_clock:
@@ -906,8 +904,8 @@ class JointModel(nn.Module):
                             for parameter in parameters
                         ]
                         pred_loss_after_raw_adamw = (
-                            self._prediction_loss_on_loader(
-                                prediction_evaluation_loader,
+                            self._prediction_loss_on_microbatches(
+                                accum_microbatches,
                                 rng_namespace="prediction_step_monitor",
                             )
                         )
@@ -974,8 +972,8 @@ class JointModel(nn.Module):
                                     f"Counterfactual update {name} has the wrong size"
                                 )
                             candidate_losses[name] = (
-                                self._prediction_loss_on_loader(
-                                    prediction_evaluation_loader,
+                                self._prediction_loss_on_microbatches(
+                                    accum_microbatches,
                                     rng_namespace="prediction_step_monitor",
                                 )
                             )
@@ -1005,8 +1003,8 @@ class JointModel(nn.Module):
                             parameter.detach().clone()
                             for parameter in parameters
                         ]
-                        pred_loss_before = self._prediction_loss_on_loader(
-                            prediction_evaluation_loader,
+                        pred_loss_before = self._prediction_loss_on_microbatches(
+                            accum_microbatches,
                             rng_namespace="prediction_step_monitor",
                         )
                         # Advance the optimizer exactly once, including any
@@ -1018,8 +1016,8 @@ class JointModel(nn.Module):
                             for parameter in parameters
                         ]
                         pred_loss_after_raw_adamw = (
-                            self._prediction_loss_on_loader(
-                                prediction_evaluation_loader,
+                            self._prediction_loss_on_microbatches(
+                                accum_microbatches,
                                 rng_namespace="prediction_step_monitor",
                             )
                         )
@@ -1075,8 +1073,8 @@ class JointModel(nn.Module):
                                 parameters, parameters_before, final_update
                             )
                         pred_loss_after_tip_adamw = (
-                            self._prediction_loss_on_loader(
-                                prediction_evaluation_loader,
+                            self._prediction_loss_on_microbatches(
+                                accum_microbatches,
                                 rng_namespace="prediction_step_monitor",
                             )
                         )
@@ -1095,16 +1093,16 @@ class JointModel(nn.Module):
                         pred_loss_before = None
                         if optimizer_step_observer is not None:
                             pred_loss_before = (
-                                self._prediction_loss_on_loader(
-                                    prediction_evaluation_loader,
+                                self._prediction_loss_on_microbatches(
+                                    accum_microbatches,
                                     rng_namespace="prediction_step_monitor",
                                 )
                             )
                         self.optimizer.step()
                         if optimizer_step_observer is not None:
                             pred_loss_after = (
-                                self._prediction_loss_on_loader(
-                                    prediction_evaluation_loader,
+                                self._prediction_loss_on_microbatches(
+                                    accum_microbatches,
                                     rng_namespace="prediction_step_monitor",
                                 )
                             )
@@ -1681,14 +1679,11 @@ class JointModel(nn.Module):
             raise ValueError("gate_mode must be 'ucb' or 'mean'")
         if accum_steps is None:
             accum_steps = self.accum_steps
-        prediction_gradient_loader = data_loader.get(
-            "train_eval", data_loader["train"]
-        )
         self.logger.info(
             "TIP local subspace: target_rank=%d | "
             "finite_difference_directions_per_step=%d | "
-            "gradient_scope=full_training_loader | "
-            "step_monitor_full_loader_passes=3 | "
+            "gradient_scope=current_optimizer_batch | "
+            "step_monitor_scope=current_optimizer_batch | "
             "epsilon=%g | confidence_delta=%g | basis_mode=%s | "
             "correction_mode=%s | gate_mode=%s | "
             "update_space=adamw_parameter_displacement | "
@@ -1785,13 +1780,15 @@ class JointModel(nn.Module):
             coordinate_batches = []
             z_batches = []
             diagnostic_batches = []
-            for rng_index, raw_batch in enumerate(prediction_gradient_loader):
-                X_N, X_NA, X_NA_mask, X_A_mask, Y_N, Y_N_mask = (
-                    model._move_batch_to_device(raw_batch)
-                )
+            for rng_index, microbatch in enumerate(microbatches):
                 coordinates, z_samples, diagnostics = (
                     model._compute_subspace_prediction_gradient(
-                        X_NA, X_NA_mask, X_N, X_A_mask, Y_N, Y_N_mask,
+                        microbatch["X_NA"],
+                        microbatch["X_NA_mask"],
+                        microbatch["X_N"],
+                        microbatch["X_A_mask"],
+                        microbatch["Y_N"],
+                        microbatch["Y_N_mask"],
                         epsilon=epsilon,
                         basis=basis,
                         update_coordinates=update_coordinates,
