@@ -12,6 +12,7 @@ predictor:
 
 device: [0]
 seed: !choice [42, 43, 44]
+# Keep the missingness realization fixed across training seeds.
 missing_seed: 42
 
 paths:
@@ -21,15 +22,15 @@ paths:
 data:
   missing_rate: 0.2
   artificial_missing_rate: 0.2
-  block_size: 32
-  lookback: 512
-  pred_len: 16
+  block_size: 8
+  lookback: 256
+  pred_len: 8
   val_ratio: 0.1
   test_ratio: 0.2
 
 loader:
   batch_size: 256
-  micro_batch: 64
+  micro_batch: 0
   auto_batch: false
   num_workers: 0
   pin_memory: true
@@ -40,9 +41,9 @@ training:
   max_epochs: 5
 
 tip:
-  subspace_rank: 8
+  subspace_rank: 3
   epsilon: 0.001
   confidence_delta: 0.1
-  rq4_ranks: "2,4,8,16"
+  rq4_ranks: "2,3,4,5,6"
   rq4_epsilons: "1e-5,1e-4,1e-3,1e-2,1e-1"
   rq4_gate_deltas: "0.01,0.05,0.1,0.2,0.5"
