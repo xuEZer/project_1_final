@@ -21,12 +21,11 @@ from src.models.jointModel import JointModel
 class EpochMonitor:
     """Log the imputation and prediction loss on both splits every epoch.
 
-    Training runs to a fixed horizon: there is no early stopping and no
-    best-checkpoint selection, so the state left by the last epoch is the one
-    that gets evaluated.  Both splits are measured with the same pair of
-    helpers on the same training-format loaders, so ``train_*`` and ``val_*``
-    are directly comparable; the loader also carries the artificial masks that
-    make the imputation loss well defined.
+    Training runs to a fixed horizon and the caller restores the checkpoint
+    with the lowest validation prediction loss.  Both splits are measured with
+    the same pair of helpers on the same training-format loaders, so
+    ``train_*`` and ``val_*`` are directly comparable; the loader also carries
+    the artificial masks that make the imputation loss well defined.
 
     Parameters
     ----------
@@ -55,21 +54,35 @@ class EpochMonitor:
         self.last_metrics: dict[str, float | None] = {}
 
     @staticmethod
-    def _losses(model: JointModel, loader: DataLoader | None) -> tuple[float, float]:
+    def _losses(
+        model: JointModel,
+        loader: DataLoader | None,
+        *,
+        split: str,
+        epoch: int,
+    ) -> tuple[float, float]:
         """Imputation and prediction loss on one split, same convention for both."""
         if loader is None:
             return float("inf"), float("inf")
         return (
             model.compute_val_loss(loader),
-            model.compute_val_prediction_loss(loader),
+            model.compute_val_prediction_loss(
+                loader,
+                rng_namespace=f"epoch_prediction_monitor_{split}",
+                rng_step=epoch,
+            ),
         )
 
     def on_epoch_end(
         self, epoch: int, train_loss: float, model: JointModel
     ) -> None:
         """Log the four losses for one finished epoch."""
-        train_imp, train_pred = self._losses(model, self._train_loader)
-        val_imp, val_pred = self._losses(model, self._val_loader)
+        train_imp, train_pred = self._losses(
+            model, self._train_loader, split="train", epoch=epoch
+        )
+        val_imp, val_pred = self._losses(
+            model, self._val_loader, split="validation", epoch=epoch
+        )
 
         parts = [f"train_loss={train_loss:.6f}"]
         for name, value in (
@@ -109,7 +122,8 @@ def run_experiment(
         logger: Logger instance.
 
     Returns:
-        The trained joint model after the final epoch.
+        The trained joint model restored to its best validation-prediction
+        checkpoint.
 
     Raises:
         ValueError: If ``exp_type`` is not recognised.
@@ -126,10 +140,26 @@ def run_experiment(
         logger=logger,
     )
     base_on_epoch_end = epoch_monitor.on_epoch_end
+    best_val_pred = float("inf")
+    best_epoch: int | None = None
+    best_imputer_state = None
 
     def on_epoch_end(epoch, train_loss, model):
-        """Monitor first, then hand the epoch to the caller's observer."""
+        """Monitor, retain the best validation checkpoint, then notify."""
+        nonlocal best_val_pred, best_epoch, best_imputer_state
         base_on_epoch_end(epoch, train_loss, model)
+        val_pred = epoch_monitor.last_metrics.get("val_pred_loss")
+        if (
+            val_pred is not None
+            and math.isfinite(val_pred)
+            and val_pred < best_val_pred
+        ):
+            best_val_pred = val_pred
+            best_epoch = epoch
+            best_imputer_state = {
+                key: value.detach().cpu().clone()
+                for key, value in model.imputer.state_dict().items()
+            }
         if on_epoch is not None:
             on_epoch(epoch, epoch_monitor)
 
@@ -152,6 +182,27 @@ def run_experiment(
         raise ValueError(
             f"Unknown experiment type {exp_type}. "
             "Available types: B1, B2, B3, B4, B5, RQ3, RQ4"
+        )
+
+    if best_imputer_state is not None:
+        assert best_epoch is not None
+        trained_model.imputer.load_state_dict(best_imputer_state)
+        trained_model.record_metric(
+            "selection/best_epoch", float(best_epoch), best_epoch
+        )
+        trained_model.record_metric(
+            "selection/best_val_pred_loss", best_val_pred, best_epoch
+        )
+        logger.info(
+            "Restored best validation-prediction checkpoint: epoch=%d | "
+            "val_pred_loss=%.9g",
+            best_epoch,
+            best_val_pred,
+        )
+    else:
+        logger.warning(
+            "No finite validation prediction loss was observed; retaining "
+            "the final-epoch imputer"
         )
 
     logger.info("Final imputer state hash: %s", imputer_state_hash(trained_model))

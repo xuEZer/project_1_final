@@ -180,7 +180,13 @@ class JointModel(nn.Module):
         }
 
     @torch.no_grad()
-    def compute_val_prediction_loss(self, val_loader: DataLoader) -> float:
+    def compute_val_prediction_loss(
+        self,
+        val_loader: DataLoader,
+        *,
+        rng_namespace: str | None = None,
+        rng_step: int | None = None,
+    ) -> float:
         """Average prediction loss on the validation set.
 
         Same weighting convention as :meth:`compute_val_loss` (batch sizes, and
@@ -196,14 +202,24 @@ class JointModel(nn.Module):
         count = 0.0
         try:
             with torch.no_grad():
-                for batch in val_loader:
+                for batch_index, batch in enumerate(val_loader):
                     (
                         X_N, X_NA, X_NA_mask, X_A_mask, Y_N, Y_N_mask,
                     ) = self._move_batch_to_device(batch)
-                    output = self.forward(
+                    inputs = (
                         X_NA, X_NA_mask, X_N, X_A_mask, Y_N, Y_N_mask,
-                        run_predictor=True,
                     )
+                    if rng_namespace is None:
+                        output = self.forward(*inputs, run_predictor=True)
+                    else:
+                        with torch_seed_scope(
+                            self.base_seed,
+                            rng_namespace,
+                            self.global_optim_step
+                            if rng_step is None else rng_step,
+                            batch_index,
+                        ):
+                            output = self.forward(*inputs, run_predictor=True)
                     if output["pred_loss"] is None:
                         continue
                     n = (

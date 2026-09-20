@@ -16,7 +16,7 @@ _logger = logging.getLogger(__name__)
 
 # Keep dataset size fixed as an internal preprocessing policy rather than an
 # experiment parameter that can accidentally enter a sweep.
-_MAX_EXPERIMENT_SERIES_POINTS = 3_000
+_MAX_EXPERIMENT_SERIES_POINTS = 2_000
 
 
 def _cached_snapshot(repo_id: str, allow_patterns: str) -> str:
