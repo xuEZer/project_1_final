@@ -177,9 +177,10 @@ def _run_b1(
 ) -> JointModel:
     """B1: Two-stage baseline — train imputer only with reconstruction loss.
 
-    The predictor takes no part in the update, but it is evaluated before and
-    after every optimizer step so the reconstruction-only trajectory carries the
-    same one-step prediction-loss record the TIP branches do.  Its third
+    The predictor takes no part in the update, but the full training prediction
+    objective is evaluated before and after every optimizer step so the
+    reconstruction-only trajectory carries the same one-step prediction-loss
+    record the TIP branches do.  Its third
     argument repeats ``pred_loss_after_raw_adamw`` because B1 applies the raw
     update unchanged, so ``tip_projection_gain`` is zero on every step by
     construction and the non-increase rate is read off

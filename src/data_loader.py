@@ -14,6 +14,10 @@ from src.rng import numpy_rng
 
 _logger = logging.getLogger(__name__)
 
+# Keep dataset size fixed as an internal preprocessing policy rather than an
+# experiment parameter that can accidentally enter a sweep.
+_MAX_EXPERIMENT_SERIES_POINTS = 5_000
+
 
 def _cached_snapshot(repo_id: str, allow_patterns: str) -> str:
     """Resolve a dataset snapshot from the local cache, downloading only if needed.
@@ -88,7 +92,6 @@ def preprocess_dataset(
         :func:`get_tensor_data_loader` consumes.
 
     """
-    ett_boundaries = get_ett_split_boundaries(dataset_name)
     data = load_raw_series(
         source=source,
         repo_name=repo_name,
@@ -97,6 +100,15 @@ def preprocess_dataset(
         item_id=item_id,
         column_index=column_index,
     )
+    original_length = len(data)
+    data = data[:_MAX_EXPERIMENT_SERIES_POINTS]
+    logger.info(
+        "Using the first %d of %d raw time points for %s",
+        len(data), original_length, dataset_name,
+    )
+    # Conventional ETT boundaries describe the full series and are invalid
+    # after applying the common prefix policy.
+    ett_boundaries = None
 
     # A complete dataset is asked to impute block missing where it is measured:
     # the synthetic natural mask is laid down over the test range only, so the
