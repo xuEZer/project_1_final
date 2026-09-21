@@ -78,8 +78,8 @@ def preprocess_dataset(
         item_id: Item index within the dataset.
         column_index: Target column index, or ``"all"`` for all variables.
         missing_rate: Rate used to inject natural missing blocks when needed.
-        artificial_missing_rate: Rate used to inject artificial missing values.
-        block_size: Block size used for natural missing simulation.
+        artificial_missing_rate: Rate used to inject artificial missing blocks.
+        block_size: Block size used for missing-block simulation.
         lookback_len: Input window length.
         pred_len: Forecast horizon length.
         val_ratio: Validation split ratio (0 to disable).
@@ -111,9 +111,10 @@ def preprocess_dataset(
     ett_boundaries = None
 
     # A complete dataset is asked to impute block missing where it is measured:
-    # the synthetic natural mask is laid down over the test range only, so the
-    # training and validation splits carry the artificial mask alone.  A dataset
-    # that brings its own NaNs keeps them everywhere -- those are real.
+    # the synthetic natural mask is laid down over the test range only, while
+    # the artificial mask -- block missing from the same sampler, spread over
+    # the whole series -- is what training and validation splits carry.  A
+    # dataset that brings its own NaNs keeps them everywhere -- those are real.
     bounds = split_boundaries(
         len(data), lookback_len, pred_len, val_ratio, test_ratio, ett_boundaries
     )
@@ -225,6 +226,26 @@ def get_ett_split_boundaries(dataset_name: str) -> tuple[int, int, int] | None:
     )
 
 
+def _sample_block_mask(
+    rng: np.random.Generator,
+    span: int,
+    n_cols: int,
+    block_size: int,
+    rate: float,
+) -> np.ndarray:
+    """Sample a boolean block-missing mask of length ``span``.
+
+    The span is tiled into consecutive blocks of ``block_size`` points and each
+    block is dropped entirely, per column, with probability ``rate``; the last
+    block is truncated when ``span`` is not a multiple of ``block_size``.  Both
+    the natural and the artificial mask are drawn from this one sampler -- they
+    differ only in rate and in the span they are laid over.
+    """
+    block_count = int(np.ceil(span / block_size))
+    block_flags = rng.random((block_count, n_cols)) < rate
+    return np.repeat(block_flags, block_size, axis=0)[:span]
+
+
 def generate_missing(
     data: np.ndarray,
     missing_rate: float,
@@ -239,16 +260,17 @@ def generate_missing(
     Args:
         data: Input time-series array.
         missing_rate: Natural missing rate used when raw data has no NaNs.
-        artificial_missing_rate: Artificial missing rate applied to observed values.
-        block_size: Block size used to sample natural missing intervals.
+        artificial_missing_rate: Artificial missing rate applied to observed
+            values as block missing over the whole series.
+        block_size: Block size used to sample missing intervals.
         random_seed: Seed for random mask generation.
         logger: Logger for missing-data diagnostics.
         natural_span: Half-open range the synthetic natural blocks are confined
             to.  A complete dataset gets its block missing only where it will be
-            measured -- the test split -- so training and validation carry the
-            artificial mask alone.  ``None`` spreads the blocks over the whole
-            series, which is what a dataset with no splits of its own still
-            needs.  Natural NaNs already present in the data are never moved.
+            measured -- the test split.  ``None`` spreads the blocks over the
+            whole series, which is what a dataset with no splits of its own
+            still needs.  Natural NaNs already present in the data are never
+            moved.
 
     Returns:
         Tuple containing complete data, natural-missing data, incomplete data, and
@@ -270,21 +292,20 @@ def generate_missing(
         complete_data = data.copy()
         natural_mask = np.zeros(data.shape, dtype=bool)
         start, end = (0, len(data)) if natural_span is None else natural_span
-        span = end - start
-        block_count = int(np.ceil(span / block_size))
-        natural_mask_block = (
-            natural_rng.random((block_count, data.shape[1])) < missing_rate
+        natural_mask[start:end] = _sample_block_mask(
+            natural_rng, end - start, data.shape[1], block_size, missing_rate
         )
-        natural_mask[start:end] = np.repeat(natural_mask_block, block_size, axis=0)[
-            :span
-        ]
         natural_missing_data = data.copy()
         natural_missing_data[natural_mask] = np.nan
 
-    observed_len = np.sum(~natural_mask)
-    artificial_missing_flags = artificial_rng.random(observed_len) < artificial_missing_rate
-    artificial_mask = np.zeros(data.shape, dtype=bool)
-    artificial_mask[~natural_mask] = artificial_missing_flags
+    # Artificial missing is block missing from the same sampler, laid over the
+    # whole series so every split carries training supervision; blocks falling
+    # on natural missing positions are dropped, keeping the two masks disjoint.
+    artificial_mask = _sample_block_mask(
+        artificial_rng, len(data), data.shape[1], block_size,
+        artificial_missing_rate,
+    )
+    artificial_mask &= ~natural_mask
 
     missing_mask = natural_mask | artificial_mask
     incomplete_data = data.copy()
