@@ -1,0 +1,49 @@
+# Held-out B2 search for the robust-cone confidence level after enabling the
+# zero-extra-forward online acceptance rule.  Seeds 77--81 are development
+# seeds and remain disjoint from the subsequent formal comparison.
+
+stage: B2
+
+dataset:
+  name: azure2019_I_5T
+imputer:
+  name: SAITS
+predictor:
+  name: Toto2
+
+device: [0]
+seed: !choice [77, 78, 79, 80, 81]
+missing_seed: 42
+
+paths:
+  cache_dir: ./cache
+  log_dir: ./logs
+
+data:
+  missing_rate: 0.2
+  artificial_missing_rate: 0.2
+  block_size: 8
+  lookback: 256
+  pred_len: 8
+  val_ratio: 0.1
+  test_ratio: 0.2
+
+loader:
+  batch_size: 128
+  micro_batch: 0
+  auto_batch: false
+  num_workers: 0
+  pin_memory: true
+
+training:
+  optimizer: AdamW
+  lr: 0.001
+  max_epochs: 5
+
+tip:
+  subspace_rank: 3
+  epsilon: 0.00001
+  gate_mode: lcb
+  gate_delta: 0.3
+  cone_delta: !choice [0.01, 0.03, 0.05, 0.1]
+  accept_only_if_improves: true
