@@ -51,7 +51,7 @@ data:
   test_ratio: 0.2
 
 loader:
-  batch_size: 256
+  batch_size: 128
   micro_batch: 0
   auto_batch: false
   num_workers: 0
@@ -66,5 +66,6 @@ training:
 
 tip:
   subspace_rank: 3
-  epsilon: 0.001
-  confidence_delta: 0.1
+  epsilon: 0.00001
+  gate_delta: 0.3
+  cone_delta: 0.1
