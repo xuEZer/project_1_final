@@ -819,7 +819,20 @@ class JointModel(nn.Module):
                 self._synchronize_for_timing()
                 epoch_started = time.perf_counter()
             total_loss = 0.0
-            num_batches = len(train_loader)
+            # TIP estimates its prediction gradient from the current optimizer
+            # batch plus one distinct, deterministically sampled probe batch.
+            # Materialising the (small) epoch keeps the probe on the exact same
+            # shuffled partition as the realised training trajectory without
+            # advancing a second DataLoader RNG stream. B1 keeps streaming the
+            # loader normally.
+            uses_prediction_gradient = (
+                optimizer_update_modifier is not None
+                or counterfactual_update_generator is not None
+            )
+            epoch_batches = (
+                list(train_loader) if uses_prediction_gradient else train_loader
+            )
+            num_batches = len(epoch_batches)
             num_optim_steps = 0
 
             self.imputer.train()
@@ -829,7 +842,7 @@ class JointModel(nn.Module):
             accum_target = 1
             accum_microbatches: list[dict[str, torch.Tensor]] = []
 
-            for batch_idx, batch in enumerate(train_loader):
+            for batch_idx, batch in enumerate(epoch_batches):
                 if accum_count == 0:
                     if measure_wall_clock:
                         self._synchronize_for_timing()
@@ -878,6 +891,51 @@ class JointModel(nn.Module):
                         self._synchronize_for_timing()
                         training_prefix_seconds = (
                             time.perf_counter() - optimizer_step_started
+                        )
+
+                    prediction_gradient_microbatches = accum_microbatches
+                    if uses_prediction_gradient and num_batches > accum_count:
+                        current_start = batch_idx - accum_count + 1
+                        current_indices = set(range(current_start, batch_idx + 1))
+                        probe_candidates = [
+                            index
+                            for index in range(num_batches)
+                            if index not in current_indices
+                        ]
+                        probe_choice = derive_seed(
+                            self.base_seed,
+                            "tip_probe_batch",
+                            self.global_optim_step,
+                        ) % len(probe_candidates)
+                        probe_index = probe_candidates[probe_choice]
+                        (
+                            probe_X_N,
+                            probe_X_NA,
+                            probe_X_NA_mask,
+                            probe_X_A_mask,
+                            probe_Y_N,
+                            probe_Y_N_mask,
+                        ) = self._move_batch_to_device(epoch_batches[probe_index])
+                        prediction_gradient_microbatches = [
+                            *accum_microbatches,
+                            {
+                                "X_N": probe_X_N,
+                                "X_NA": probe_X_NA,
+                                "X_NA_mask": probe_X_NA_mask,
+                                "X_A_mask": probe_X_A_mask,
+                                "Y_N": probe_Y_N,
+                                "Y_N_mask": probe_Y_N_mask,
+                            },
+                        ]
+                        self.logger.info(
+                            "TIP probe batch: epoch=%d | step=%d | "
+                            "current_batch=%d | probe_batch=%d | "
+                            "candidate_count=%d",
+                            epoch_number,
+                            self.global_optim_step + 1,
+                            batch_idx,
+                            probe_index,
+                            len(probe_candidates),
                         )
 
                     if counterfactual_update_generator is not None:
@@ -940,7 +998,9 @@ class JointModel(nn.Module):
                             ):
                                 parameter.copy_(before)
                         candidates = counterfactual_update_generator(
-                            self, accum_microbatches, raw_adamw_update
+                            self,
+                            prediction_gradient_microbatches,
+                            raw_adamw_update,
                         )
                         candidate_losses: dict[str, float | None] = {}
                         evaluated_candidates: dict[int, float | None] = {}
@@ -1034,7 +1094,9 @@ class JointModel(nn.Module):
                                 parameter.copy_(before)
 
                         final_update = optimizer_update_modifier(
-                            self, accum_microbatches, raw_adamw_update
+                            self,
+                            prediction_gradient_microbatches,
+                            raw_adamw_update,
                         )
                         offset = 0
                         with torch.no_grad():
@@ -1691,7 +1753,7 @@ class JointModel(nn.Module):
         self.logger.info(
             "TIP local subspace: target_rank=%d | "
             "finite_difference_directions_per_step=%d | "
-            "gradient_scope=current_optimizer_batch | "
+            "gradient_scope=current_optimizer_batch_plus_one_probe_batch | "
             "step_monitor_scope=current_optimizer_batch | "
             "epsilon=%g | confidence_delta=%g | basis_mode=%s | "
             "correction_mode=%s | gate_mode=%s | "
