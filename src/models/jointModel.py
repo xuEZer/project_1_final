@@ -14,7 +14,6 @@ import math
 import time
 
 import numpy as np
-from scipy.optimize import minimize
 from scipy.stats import t as student_t
 import torch
 import torch.nn as nn
@@ -595,9 +594,12 @@ class JointModel(nn.Module):
 
         This accounts for uncertainty in the *whole* subspace direction,
         whereas the scalar UCB only decides whether the raw update conflicts.
-        The problem is tiny (the configured TIP rank, normally four) and is
-        solved on CPU.  A failed or statistically unidentified cone falls back
-        to the zero coordinate vector, which safely skips the conflicting step.
+        The projection is solved in Torch from the KKT system of the equivalent
+        quadratic cone.  Diagonalising that tiny system reduces the constrained
+        problem to a monotone one-dimensional root, avoiding a per-step SciPy
+        optimiser and its Python callbacks.  A statistically unidentified cone
+        falls back to the zero coordinate vector, which safely skips the
+        conflicting step.
         """
         if coordinate_samples.ndim != 2:
             raise ValueError("coordinate_samples must have shape [n, rank]")
@@ -609,64 +611,123 @@ class JointModel(nn.Module):
                 "fallback": 1.0,
             }
 
-        mean = coordinate_samples.mean(dim=0).detach().double().cpu().numpy()
-        samples = coordinate_samples.detach().double().cpu().numpy()
-        raw = update_coordinates.detach().double().cpu().numpy()
-        covariance_mean = np.cov(samples, rowvar=False, ddof=1) / sample_count
-        covariance_mean = np.atleast_2d(covariance_mean)
+        work_device = update_coordinates.device
+        mean = coordinate_samples.detach().to(
+            device=work_device, dtype=torch.float64,
+        ).mean(dim=0)
+        samples = coordinate_samples.detach().to(
+            device=work_device, dtype=torch.float64,
+        )
+        raw = update_coordinates.detach().to(dtype=torch.float64)
+        centered = samples - mean
+        covariance_mean = centered.T @ centered
+        covariance_mean /= sample_count * (sample_count - 1)
         ridge = max(
-            float(np.trace(covariance_mean)) / max(rank, 1) * 1e-8,
+            float(torch.trace(covariance_mean).item()) / max(rank, 1) * 1e-8,
             1e-12,
         )
-        covariance_mean = covariance_mean + ridge * np.eye(rank)
+        covariance_mean.add_(
+            torch.eye(rank, dtype=torch.float64, device=work_device),
+            alpha=ridge,
+        )
         beta = float(student_t.ppf(1.0 - delta, df=sample_count - 1))
 
-        def objective(value: np.ndarray) -> float:
-            residual = value - raw
-            return 0.5 * float(residual @ residual)
+        def robust_margin(value: torch.Tensor) -> torch.Tensor:
+            variance = torch.clamp(value @ covariance_mean @ value, min=0.0)
+            return mean @ value - beta * torch.sqrt(variance)
 
-        def robust_margin(value: np.ndarray) -> float:
-            variance = max(float(value @ covariance_mean @ value), 0.0)
-            return float(mean @ value - beta * math.sqrt(variance))
-
-        starts = [np.zeros_like(raw), raw.copy()]
-        mean_norm_sq = float(mean @ mean)
-        if mean_norm_sq > 1e-20:
-            starts.append(raw - float(raw @ mean) / mean_norm_sq * mean)
-            starts.append(mean * (max(float(mean @ raw), 0.0) + 1.0) / mean_norm_sq)
-
-        best = None
-        for start in starts:
-            result = minimize(
-                objective,
-                start,
-                method="SLSQP",
-                constraints={"type": "ineq", "fun": robust_margin},
-                options={"ftol": 1e-12, "maxiter": 200},
-            )
-            if (
-                result.success
-                and robust_margin(result.x) >= -1e-7
-                and (best is None or result.fun < best.fun)
-            ):
-                best = result
-
-        if best is None:
-            solution = np.zeros_like(raw)
-            success = 0.0
-            fallback = 1.0
-        else:
-            solution = best.x
+        raw_margin = robust_margin(raw)
+        if raw_margin >= -1e-12:
+            solution = raw
             success = 1.0
-            fallback = float(np.linalg.norm(solution) <= 1e-10)
-        output = torch.as_tensor(
-            solution,
+        else:
+            # Squaring the active boundary gives x^T M x = 0 with
+            # M = beta^2 Sigma - mean mean^T.  KKT then yields
+            # x(lambda) = (I + lambda M)^-1 raw.  In M's eigenbasis the
+            # boundary equation is scalar and monotone on the PSD interval.
+            cone_matrix = (
+                beta * beta * covariance_mean - torch.outer(mean, mean)
+            )
+            eigenvalues, eigenvectors = torch.linalg.eigh(cone_matrix)
+            negative = eigenvalues < -1e-14
+            solution = torch.zeros_like(raw)
+            success = 0.0
+            if torch.any(negative):
+                rotated_raw = eigenvectors.T @ raw
+                most_negative = eigenvalues[0]
+                pole = -1.0 / most_negative
+
+                def boundary_value(multiplier: torch.Tensor) -> torch.Tensor:
+                    denominator = 1.0 + multiplier * eigenvalues
+                    return torch.sum(
+                        eigenvalues * rotated_raw.square()
+                        / denominator.square()
+                    )
+
+                def bisect_root(
+                    low: torch.Tensor,
+                    high: torch.Tensor,
+                ) -> torch.Tensor:
+                    low_value = boundary_value(low)
+                    for _ in range(80):
+                        middle = 0.5 * (low + high)
+                        middle_value = boundary_value(middle)
+                        if low_value * middle_value <= 0.0:
+                            high = middle
+                        else:
+                            low = middle
+                            low_value = middle_value
+                    return 0.5 * (low + high)
+
+                # The squared boundary has two nappes separated by the pole
+                # of (I + lambda M)^-1.  Consider a root on each side, retain
+                # only the requested (positive-mean) nappe, then choose the
+                # closest feasible point.  The cone apex is always a valid
+                # candidate.
+                root_candidates: list[torch.Tensor] = []
+                zero = torch.zeros((), dtype=torch.float64, device=work_device)
+                before_pole = pole * (1.0 - 1e-12)
+                if boundary_value(zero) * boundary_value(before_pole) < 0.0:
+                    root_candidates.append(bisect_root(zero, before_pole))
+                after_pole = pole * (1.0 + 1e-12)
+                far_after_pole = pole * 1e12
+                if (
+                    boundary_value(after_pole)
+                    * boundary_value(far_after_pole)
+                    < 0.0
+                ):
+                    root_candidates.append(
+                        bisect_root(after_pole, far_after_pole)
+                    )
+
+                feasible = [torch.zeros_like(raw)]
+                for multiplier in root_candidates:
+                    candidate = eigenvectors @ (
+                        rotated_raw / (1.0 + multiplier * eigenvalues)
+                    )
+                    if (
+                        mean @ candidate >= 0.0
+                        and robust_margin(candidate) >= -1e-7
+                    ):
+                        feasible.append(candidate)
+                solution = min(
+                    feasible,
+                    key=lambda value: float(
+                        torch.linalg.vector_norm(value - raw).item()
+                    ),
+                )
+                success = float(len(feasible) > 1)
+
+        if not success:
+            solution.zero_()
+        fallback = float(torch.linalg.vector_norm(solution).item() <= 1e-10)
+        output = solution.to(
             dtype=update_coordinates.dtype,
             device=update_coordinates.device,
         )
         return output, {
             "success": success,
-            "margin": robust_margin(solution),
+            "margin": float(robust_margin(solution).item()),
             "fallback": fallback,
         }
 

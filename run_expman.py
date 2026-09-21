@@ -13,8 +13,19 @@ output directory with per-stage snapshots.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
+
+# Each expman worker is a separate process.  On large hosts PyTorch and the
+# BLAS libraries otherwise create one thread per physical core in every
+# worker, causing severe oversubscription while the actual model work runs on
+# the GPU.  The environment is inherited by expman's worker subprocesses.
+_CPU_THREADS = os.environ.setdefault("FOTSI_CPU_THREADS", "2")
+os.environ["OMP_NUM_THREADS"] = _CPU_THREADS
+os.environ["MKL_NUM_THREADS"] = _CPU_THREADS
+os.environ["OPENBLAS_NUM_THREADS"] = _CPU_THREADS
+os.environ["NUMEXPR_NUM_THREADS"] = _CPU_THREADS
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))

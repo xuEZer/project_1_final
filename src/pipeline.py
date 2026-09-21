@@ -30,11 +30,25 @@ import hashlib
 import json
 import logging
 import math
+import os
 from collections.abc import Mapping, Sequence
 from configparser import ConfigParser, ExtendedInterpolation
 from pathlib import Path
 
 from expman import Pipeline, Stage
+import torch
+
+# Limit per-worker CPU pools.  A batch can run many independent GPU workers;
+# allowing every process to claim all host cores creates hundreds of runnable
+# threads without improving accelerator throughput.
+_CPU_THREADS = max(1, int(os.environ.get("FOTSI_CPU_THREADS", "2")))
+torch.set_num_threads(_CPU_THREADS)
+try:
+    torch.set_num_interop_threads(1)
+except RuntimeError:
+    # PyTorch permits setting the inter-op pool only before parallel work has
+    # started.  Re-imports in an already initialised test process are harmless.
+    pass
 
 ROOT = Path(__file__).resolve().parent.parent
 
