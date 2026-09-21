@@ -71,3 +71,4 @@ tip:
   gate_delta: 0.3
   cone_delta: 0.03
   accept_only_if_improves: true
+  prediction_probe_batches: 2
