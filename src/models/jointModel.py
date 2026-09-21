@@ -854,6 +854,7 @@ class JointModel(nn.Module):
         ]
         | None = None,
         accept_modified_update_if_better: bool = False,
+        prediction_probe_batches: int = 1,
         counterfactual_update_generator: collections.abc.Callable | None = None,
         counterfactual_step_observer: collections.abc.Callable | None = None,
     ) -> float:
@@ -889,6 +890,8 @@ class JointModel(nn.Module):
         """
         if accum_steps is None:
             accum_steps = getattr(self, "accum_steps", 1)
+        if prediction_probe_batches < 0:
+            raise ValueError("prediction_probe_batches must be non-negative")
 
         train_loader = data_loader["train"]
         final_train_loss = float("inf")
@@ -976,7 +979,11 @@ class JointModel(nn.Module):
                         )
 
                     prediction_gradient_microbatches = accum_microbatches
-                    if uses_prediction_gradient and num_batches > accum_count:
+                    if (
+                        uses_prediction_gradient
+                        and prediction_probe_batches > 0
+                        and num_batches > accum_count
+                    ):
                         current_start = batch_idx - accum_count + 1
                         current_indices = set(range(current_start, batch_idx + 1))
                         probe_candidates = [
@@ -984,39 +991,49 @@ class JointModel(nn.Module):
                             for index in range(num_batches)
                             if index not in current_indices
                         ]
-                        probe_choice = derive_seed(
-                            self.base_seed,
-                            "tip_probe_batch",
-                            self.global_optim_step,
-                        ) % len(probe_candidates)
-                        probe_index = probe_candidates[probe_choice]
-                        (
-                            probe_X_N,
-                            probe_X_NA,
-                            probe_X_NA_mask,
-                            probe_X_A_mask,
-                            probe_Y_N,
-                            probe_Y_N_mask,
-                        ) = self._move_batch_to_device(epoch_batches[probe_index])
-                        prediction_gradient_microbatches = [
-                            *accum_microbatches,
-                            {
+                        selected_probe_indices = []
+                        remaining_candidates = list(probe_candidates)
+                        for probe_ordinal in range(min(
+                            prediction_probe_batches,
+                            len(remaining_candidates),
+                        )):
+                            probe_choice = derive_seed(
+                                self.base_seed,
+                                "tip_probe_batch",
+                                self.global_optim_step,
+                                probe_ordinal,
+                            ) % len(remaining_candidates)
+                            selected_probe_indices.append(
+                                remaining_candidates.pop(probe_choice)
+                            )
+                        prediction_gradient_microbatches = list(accum_microbatches)
+                        for probe_index in selected_probe_indices:
+                            (
+                                probe_X_N,
+                                probe_X_NA,
+                                probe_X_NA_mask,
+                                probe_X_A_mask,
+                                probe_Y_N,
+                                probe_Y_N_mask,
+                            ) = self._move_batch_to_device(
+                                epoch_batches[probe_index]
+                            )
+                            prediction_gradient_microbatches.append({
                                 "X_N": probe_X_N,
                                 "X_NA": probe_X_NA,
                                 "X_NA_mask": probe_X_NA_mask,
                                 "X_A_mask": probe_X_A_mask,
                                 "Y_N": probe_Y_N,
                                 "Y_N_mask": probe_Y_N_mask,
-                            },
-                        ]
+                            })
                         self.logger.info(
                             "TIP probe batch: epoch=%d | step=%d | "
-                            "current_batch=%d | probe_batch=%d | "
+                            "current_batch=%d | probe_batches=%s | "
                             "candidate_count=%d",
                             epoch_number,
                             self.global_optim_step + 1,
                             batch_idx,
-                            probe_index,
+                            selected_probe_indices,
                             len(probe_candidates),
                         )
 
@@ -1841,7 +1858,7 @@ class JointModel(nn.Module):
         epsilon=1e-3, confidence_delta=0.05, accum_steps=None,
         on_epoch_end=None, basis_mode="history", correction_mode="robust",
         gate_mode="ucb", anchor_delta=0.0, gate_delta=None, cone_delta=None,
-        accept_only_if_improves=False,
+        accept_only_if_improves=False, prediction_probe_batches=1,
     ):
         if gate_delta is None:
             gate_delta = confidence_delta
@@ -1859,6 +1876,8 @@ class JointModel(nn.Module):
             raise ValueError("cone_delta must lie in (0, 1)")
         if anchor_delta < 0.0:
             raise ValueError("anchor_delta must be non-negative")
+        if prediction_probe_batches < 0:
+            raise ValueError("prediction_probe_batches must be non-negative")
         if basis_mode not in {"history", "random"}:
             raise ValueError("basis_mode must be 'history' or 'random'")
         if correction_mode not in {"robust", "point"}:
@@ -1870,14 +1889,14 @@ class JointModel(nn.Module):
         self.logger.info(
             "TIP local subspace: target_rank=%d | "
             "finite_difference_directions_per_step=%d | "
-            "gradient_scope=current_optimizer_batch_plus_one_probe_batch | "
+            "gradient_scope=current_optimizer_batch_plus_%d_probe_batches | "
             "step_monitor_scope=current_optimizer_batch | "
             "epsilon=%g | gate_delta=%g | cone_delta=%g | basis_mode=%s | "
             "correction_mode=%s | gate_mode=%s | "
             "accept_only_if_improves=%s | "
             "update_space=adamw_parameter_displacement | "
             "prediction_rng=common_random_numbers",
-            subspace_rank, 2 * subspace_rank,
+            subspace_rank, 2 * subspace_rank, prediction_probe_batches,
             epsilon, gate_delta, cone_delta, basis_mode, correction_mode, gate_mode,
             accept_only_if_improves,
         )
@@ -2510,4 +2529,5 @@ class JointModel(nn.Module):
             optimizer_step_observer=observe_optimizer_step,
             optimizer_update_acceptance_observer=observe_update_acceptance,
             accept_modified_update_if_better=accept_only_if_improves,
+            prediction_probe_batches=prediction_probe_batches,
         )

@@ -299,6 +299,9 @@ def _run_b2(
     accept_only_if_improves = config.getboolean(
         "tip", "accept_only_if_improves", fallback=False,
     )
+    prediction_probe_batches = config.getint(
+        "tip", "prediction_probe_batches", fallback=1,
+    )
     basis_mode, correction_mode, gate_mode = variants[exp_type]
     log_phase(
         logger,
@@ -327,6 +330,7 @@ def _run_b2(
         gate_mode=gate_mode,
         anchor_delta=anchor_delta,
         accept_only_if_improves=accept_only_if_improves,
+        prediction_probe_batches=prediction_probe_batches,
     )
 
     return joint_model
