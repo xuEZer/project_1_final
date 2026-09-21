@@ -26,7 +26,7 @@ loader:
 training:
   optimizer: AdamW
   lr: 0.0001
-  max_epochs: 5
+  max_epochs: 10
 
 tip:
   subspace_rank: 3
@@ -35,4 +35,4 @@ tip:
   gate_delta: 0.1
   cone_delta: 0.03
   accept_only_if_improves: false
-  prediction_probe_batches: 4
+  prediction_probe_batches: 7

@@ -62,7 +62,7 @@ training:
   lr: 0.0001
   # Fixed horizon: every run trains exactly this many epochs, then evaluation
   # uses the checkpoint with the lowest validation prediction loss.
-  max_epochs: 5
+  max_epochs: 10
 
 tip:
   subspace_rank: 3
@@ -71,4 +71,4 @@ tip:
   gate_delta: 0.1
   cone_delta: 0.03
   accept_only_if_improves: false
-  prediction_probe_batches: 4
+  prediction_probe_batches: 7
