@@ -17,7 +17,7 @@ data:
   test_ratio: 0.2
 
 loader:
-  batch_size: 64
+  batch_size: 32
   micro_batch: 0
   auto_batch: false
   num_workers: 0
@@ -35,4 +35,4 @@ tip:
   gate_delta: 0.1
   cone_delta: 0.03
   accept_only_if_improves: false
-  prediction_probe_batches: 7
+  prediction_probe_batches: 15

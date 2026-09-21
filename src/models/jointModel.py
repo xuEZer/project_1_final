@@ -413,6 +413,11 @@ class JointModel(nn.Module):
                 torch.stack(q_plus_samples) + torch.stack(q_minus_samples)
             ),
             "coordinate_samples": per_sample_coordinates,
+            # One probe batch is one statistically independent unit: its mean
+            # alignment summarises the whole batch, and units are what the
+            # gate's t-margin must run on (windows inside a unit are allowed
+            # to be arbitrarily correlated).
+            "unit_coordinate_samples": per_sample_coordinates.mean(dim=0),
         }
         return gradient_coordinates, z_samples, diagnostics
 
@@ -1407,12 +1412,17 @@ class JointModel(nn.Module):
                 coordinate_samples = torch.cat([
                     item["coordinate_samples"] for item in diagnostic_batches
                 ])
+                unit_coordinate_samples = torch.stack([
+                    item["unit_coordinate_samples"]
+                    for item in diagnostic_batches
+                ])
                 prediction_coordinates = coordinate_samples.mean(dim=0)
             else:
                 prediction_coordinates = torch.stack(coordinate_batches).mean(dim=0)
                 coordinate_samples = prediction_coordinates.unsqueeze(0)
-            z_samples = coordinate_samples @ update_coordinates
-            return prediction_coordinates, coordinate_samples, z_samples
+                unit_coordinate_samples = coordinate_samples
+            unit_z_samples = unit_coordinate_samples @ update_coordinates
+            return prediction_coordinates, unit_coordinate_samples, unit_z_samples
 
         def candidate(
             g_i,
@@ -1663,11 +1673,16 @@ class JointModel(nn.Module):
                 coordinate_samples = torch.cat([
                     item["coordinate_samples"] for item in diagnostic_batches
                 ])
+                unit_coordinate_samples = torch.stack([
+                    item["unit_coordinate_samples"]
+                    for item in diagnostic_batches
+                ])
                 prediction_coordinates = coordinate_samples.mean(dim=0)
             else:
                 prediction_coordinates = torch.stack(coordinate_batches).mean(dim=0)
                 coordinate_samples = prediction_coordinates.unsqueeze(0)
-            return prediction_coordinates, coordinate_samples
+                unit_coordinate_samples = coordinate_samples
+            return prediction_coordinates, unit_coordinate_samples
 
         def build_candidate(
             g_i,
@@ -1917,6 +1932,9 @@ class JointModel(nn.Module):
             "z_mean": 0.0,
             "z_std": 0.0,
             "z_sem": 0.0,
+            "z_unit_mean": 0.0,
+            "z_unit_sem": 0.0,
+            "unit_count": 0.0,
             "adamw_update_norm": 0.0,
             "gp_subspace_norm": 0.0,
             "cosine": 0.0,
@@ -2020,6 +2038,10 @@ class JointModel(nn.Module):
                 coordinate_samples = torch.cat([
                     item["coordinate_samples"] for item in diagnostic_batches
                 ])
+                unit_coordinate_samples = torch.stack([
+                    item["unit_coordinate_samples"]
+                    for item in diagnostic_batches
+                ])
                 prediction_coordinates = coordinate_samples.mean(dim=0)
                 z_samples = coordinate_samples @ update_coordinates
             else:
@@ -2028,9 +2050,18 @@ class JointModel(nn.Module):
                 ).mean(dim=0)
                 z_samples = torch.cat(z_batches)
                 coordinate_samples = prediction_coordinates.unsqueeze(0)
+                unit_coordinate_samples = coordinate_samples
+            unit_z_samples = unit_coordinate_samples @ update_coordinates
             dot = torch.dot(update_coordinates, prediction_coordinates)
-            upper = model._student_t_upper_confidence_bound(z_samples, gate_delta)
-            lower = model._student_t_lower_confidence_bound(z_samples, gate_delta)
+            # The gate's sample unit is the probe batch, not the window:
+            # windows overlap and share this step's perturbation, so a
+            # window-level t-margin would run on pseudo-replicated samples.
+            upper = model._student_t_upper_confidence_bound(
+                unit_z_samples, gate_delta
+            )
+            lower = model._student_t_lower_confidence_bound(
+                unit_z_samples, gate_delta
+            )
             gi_norm = torch.linalg.vector_norm(g_i)
             gp_norm = torch.linalg.vector_norm(prediction_coordinates)
             cosine = dot / (gi_norm * gp_norm).clamp_min(1e-12)
@@ -2062,7 +2093,7 @@ class JointModel(nn.Module):
                     candidate_coordinates, robust_diagnostics = (
                         model._robust_subspace_projection(
                             update_coordinates,
-                            coordinate_samples,
+                            unit_coordinate_samples,
                             cone_delta,
                         )
                     )
@@ -2096,7 +2127,7 @@ class JointModel(nn.Module):
                     if (
                         correction_mode != "robust"
                         or model._robust_cone_margin(
-                            anchored, coordinate_samples, cone_delta
+                            anchored, unit_coordinate_samples, cone_delta
                         )
                         >= 0.0
                     ):
@@ -2126,6 +2157,14 @@ class JointModel(nn.Module):
             z_std = z_samples.std(unbiased=z_samples.numel() > 1)
             stats["z_std"] += z_std.item()
             stats["z_sem"] += (z_std / math.sqrt(z_samples.numel())).item()
+            stats["z_unit_mean"] += unit_z_samples.mean().item()
+            unit_std = unit_z_samples.std(
+                unbiased=unit_z_samples.numel() > 1
+            )
+            stats["z_unit_sem"] += (
+                unit_std / math.sqrt(unit_z_samples.numel())
+            ).item()
+            stats["unit_count"] += float(unit_z_samples.numel())
             stats["adamw_update_norm"] += gi_norm.item()
             stats["gp_subspace_norm"] += gp_norm.item()
             stats["cosine"] += cosine.item()
