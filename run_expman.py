@@ -26,6 +26,11 @@ os.environ["OMP_NUM_THREADS"] = _CPU_THREADS
 os.environ["MKL_NUM_THREADS"] = _CPU_THREADS
 os.environ["OPENBLAS_NUM_THREADS"] = _CPU_THREADS
 os.environ["NUMEXPR_NUM_THREADS"] = _CPU_THREADS
+# Idle thread pools spin by default: on a 128-core host that inflates the
+# load average and steals scheduler time from the pinned-memory data-transfer
+# threads.  Passive waiting trades a little wake-up latency for quiet.
+os.environ.setdefault("OMP_WAIT_POLICY", "PASSIVE")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 # huggingface_hub caches its endpoint when imported.  Set the mirror before
 # importing expman or the pipeline so every worker inherits and observes it.
 os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
@@ -33,9 +38,21 @@ os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
-from expman import Batch  # noqa: E402
+import torch
 
-from src.pipeline import build_pipeline  # noqa: E402
+# The OMP variables above bind BLAS and MKL, but PyTorch's own intra-op pool
+# sizes itself from the core count unless told otherwise, and its inter-op
+# pool defaults to half the cores in every worker.  Pin both; inter-op may
+# already be initialised in a spawned worker, which is harmless.
+torch.set_num_threads(int(_CPU_THREADS))
+try:
+    torch.set_num_interop_threads(max(1, int(_CPU_THREADS)))
+except RuntimeError:
+    pass
+
+from expman import Batch
+
+from src.pipeline import build_pipeline
 
 
 def parse_args() -> argparse.Namespace:
