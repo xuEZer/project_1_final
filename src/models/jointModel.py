@@ -1882,8 +1882,10 @@ class JointModel(nn.Module):
             raise ValueError("basis_mode must be 'history' or 'random'")
         if correction_mode not in {"robust", "point"}:
             raise ValueError("correction_mode must be 'robust' or 'point'")
-        if gate_mode not in {"ucb", "lcb", "mean"}:
-            raise ValueError("gate_mode must be 'ucb', 'lcb', or 'mean'")
+        if gate_mode not in {"ucb", "lcb", "mean", "any"}:
+            raise ValueError(
+                "gate_mode must be 'ucb', 'lcb', 'mean', or 'any'"
+            )
         if accum_steps is None:
             accum_steps = self.accum_steps
         self.logger.info(
@@ -2038,6 +2040,8 @@ class JointModel(nn.Module):
                 gate_conflict = upper.item() < 0.0
             elif gate_mode == "lcb":
                 gate_conflict = lower.item() < 0.0
+            elif gate_mode == "any":
+                gate_conflict = bool(torch.any(z_samples < 0.0).item())
             else:
                 gate_conflict = dot.item() < 0.0
             project = rank_ready and gate_conflict and gp_norm.item() > 1e-12
