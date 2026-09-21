@@ -1,0 +1,61 @@
+# cone_delta recalibration under batch-unit statistics.
+#
+# Switching the gate and the cone to unit-level samples made the covariance
+# cone's uncertainty set roughly an order of magnitude larger (the old
+# window-level covariance was pseudo-replication-deflated), so the 0.03
+# operating point strangles the update: corrections saturate or zero out and
+# imputation training stalls far above B1.  This OFAT scan re-calibrates
+# cone_delta on the c1 cell (paired seeds with the ablation batch) before the
+# full ablation is re-run.  Baseline (cone_delta 0.03) included.
+
+stage: B2
+
+dataset:
+  name: azure2019_I_5T
+imputer:
+  name: SAITS
+predictor:
+  name: Toto2
+
+device: [0]
+seed: !choice [102, 103, 104, 105, 106]
+missing_seed: 42
+
+paths:
+  cache_dir: ./cache
+  log_dir: ./logs
+
+data:
+  missing_rate: 0.2
+  artificial_missing_rate: 0.2
+  block_size: 8
+  lookback: 256
+  pred_len: 8
+  val_ratio: 0.1
+  test_ratio: 0.2
+
+loader:
+  batch_size: 32
+  micro_batch: 0
+  auto_batch: false
+  num_workers: 0
+  pin_memory: true
+
+training:
+  optimizer: AdamW
+  lr: 0.0001
+  max_epochs: 10
+
+tip:
+  subspace_rank: 3
+  epsilon: 0.0001
+  gate_mode: ucb
+  gate_delta: 0.1
+  cone_delta: 0.03
+  accept_only_if_improves: false
+  prediction_probe_batches: 15
+
+sweep:
+  include_baseline: true
+  axes:
+    tip.cone_delta: [0.1, 0.2, 0.3]
