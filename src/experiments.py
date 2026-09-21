@@ -275,7 +275,12 @@ def _run_b2(
     num_epoch = config.getint("training", "max_epochs")
     subspace_rank = config.getint("tip", "subspace_rank")
     epsilon = config.getfloat("tip", "epsilon")
-    confidence_delta = config.getfloat("tip", "confidence_delta")
+    # ``confidence_delta`` is the legacy shared threshold.  Keep it as a
+    # compatibility default, but allow fully decoupled configurations to
+    # specify only ``gate_delta`` and ``cone_delta``.
+    confidence_delta = config.getfloat(
+        "tip", "confidence_delta", fallback=0.05,
+    )
     gate_delta = config.getfloat(
         "tip", "gate_delta", fallback=confidence_delta,
     )
