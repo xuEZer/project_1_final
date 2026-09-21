@@ -1,0 +1,40 @@
+# RQ3 component ablation.
+#
+# A root !choice pairs dataset/imputer/predictor per cell: independent !choice
+# fields would take the Cartesian product and mix cells.  Each candidate then
+# expands stage and seed inside the cell, and loads the shared protocol from
+# configs/ablation_base.yaml through its root `name`.
+#
+# 5 cells x 5 branches (B1--B5) x 5 seeds = 125 runs.  Replaces rq3.yaml plus
+# rq3_c2.yaml ... rq3_c5.yaml.
+!choice
+- name: ablation_base
+  dataset: {name: azure2019_I_5T}
+  imputer: {name: SAITS}
+  predictor: {name: Toto2}
+  stage: !choice [B1, B2, B3, B4, B5]
+  seed: !choice [102, 103, 104, 105, 106]
+- name: ablation_base
+  dataset: {name: azure2019_I_5T}
+  imputer: {name: TimesNet}
+  predictor: {name: Chronos}
+  stage: !choice [B1, B2, B3, B4, B5]
+  seed: !choice [102, 103, 104, 105, 106]
+- name: ablation_base
+  dataset: {name: EWELD_Load_15T}
+  imputer: {name: DeepMVI}
+  predictor: {name: Toto2}
+  stage: !choice [B1, B2, B3, B4, B5]
+  seed: !choice [102, 103, 104, 105, 106]
+- name: ablation_base
+  dataset: {name: MetroPT-3_5T}
+  imputer: {name: ModernTCN}
+  predictor: {name: TimesFM3}
+  stage: !choice [B1, B2, B3, B4, B5]
+  seed: !choice [102, 103, 104, 105, 106]
+- name: ablation_base
+  dataset: {name: Coastal_T_S_15T}
+  imputer: {name: TSLANet}
+  predictor: {name: Sundial}
+  stage: !choice [B1, B2, B3, B4, B5]
+  seed: !choice [102, 103, 104, 105, 106]

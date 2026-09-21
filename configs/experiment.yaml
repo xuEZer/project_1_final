@@ -51,7 +51,7 @@ data:
   test_ratio: 0.2
 
 loader:
-  batch_size: 128
+  batch_size: 64
   micro_batch: 0
   auto_batch: false
   num_workers: 0
@@ -59,16 +59,16 @@ loader:
 
 training:
   optimizer: AdamW
-  lr: 0.001
+  lr: 0.0001
   # Fixed horizon: every run trains exactly this many epochs, then evaluation
   # uses the checkpoint with the lowest validation prediction loss.
   max_epochs: 5
 
 tip:
   subspace_rank: 3
-  epsilon: 0.00001
-  gate_mode: lcb
-  gate_delta: 0.3
+  epsilon: 0.0001
+  gate_mode: ucb
+  gate_delta: 0.1
   cone_delta: 0.03
-  accept_only_if_improves: true
-  prediction_probe_batches: 1
+  accept_only_if_improves: false
+  prediction_probe_batches: 4

@@ -1,16 +1,6 @@
-# Full held-out ablation for the zero-extra-forward online acceptance rule.
-
-stage: !choice [B1, B2, B3, B4, B5]
-
-dataset:
-  name: azure2019_I_5T
-imputer:
-  name: SAITS
-predictor:
-  name: Toto2
-
+# Shared protocol for the RQ3 component ablation (see ablation.yaml).
+# Every root !choice candidate pulls this file through its root `name`.
 device: [0]
-seed: !choice [77, 78, 79, 80, 81]
 missing_seed: 42
 
 paths:
@@ -27,7 +17,7 @@ data:
   test_ratio: 0.2
 
 loader:
-  batch_size: 128
+  batch_size: 64
   micro_batch: 0
   auto_batch: false
   num_workers: 0
@@ -35,13 +25,14 @@ loader:
 
 training:
   optimizer: AdamW
-  lr: 0.001
+  lr: 0.0001
   max_epochs: 5
 
 tip:
   subspace_rank: 3
-  epsilon: 0.00001
-  gate_mode: lcb
-  gate_delta: 0.3
-  cone_delta: 0.1
-  accept_only_if_improves: true
+  epsilon: 0.0001
+  gate_mode: ucb
+  gate_delta: 0.1
+  cone_delta: 0.03
+  accept_only_if_improves: false
+  prediction_probe_batches: 4
