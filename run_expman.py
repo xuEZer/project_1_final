@@ -26,6 +26,9 @@ os.environ["OMP_NUM_THREADS"] = _CPU_THREADS
 os.environ["MKL_NUM_THREADS"] = _CPU_THREADS
 os.environ["OPENBLAS_NUM_THREADS"] = _CPU_THREADS
 os.environ["NUMEXPR_NUM_THREADS"] = _CPU_THREADS
+# huggingface_hub caches its endpoint when imported.  Set the mirror before
+# importing expman or the pipeline so every worker inherits and observes it.
+os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
