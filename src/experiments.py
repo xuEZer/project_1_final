@@ -288,10 +288,11 @@ def _run_b2(
         "tip", "cone_delta", fallback=confidence_delta,
     )
 
+    robust_gate_mode = config.get("tip", "gate_mode", fallback="ucb")
     variants = {
-        "B2": ("history", "robust", "ucb"),
-        "B3": ("random", "robust", "ucb"),
-        "B4": ("history", "point", "ucb"),
+        "B2": ("history", "robust", robust_gate_mode),
+        "B3": ("random", "robust", robust_gate_mode),
+        "B4": ("history", "point", robust_gate_mode),
         "B5": ("history", "robust", "mean"),
     }
     anchor_delta = config.getfloat("tip", "anchor_delta", fallback=0.0)

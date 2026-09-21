@@ -580,6 +580,22 @@ class JointModel(nn.Module):
         return samples.mean() + critical * standard_error
 
     @staticmethod
+    def _student_t_lower_confidence_bound(
+        samples: torch.Tensor,
+        delta: float,
+    ) -> torch.Tensor:
+        if samples.numel() < 2:
+            return torch.full((), -float("inf"), device=samples.device)
+        if not 0.0 < delta < 1.0:
+            raise ValueError(f"confidence delta must lie in (0, 1), got {delta}")
+
+        critical = float(student_t.ppf(1.0 - delta, df=samples.numel() - 1))
+        if not math.isfinite(critical):
+            return torch.full((), -float("inf"), device=samples.device)
+        standard_error = samples.std(unbiased=True) / math.sqrt(samples.numel())
+        return samples.mean() - critical * standard_error
+
+    @staticmethod
     def _robust_subspace_projection(
         update_coordinates: torch.Tensor,
         coordinate_samples: torch.Tensor,
@@ -1815,8 +1831,8 @@ class JointModel(nn.Module):
             raise ValueError("basis_mode must be 'history' or 'random'")
         if correction_mode not in {"robust", "point"}:
             raise ValueError("correction_mode must be 'robust' or 'point'")
-        if gate_mode not in {"ucb", "mean"}:
-            raise ValueError("gate_mode must be 'ucb' or 'mean'")
+        if gate_mode not in {"ucb", "lcb", "mean"}:
+            raise ValueError("gate_mode must be 'ucb', 'lcb', or 'mean'")
         if accum_steps is None:
             accum_steps = self.accum_steps
         self.logger.info(
@@ -1953,17 +1969,19 @@ class JointModel(nn.Module):
                 z_samples = torch.cat(z_batches)
                 coordinate_samples = prediction_coordinates.unsqueeze(0)
             dot = torch.dot(update_coordinates, prediction_coordinates)
-            upper = model._student_t_upper_confidence_bound(
-                z_samples, gate_delta
-            )
+            upper = model._student_t_upper_confidence_bound(z_samples, gate_delta)
+            lower = model._student_t_lower_confidence_bound(z_samples, gate_delta)
             gi_norm = torch.linalg.vector_norm(g_i)
             gp_norm = torch.linalg.vector_norm(prediction_coordinates)
             cosine = dot / (gi_norm * gp_norm).clamp_min(1e-12)
             raw_conflict = dot.item() < 0.0
             rank_ready = effective_rank >= subspace_rank
-            gate_conflict = (
-                upper.item() < 0.0 if gate_mode == "ucb" else dot.item() < 0.0
-            )
+            if gate_mode == "ucb":
+                gate_conflict = upper.item() < 0.0
+            elif gate_mode == "lcb":
+                gate_conflict = lower.item() < 0.0
+            else:
+                gate_conflict = dot.item() < 0.0
             project = rank_ready and gate_conflict and gp_norm.item() > 1e-12
             last_step_projected = project
 
