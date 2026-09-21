@@ -69,4 +69,5 @@ tip:
   epsilon: 0.00001
   gate_mode: lcb
   gate_delta: 0.3
-  cone_delta: 0.1
+  cone_delta: 0.03
+  accept_only_if_improves: true
