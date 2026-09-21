@@ -67,5 +67,6 @@ training:
 tip:
   subspace_rank: 3
   epsilon: 0.00001
+  gate_mode: lcb
   gate_delta: 0.3
   cone_delta: 0.1
