@@ -276,6 +276,12 @@ def _run_b2(
     subspace_rank = config.getint("tip", "subspace_rank")
     epsilon = config.getfloat("tip", "epsilon")
     confidence_delta = config.getfloat("tip", "confidence_delta")
+    gate_delta = config.getfloat(
+        "tip", "gate_delta", fallback=confidence_delta,
+    )
+    cone_delta = config.getfloat(
+        "tip", "cone_delta", fallback=confidence_delta,
+    )
 
     variants = {
         "B2": ("history", "robust", "ucb"),
@@ -292,9 +298,9 @@ def _run_b2(
         num_epoch,
     )
     logger.info(
-        "  subspace_rank=%d, epsilon=%g, confidence_delta=%g, "
+        "  subspace_rank=%d, epsilon=%g, gate_delta=%g, cone_delta=%g, "
         "basis_mode=%s, correction_mode=%s, gate_mode=%s",
-        subspace_rank, epsilon, confidence_delta, basis_mode, correction_mode,
+        subspace_rank, epsilon, gate_delta, cone_delta, basis_mode, correction_mode,
         gate_mode,
     )
     joint_model.fit_tip(
@@ -305,6 +311,8 @@ def _run_b2(
         subspace_rank=subspace_rank,
         epsilon=epsilon,
         confidence_delta=confidence_delta,
+        gate_delta=gate_delta,
+        cone_delta=cone_delta,
         basis_mode=basis_mode,
         correction_mode=correction_mode,
         gate_mode=gate_mode,

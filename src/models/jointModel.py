@@ -1793,14 +1793,22 @@ class JointModel(nn.Module):
         self, data_loader, phase_name, num_epoch, subspace_rank=4,
         epsilon=1e-3, confidence_delta=0.05, accum_steps=None,
         on_epoch_end=None, basis_mode="history", correction_mode="robust",
-        gate_mode="ucb", anchor_delta=0.0,
+        gate_mode="ucb", anchor_delta=0.0, gate_delta=None, cone_delta=None,
     ):
+        if gate_delta is None:
+            gate_delta = confidence_delta
+        if cone_delta is None:
+            cone_delta = confidence_delta
         if subspace_rank < 2:
             raise ValueError("subspace_rank must be at least 2")
         if epsilon <= 0:
             raise ValueError("epsilon must be positive")
         if not 0.0 < confidence_delta < 1.0:
             raise ValueError("confidence_delta must lie in (0, 1)")
+        if not 0.0 < gate_delta < 1.0:
+            raise ValueError("gate_delta must lie in (0, 1)")
+        if not 0.0 < cone_delta < 1.0:
+            raise ValueError("cone_delta must lie in (0, 1)")
         if anchor_delta < 0.0:
             raise ValueError("anchor_delta must be non-negative")
         if basis_mode not in {"history", "random"}:
@@ -1816,12 +1824,12 @@ class JointModel(nn.Module):
             "finite_difference_directions_per_step=%d | "
             "gradient_scope=current_optimizer_batch_plus_one_probe_batch | "
             "step_monitor_scope=current_optimizer_batch | "
-            "epsilon=%g | confidence_delta=%g | basis_mode=%s | "
+            "epsilon=%g | gate_delta=%g | cone_delta=%g | basis_mode=%s | "
             "correction_mode=%s | gate_mode=%s | "
             "update_space=adamw_parameter_displacement | "
             "prediction_rng=common_random_numbers",
             subspace_rank, 2 * subspace_rank,
-            epsilon, confidence_delta, basis_mode, correction_mode, gate_mode,
+            epsilon, gate_delta, cone_delta, basis_mode, correction_mode, gate_mode,
         )
 
         history: list[torch.Tensor] = []
@@ -1946,7 +1954,7 @@ class JointModel(nn.Module):
                 coordinate_samples = prediction_coordinates.unsqueeze(0)
             dot = torch.dot(update_coordinates, prediction_coordinates)
             upper = model._student_t_upper_confidence_bound(
-                z_samples, confidence_delta
+                z_samples, gate_delta
             )
             gi_norm = torch.linalg.vector_norm(g_i)
             gp_norm = torch.linalg.vector_norm(prediction_coordinates)
@@ -1971,7 +1979,7 @@ class JointModel(nn.Module):
                         model._robust_subspace_projection(
                             update_coordinates,
                             coordinate_samples,
-                            confidence_delta,
+                            cone_delta,
                         )
                     )
                 else:
@@ -2004,7 +2012,7 @@ class JointModel(nn.Module):
                     if (
                         correction_mode != "robust"
                         or model._robust_cone_margin(
-                            anchored, coordinate_samples, confidence_delta
+                            anchored, coordinate_samples, cone_delta
                         )
                         >= 0.0
                     ):
