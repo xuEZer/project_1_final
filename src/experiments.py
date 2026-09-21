@@ -296,6 +296,9 @@ def _run_b2(
         "B5": ("history", "robust", "mean"),
     }
     anchor_delta = config.getfloat("tip", "anchor_delta", fallback=0.0)
+    accept_only_if_improves = config.getboolean(
+        "tip", "accept_only_if_improves", fallback=False,
+    )
     basis_mode, correction_mode, gate_mode = variants[exp_type]
     log_phase(
         logger,
@@ -323,6 +326,7 @@ def _run_b2(
         correction_mode=correction_mode,
         gate_mode=gate_mode,
         anchor_delta=anchor_delta,
+        accept_only_if_improves=accept_only_if_improves,
     )
 
     return joint_model

@@ -849,6 +849,11 @@ class JointModel(nn.Module):
             [float, float, float], None
         ]
         | None = None,
+        optimizer_update_acceptance_observer: collections.abc.Callable[
+            [bool], None
+        ]
+        | None = None,
+        accept_modified_update_if_better: bool = False,
         counterfactual_update_generator: collections.abc.Callable | None = None,
         counterfactual_step_observer: collections.abc.Callable | None = None,
     ) -> float:
@@ -1202,16 +1207,10 @@ class JointModel(nn.Module):
                             raise ValueError(
                                 "TIP update size does not match imputer parameters"
                             )
-                        # Keep the optimizer's first moment consistent with the
-                        # displacement actually applied.  Without this, AdamW's
-                        # state still implies the raw proposal, so the next step
-                        # re-injects the component TIP just removed and the
-                        # correction never accumulates.
-                        if not torch.equal(final_update, raw_adamw_update):
-                            self._sync_first_moment_to_applied_update(
-                                parameters, parameters_before, final_update
-                            )
-                        if torch.equal(final_update, raw_adamw_update):
+                        modified_update = not torch.equal(
+                            final_update, raw_adamw_update
+                        )
+                        if not modified_update:
                             # The applied parameters are exactly the already
                             # evaluated raw AdamW parameters, so another
                             # predictor forward would duplicate the same CRN
@@ -1225,6 +1224,38 @@ class JointModel(nn.Module):
                                     accum_microbatches,
                                     rng_namespace="prediction_step_monitor",
                                 )
+                            )
+                        modified_update_applied = modified_update
+                        if (
+                            modified_update
+                            and accept_modified_update_if_better
+                            and pred_loss_after_tip_adamw is not None
+                            and pred_loss_after_raw_adamw is not None
+                            and pred_loss_after_tip_adamw
+                            >= pred_loss_after_raw_adamw
+                        ):
+                            # The exact AdamW proposal and its optimizer state
+                            # are still available. Reject a TIP candidate that
+                            # does not improve prediction loss on the current
+                            # optimizer batch, without another forward pass.
+                            with torch.no_grad():
+                                for parameter, after in zip(
+                                    parameters,
+                                    parameters_after_raw_adamw,
+                                    strict=True,
+                                ):
+                                    parameter.copy_(after)
+                            pred_loss_after_tip_adamw = pred_loss_after_raw_adamw
+                            modified_update_applied = False
+                        elif modified_update:
+                            # Synchronise AdamW's first moment only with a
+                            # modified displacement that was actually accepted.
+                            self._sync_first_moment_to_applied_update(
+                                parameters, parameters_before, final_update
+                            )
+                        if optimizer_update_acceptance_observer is not None:
+                            optimizer_update_acceptance_observer(
+                                modified_update_applied
                             )
                         if (
                             optimizer_step_observer is not None
@@ -1810,6 +1841,7 @@ class JointModel(nn.Module):
         epsilon=1e-3, confidence_delta=0.05, accum_steps=None,
         on_epoch_end=None, basis_mode="history", correction_mode="robust",
         gate_mode="ucb", anchor_delta=0.0, gate_delta=None, cone_delta=None,
+        accept_only_if_improves=False,
     ):
         if gate_delta is None:
             gate_delta = confidence_delta
@@ -1842,10 +1874,12 @@ class JointModel(nn.Module):
             "step_monitor_scope=current_optimizer_batch | "
             "epsilon=%g | gate_delta=%g | cone_delta=%g | basis_mode=%s | "
             "correction_mode=%s | gate_mode=%s | "
+            "accept_only_if_improves=%s | "
             "update_space=adamw_parameter_displacement | "
             "prediction_rng=common_random_numbers",
             subspace_rank, 2 * subspace_rank,
             epsilon, gate_delta, cone_delta, basis_mode, correction_mode, gate_mode,
+            accept_only_if_improves,
         )
 
         history: list[torch.Tensor] = []
@@ -1857,6 +1891,7 @@ class JointModel(nn.Module):
             "raw": 0,
             "ucb_conflict": 0,
             "projected": 0,
+            "projection_rejected": 0,
             "ucb": 0.0,
             "z_mean": 0.0,
             "z_std": 0.0,
@@ -1895,12 +1930,16 @@ class JointModel(nn.Module):
             "projected_gain_ratio_sq": 0.0,
         }
         last_step_projected = False
+        last_correction_ratio = 0.0
+        last_raw_update = None
 
         def modifier(model, microbatches, raw_adamw_update):
-            nonlocal last_step_projected
+            nonlocal last_step_projected, last_correction_ratio, last_raw_update
             # TIP operates on the parameter-space direction proposed by the
             # configured optimizer, after any momentum, scaling, and decay.
             g_i = raw_adamw_update
+            last_raw_update = g_i.detach().clone()
+            last_correction_ratio = 0.0
             if basis_mode == "history":
                 basis_candidates = [g_i, *reversed(history)]
             else:
@@ -2049,6 +2088,7 @@ class JointModel(nn.Module):
             correction_ratio = (
                 torch.linalg.vector_norm(correction) / gi_norm.clamp_min(1e-12)
             )
+            last_correction_ratio = correction_ratio.item() if project else 0.0
 
             stats["steps"] += 1
             stats["raw"] += int(raw_conflict)
@@ -2093,6 +2133,16 @@ class JointModel(nn.Module):
             if len(history) > history_limit:
                 del history[:-history_limit]
             return candidate if project else g_i
+
+        def observe_update_acceptance(modified_update_applied: bool) -> None:
+            nonlocal last_step_projected
+            if last_step_projected and not modified_update_applied:
+                last_step_projected = False
+                stats["projected"] -= 1
+                stats["projection_rejected"] += 1
+                stats["applied_correction_ratio"] -= last_correction_ratio
+                if history and last_raw_update is not None:
+                    history[-1] = last_raw_update
 
         def observe_optimizer_step(
             pred_loss_before: float,
@@ -2169,12 +2219,15 @@ class JointModel(nn.Module):
         def epoch_end(epoch, train_loss, model):
             steps = stats["steps"]
             if steps:
-                projected = max(stats["projected"], 1)
+                projected = max(
+                    stats["projected"] + stats["projection_rejected"], 1
+                )
                 averages = {
                     key: value / steps
                     for key, value in stats.items()
                     if key not in {
-                        "steps", "raw", "ucb_conflict", "projected"
+                        "steps", "raw", "ucb_conflict", "projected",
+                        "projection_rejected",
                     }
                 }
                 model.logger.info(
@@ -2416,6 +2469,9 @@ class JointModel(nn.Module):
                     "raw_conflict_rate": stats["raw"] / steps,
                     "ucb_conflict_rate": stats["ucb_conflict"] / steps,
                     "projection_rate": stats["projected"] / steps,
+                    "projection_rejection_rate": (
+                        stats["projection_rejected"] / steps
+                    ),
                     **averages,
                     "robust_margin": stats["robust_margin"] / projected,
                     "robust_solver_success": (
@@ -2434,7 +2490,8 @@ class JointModel(nn.Module):
                     model.record_metric(f"tip/{phase_name}/{name}", value, epoch)
             for key in stats:
                 stats[key] = 0 if key in {
-                    "steps", "raw", "ucb_conflict", "projected"
+                    "steps", "raw", "ucb_conflict", "projected",
+                    "projection_rejected",
                 } else 0.0
             for key in prediction_change_stats:
                 prediction_change_stats[key] = 0 if key in {
@@ -2451,4 +2508,6 @@ class JointModel(nn.Module):
             data_loader, phase_name, num_epoch, accum_steps=accum_steps,
             on_epoch_end=epoch_end, optimizer_update_modifier=modifier,
             optimizer_step_observer=observe_optimizer_step,
+            optimizer_update_acceptance_observer=observe_update_acceptance,
+            accept_modified_update_if_better=accept_only_if_improves,
         )
