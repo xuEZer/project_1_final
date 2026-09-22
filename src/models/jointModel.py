@@ -571,6 +571,7 @@ class JointModel(nn.Module):
     def _student_t_upper_confidence_bound(
         samples: torch.Tensor,
         delta: float,
+        population_size: int | None = None,
     ) -> torch.Tensor:
         if samples.numel() < 2:
             return torch.full((), float("inf"), device=samples.device)
@@ -581,12 +582,22 @@ class JointModel(nn.Module):
         if not math.isfinite(critical):
             return torch.full((), float("inf"), device=samples.device)
         standard_error = samples.std(unbiased=True) / math.sqrt(samples.numel())
+        if population_size is not None and population_size > 1:
+            # Finite-population correction: the probed windows are drawn
+            # without replacement from the training stream, so the naive
+            # SEM shrinks by sqrt of the still-unseen fraction (to zero
+            # at full coverage).
+            correction = max(population_size - samples.numel(), 0) / (
+                population_size - 1
+            )
+            standard_error *= math.sqrt(correction)
         return samples.mean() + critical * standard_error
 
     @staticmethod
     def _student_t_lower_confidence_bound(
         samples: torch.Tensor,
         delta: float,
+        population_size: int | None = None,
     ) -> torch.Tensor:
         if samples.numel() < 2:
             return torch.full((), -float("inf"), device=samples.device)
@@ -597,6 +608,11 @@ class JointModel(nn.Module):
         if not math.isfinite(critical):
             return torch.full((), -float("inf"), device=samples.device)
         standard_error = samples.std(unbiased=True) / math.sqrt(samples.numel())
+        if population_size is not None and population_size > 1:
+            correction = max(population_size - samples.numel(), 0) / (
+                population_size - 1
+            )
+            standard_error *= math.sqrt(correction)
         return samples.mean() - critical * standard_error
 
     @staticmethod
@@ -1960,6 +1976,15 @@ class JointModel(nn.Module):
         last_step_projected = False
         last_correction_ratio = 0.0
         last_raw_update = None
+        try:
+            # Training-stream size for the finite-population correction of
+            # the gate's margin: the probed windows are a without-replacement
+            # sample of these windows.
+            tip_population_size: int | None = len(
+                data_loader["train"].dataset
+            )
+        except (KeyError, TypeError, AttributeError):
+            tip_population_size = None
 
         def modifier(model, microbatches, raw_adamw_update):
             nonlocal last_step_projected, last_correction_ratio, last_raw_update
@@ -2049,10 +2074,10 @@ class JointModel(nn.Module):
             # (batch-mean) samples, whose between-batch spread honestly
             # reflects dependence inside a probe batch.
             upper = model._student_t_upper_confidence_bound(
-                z_samples, gate_delta
+                z_samples, gate_delta, population_size=tip_population_size
             )
             lower = model._student_t_lower_confidence_bound(
-                z_samples, gate_delta
+                z_samples, gate_delta, population_size=tip_population_size
             )
             gi_norm = torch.linalg.vector_norm(g_i)
             gp_norm = torch.linalg.vector_norm(prediction_coordinates)
