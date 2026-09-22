@@ -15,6 +15,11 @@ data:
   pred_len: 8
   val_ratio: 0.1
   test_ratio: 0.2
+  # Random window split holding the 7:1:2 sample counts, instead of a
+  # contiguous time-ordered cut.  The whole series is windowed first and the
+  # windows are permuted; the synthetic natural mask is then spread over the
+  # whole series, since there is no test span left to confine it to.
+  split_mode: shuffled
 
 loader:
   batch_size: 128

@@ -99,6 +99,7 @@ def preprocess_dataset(
     test_ratio: float,
     random_seed: int,
     logger: logging.Logger,
+    split_mode: str = "chronological",
 ) -> dict[str, dict[str, Any]]:
     """Preprocess raw data and return the windowed tensors.
 
@@ -123,6 +124,10 @@ def preprocess_dataset(
         test_ratio: Test split ratio.
         random_seed: Random seed for reproducible preprocessing.
         logger: Logger used to report preprocessing progress.
+        split_mode: ``"chronological"`` (default) cuts the series into
+            contiguous train/validation/test ranges; ``"shuffled"`` winds the
+            whole series first and assigns windows to the three splits at
+            random, holding the 7:1:2 sample counts.
 
     Returns:
         ``{"train": ..., "val": ..., "test": ...}``, the split dictionaries
@@ -143,6 +148,27 @@ def preprocess_dataset(
         "Using the first %d of %d raw time points for %s",
         len(data), original_length, dataset_name,
     )
+    if split_mode == "shuffled":
+        train_set, val_set, test_set, _ = _shuffled_split(
+            data,
+            missing_rate,
+            artificial_missing_rate,
+            block_size,
+            lookback_len,
+            pred_len,
+            val_ratio,
+            test_ratio,
+            random_seed,
+            logger,
+        )
+        logger.info("Preprocessed data ready")
+        return {"train": train_set, "val": val_set, "test": test_set}
+    if split_mode != "chronological":
+        raise ValueError(
+            f"Unknown split_mode {split_mode!r}: expected 'chronological' or "
+            "'shuffled'."
+        )
+
     # Conventional ETT boundaries describe the full series and are invalid
     # after applying the common prefix policy.
     ett_boundaries = None
@@ -668,56 +694,9 @@ def truncate_data(
 
     """
 
-    def truncate_data_(
-        data: dict[str, np.ndarray | None], lookback_len: int, pred_len: int
-    ) -> dict[str, np.ndarray | None]:
-        def window_truncate(data: np.ndarray, window_size: int) -> np.ndarray:
-            windows = np.lib.stride_tricks.sliding_window_view(
-                data,
-                window_shape=window_size,
-                axis=0,
-            )
-            return np.ascontiguousarray(np.moveaxis(windows, -1, 1))
-
-        data_set = {}
-        len_data = len(data["N_data"])
-
-        data_set["X_N"] = window_truncate(
-            data["N_data"][: len_data - pred_len, :], lookback_len
-        )
-        data_set["X_N_mask"] = window_truncate(
-            data["N_mask"][: len_data - pred_len, :], lookback_len
-        )
-        data_set["X_NA"] = window_truncate(
-            data["NA_data"][: len_data - pred_len, :], lookback_len
-        )
-        data_set["X_NA_mask"] = window_truncate(
-            data["NA_mask"][: len_data - pred_len, :], lookback_len
-        )
-        data_set["X_A_mask"] = window_truncate(
-            data["A_mask"][: len_data - pred_len, :], lookback_len
-        )
-        data_set["X"] = (
-            window_truncate(data["data"][: len_data - pred_len, :], lookback_len)
-            if data["data"] is not None
-            else None
-        )
-
-        data_set["Y_N"] = window_truncate(data["N_data"][lookback_len:, :], pred_len)
-        data_set["Y_N_mask"] = window_truncate(
-            data["N_mask"][lookback_len:, :], pred_len
-        )
-        data_set["Y"] = (
-            window_truncate(data["data"][lookback_len:, :], pred_len)
-            if data["data"] is not None
-            else None
-        )
-
-        return data_set
-
-    train_set = truncate_data_(train_data, lookback_len, pred_len)
-    val_set = truncate_data_(val_data, lookback_len, pred_len) if val_data is not None else None
-    test_set = truncate_data_(test_data, lookback_len, pred_len)
+    train_set = _window_split(train_data, lookback_len, pred_len)
+    val_set = _window_split(val_data, lookback_len, pred_len) if val_data is not None else None
+    test_set = _window_split(test_data, lookback_len, pred_len)
 
     assert len(train_set["X_N"]) > 0, (
         "Lookback length is too long for the training data."
@@ -750,6 +729,154 @@ def truncate_data(
                 f"{name}: {key} values out of [0,1]"
 
     return train_set, val_set, test_set
+
+
+def _window_truncate(values: np.ndarray, window_size: int) -> np.ndarray:
+    """Slide a window over axis 0 into ``(n_windows, window_size, n_features)``."""
+    windows = np.lib.stride_tricks.sliding_window_view(
+        values,
+        window_shape=window_size,
+        axis=0,
+    )
+    return np.ascontiguousarray(np.moveaxis(windows, -1, 1))
+
+
+def _window_split(
+    data: dict[str, np.ndarray | None], lookback_len: int, pred_len: int
+) -> dict[str, np.ndarray | None]:
+    """Convert one split dictionary into rolling windows for input and targets."""
+    data_set = {}
+    len_data = len(data["N_data"])
+    inputs = slice(0, len_data - pred_len)
+    targets = slice(lookback_len, len_data)
+
+    for name, key in (
+        ("X_N", "N_data"),
+        ("X_N_mask", "N_mask"),
+        ("X_NA", "NA_data"),
+        ("X_NA_mask", "NA_mask"),
+        ("X_A_mask", "A_mask"),
+        ("X", "data"),
+    ):
+        values = data[key]
+        data_set[name] = (
+            None if values is None else _window_truncate(values[inputs, :], lookback_len)
+        )
+    for name, key in (("Y_N", "N_data"), ("Y_N_mask", "N_mask"), ("Y", "data")):
+        values = data[key]
+        data_set[name] = (
+            None if values is None else _window_truncate(values[targets, :], pred_len)
+        )
+    return data_set
+
+
+def _subset_windows(
+    windows: dict[str, np.ndarray | None], indices: np.ndarray
+) -> dict[str, np.ndarray | None]:
+    """Select window rows by index, preserving the dictionary layout."""
+    return {
+        key: (None if value is None else np.ascontiguousarray(value[indices]))
+        for key, value in windows.items()
+    }
+
+
+def _shuffled_split(
+    data: np.ndarray,
+    missing_rate: float,
+    artificial_missing_rate: float,
+    block_size: int,
+    lookback_len: int,
+    pred_len: int,
+    val_ratio: float,
+    test_ratio: float,
+    random_seed: int,
+    logger: logging.Logger,
+) -> tuple[
+    dict[str, np.ndarray | None],
+    dict[str, np.ndarray | None] | None,
+    dict[str, np.ndarray | None],
+    _IgnoreNaNScaler,
+]:
+    """Partition rolling windows at random instead of cutting the series by time.
+
+    Every sliding window is one sample, so the 7:1:2 split is a random
+    permutation of the window indices rather than a set of contiguous raw
+    ranges.  Two consequences follow from dropping the time order, and both are
+    deliberate rather than incidental:
+
+    * The synthetic natural mask has no test span left to be confined to, so it
+      is spread over the whole series and every split carries the same
+      missingness regime.
+    * Normalization is fitted on the raw positions the training windows cover.
+      Because the windows overlap and are drawn at random, that coverage is
+      nearly the whole series -- so the shuffled split also shares raw context
+      between train and test far more than a chronological cut does.
+    """
+    if val_ratio < 0 or test_ratio <= 0 or val_ratio + test_ratio >= 1:
+        raise ValueError(
+            "Expected val_ratio >= 0, test_ratio > 0, "
+            "and val_ratio + test_ratio < 1."
+        )
+    overhead = lookback_len + pred_len - 1
+    if len(data) < overhead + 1:
+        raise ValueError(
+            f"Time series too short ({len(data)}) for lookback={lookback_len}, "
+            f"pred={pred_len}."
+        )
+
+    complete, n_data, na_data, n_mask, a_mask, na_mask = generate_missing(
+        data,
+        missing_rate,
+        artificial_missing_rate,
+        block_size,
+        random_seed,
+        logger,
+        natural_span=None,
+    )
+
+    n_windows = len(data) - overhead
+    order = numpy_rng(random_seed, "split", "shuffled").permutation(n_windows)
+    n_train = int(n_windows * (1 - val_ratio - test_ratio))
+    n_val = int(n_windows * val_ratio) if val_ratio > 0 else 0
+    # Sorted indices keep the snapshot deterministic and give the contiguous
+    # loaders a stable order; the partition itself is already random.
+    train_idx = np.sort(order[:n_train])
+    val_idx = np.sort(order[n_train:n_train + n_val])
+    test_idx = np.sort(order[n_train + n_val:])
+
+    covered = np.zeros(len(data), dtype=bool)
+    for start in train_idx:
+        covered[start:start + lookback_len + pred_len] = True
+    mean = np.nanmean(n_data[covered], axis=0)
+    std = np.nanstd(n_data[covered], axis=0)
+    std = np.where(std == 0, 1.0, std)
+    scaler = _IgnoreNaNScaler(mean, std)
+
+    full = {
+        "N_data": np.nan_to_num(scaler.transform(n_data), nan=0.0),
+        "N_mask": n_mask,
+        "NA_data": np.nan_to_num(scaler.transform(na_data), nan=0.0),
+        "NA_mask": na_mask,
+        "A_mask": a_mask,
+        "data": None if complete is None else scaler.transform(complete),
+    }
+
+    windows = _window_split(full, lookback_len, pred_len)
+    assert len(windows["X_N"]) == n_windows, "window count changed during splitting"
+    logger.info(
+        "Shuffled split over the whole series: %d windows -> train %d / val %d / "
+        "test %d",
+        n_windows,
+        len(train_idx),
+        len(val_idx),
+        len(test_idx),
+    )
+    return (
+        _subset_windows(windows, train_idx),
+        _subset_windows(windows, val_idx) if n_val else None,
+        _subset_windows(windows, test_idx),
+        scaler,
+    )
 
 
 def get_tensor_data_loader(

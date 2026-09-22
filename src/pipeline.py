@@ -173,6 +173,8 @@ def prepare_dataset(run: dict) -> dict:
         test_ratio=cfg.getfloat("data", "test_ratio"),
         random_seed=resolve_missing_seed(cfg),
         logger=logging.getLogger("expman.pipeline"),
+        # Absent from a config that still wants the historical time-ordered cut.
+        split_mode=cfg.get("data", "split_mode", fallback="chronological"),
     )
 
 
