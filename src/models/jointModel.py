@@ -2110,7 +2110,7 @@ class JointModel(nn.Module):
                     candidate_coordinates, robust_diagnostics = (
                         model._robust_subspace_projection(
                             update_coordinates,
-                            unit_coordinate_samples,
+                            coordinate_samples,
                             cone_delta,
                         )
                     )
@@ -2144,7 +2144,7 @@ class JointModel(nn.Module):
                     if (
                         correction_mode != "robust"
                         or model._robust_cone_margin(
-                            anchored, unit_coordinate_samples, cone_delta
+                            anchored, coordinate_samples, cone_delta
                         )
                         >= 0.0
                     ):
