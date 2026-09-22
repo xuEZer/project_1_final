@@ -51,7 +51,7 @@ data:
   test_ratio: 0.2
 
 loader:
-  batch_size: 32
+  batch_size: 128
   micro_batch: 0
   auto_batch: false
   num_workers: 0
