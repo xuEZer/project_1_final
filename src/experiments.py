@@ -278,14 +278,13 @@ def _run_b2(
     cone_delta = config.getfloat(
         "tip", "cone_delta", fallback=confidence_delta,
     )
-    cone_radius = config.get("tip", "cone_radius", fallback="chi2")
 
     robust_gate_mode = config.get("tip", "gate_mode", fallback="ucb")
     variants = {
-        "B2": ("history", "worst_case", robust_gate_mode),
-        "B3": ("random", "worst_case", robust_gate_mode),
+        "B2": ("history", "robust", robust_gate_mode),
+        "B3": ("random", "robust", robust_gate_mode),
         "B4": ("history", "point", robust_gate_mode),
-        "B5": ("history", "worst_case", "mean"),
+        "B5": ("history", "robust", "mean"),
     }
     anchor_delta = config.getfloat("tip", "anchor_delta", fallback=0.0)
     accept_only_if_improves = config.getboolean(
@@ -303,9 +302,9 @@ def _run_b2(
     )
     logger.info(
         "  subspace_rank=%d, epsilon=%g, gate_delta=%g, cone_delta=%g, "
-        "cone_radius=%s, basis_mode=%s, correction_mode=%s, gate_mode=%s",
-        subspace_rank, epsilon, gate_delta, cone_delta, cone_radius, basis_mode,
-        correction_mode, gate_mode,
+        "basis_mode=%s, correction_mode=%s, gate_mode=%s",
+        subspace_rank, epsilon, gate_delta, cone_delta, basis_mode, correction_mode,
+        gate_mode,
     )
     joint_model.fit_tip(
         data_loader=train_loader,
@@ -317,7 +316,6 @@ def _run_b2(
         confidence_delta=confidence_delta,
         gate_delta=gate_delta,
         cone_delta=cone_delta,
-        cone_radius=cone_radius,
         basis_mode=basis_mode,
         correction_mode=correction_mode,
         gate_mode=gate_mode,
@@ -341,7 +339,6 @@ def _run_rq3(
     subspace_rank = config.getint("tip", "subspace_rank")
     epsilon = config.getfloat("tip", "epsilon")
     confidence_delta = config.getfloat("tip", "confidence_delta")
-    cone_radius = config.get("tip", "cone_radius", fallback="chi2")
     log_phase(logger, "RQ3 — shared B1 trajectory", num_epoch)
     joint_model.fit_rq3_counterfactual(
         data_loader=train_loader,
@@ -351,7 +348,6 @@ def _run_rq3(
         subspace_rank=subspace_rank,
         epsilon=epsilon,
         confidence_delta=confidence_delta,
-        cone_radius=cone_radius,
     )
     return joint_model
 
@@ -395,9 +391,8 @@ def _run_rq4(
 
     log_phase(logger, f"RQ4 — independent TIP training ({variant})", num_epoch)
     logger.info(
-        "  variant=%s, subspace_rank=%d, epsilon=%g, confidence_delta=%g, "
-        "cone_radius=%s",
-        variant, rank, epsilon, confidence_delta, cone_radius,
+        "  variant=%s, subspace_rank=%d, epsilon=%g, confidence_delta=%g",
+        variant, rank, epsilon, confidence_delta,
     )
     joint_model.fit_tip(
         data_loader=train_loader,
@@ -407,9 +402,8 @@ def _run_rq4(
         subspace_rank=rank,
         epsilon=epsilon,
         confidence_delta=confidence_delta,
-        cone_radius=cone_radius,
         basis_mode="history",
-        correction_mode="worst_case",
+        correction_mode="robust",
         gate_mode="ucb",
     )
     return joint_model

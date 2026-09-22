@@ -14,8 +14,6 @@ import math
 import time
 
 import numpy as np
-from scipy.stats import chi2 as chi2_dist
-from scipy.stats import f as f_dist
 from scipy.stats import t as student_t
 import torch
 import torch.nn as nn
@@ -622,7 +620,6 @@ class JointModel(nn.Module):
         update_coordinates: torch.Tensor,
         coordinate_samples: torch.Tensor,
         delta: float,
-        radius_kind: str = "chi2",
     ) -> tuple[torch.Tensor, dict[str, float]]:
         """Project onto a confidence cone for the prediction direction.
 
@@ -669,9 +666,7 @@ class JointModel(nn.Module):
             torch.eye(rank, dtype=torch.float64, device=work_device),
             alpha=ridge,
         )
-        beta = JointModel._ellipsoid_radius(
-            rank, sample_count, delta, radius_kind
-        )
+        beta = float(student_t.ppf(1.0 - delta, df=sample_count - 1))
 
         def robust_margin(value: torch.Tensor) -> torch.Tensor:
             variance = torch.clamp(value @ covariance_mean @ value, min=0.0)
@@ -772,353 +767,11 @@ class JointModel(nn.Module):
             "fallback": fallback,
         }
 
-    CONE_RADIUS_KINDS = ("chi2", "hotelling", "student_t")
-
-    @staticmethod
-    def _ellipsoid_radius(
-        rank: int,
-        sample_count: int,
-        delta: float,
-        radius_kind: str = "chi2",
-    ) -> float:
-        """Radius ``beta`` of the covariance-weighted coordinate ellipsoid.
-
-        The uncertainty set lives in ``rank`` dimensions, so its radius is a
-        multivariate quantile rather than a univariate one.  ``chi2`` is the
-        asymptotic confidence radius ``sqrt(chi2_{rank,1-delta})`` and
-        ``hotelling`` is the exact normal-theory radius
-
-            sqrt( rank * (n - 1) / (n - rank) * F_{rank, n-rank, 1-delta} ).
-
-        The univariate Student-``t`` quantile used by the earlier code is the
-        ``rank = 1`` special case of the Hotelling radius; it is retained only
-        so that previously reported runs can be reproduced.  Because a radius
-        must grow like ``sqrt(rank)`` for a ``rank``-dimensional ellipsoid, the
-        Student-``t`` choice is almost always too small and collapses the
-        feasible interval to a ray (see :meth:`_worst_case_correction`).
-        """
-        if radius_kind == "student_t":
-            return float(student_t.ppf(1.0 - delta, df=max(sample_count - 1, 1)))
-        if radius_kind == "hotelling":
-            degrees = sample_count - 1
-            if degrees - rank + 1 <= 0:
-                return JointModel._ellipsoid_radius(
-                    rank, sample_count, delta, "chi2"
-                )
-            scale = rank * degrees / (degrees - rank + 1)
-            return float(
-                np.sqrt(scale * f_dist.ppf(1.0 - delta, rank, degrees - rank + 1))
-            )
-        if radius_kind != "chi2":
-            raise ValueError(
-                "radius_kind must be one of "
-                f"{JointModel.CONE_RADIUS_KINDS}, got {radius_kind!r}"
-            )
-        return float(np.sqrt(chi2_dist.ppf(1.0 - delta, df=max(rank, 1))))
-
-    @staticmethod
-    def _worst_case_stats(
-        coordinate_samples: torch.Tensor,
-        delta: float,
-        radius_kind: str = "chi2",
-    ) -> tuple[torch.Tensor, torch.Tensor, float]:
-        """Shared ellipsoid statistics for the worst-case correction."""
-        sample_count, rank = coordinate_samples.shape
-        work = coordinate_samples.detach().to(dtype=torch.float64)
-        mean = work.mean(dim=0)
-        centered = work - mean
-        covariance_mean = centered.T @ centered
-        covariance_mean /= sample_count * (sample_count - 1)
-        ridge = max(
-            float(torch.trace(covariance_mean).item()) / max(rank, 1) * 1e-8,
-            1e-12,
-        )
-        covariance_mean.add_(
-            torch.eye(
-                rank,
-                dtype=torch.float64,
-                device=work.device,
-            ),
-            alpha=ridge,
-        )
-        beta = JointModel._ellipsoid_radius(
-            rank, sample_count, delta, radius_kind
-        )
-        return mean, covariance_mean, beta
-
-    @staticmethod
-    def _worst_case_margin(
-        coordinates: torch.Tensor,
-        coordinate_samples: torch.Tensor,
-        delta: float,
-        radius_kind: str = "chi2",
-    ) -> float:
-        """Worst-case alignment of ``coordinates`` over the ellipsoid."""
-        if coordinate_samples.ndim != 2 or coordinate_samples.shape[0] < 2:
-            return 0.0
-        mean, covariance_mean, beta = JointModel._worst_case_stats(
-            coordinate_samples, delta, radius_kind
-        )
-        value = coordinates.detach().to(dtype=torch.float64)
-        variance = torch.clamp(value @ covariance_mean @ value, min=0.0)
-        return float(mean @ value - beta * torch.sqrt(variance).item())
-
-    @staticmethod
-    def _worst_case_correction(
-        update_coordinates: torch.Tensor,
-        coordinate_samples: torch.Tensor,
-        delta: float,
-        radius_kind: str = "chi2",
-    ) -> tuple[torch.Tensor, dict[str, float]]:
-        """Correct along the estimated conflict direction, in closed form.
-
-        Write ``a = update_coordinates`` for the raw proposal and ``u = c_bar``
-        for the estimated forecast-gradient coordinate vector (the direction
-        with which ``a`` conflicts).  The correction walks the ray
-
-            x(lambda) = a + lambda * u,     lambda >= 0,
-
-        in *coordinate* space; the minus sign that would move away from ``u``
-        is never feasible, because ``c^T x`` must increase to remove the
-        conflict.  The worst-case alignment over the ellipsoid
-
-            f(lambda) = min_{c in E} c^T x(lambda)
-                      = c_bar^T x(lambda)
-                        - beta * sqrt(x(lambda)^T Sigma_bar x(lambda))
-
-        is concave in ``lambda`` -- ``sqrt`` of a non-negative quadratic is
-        convex -- so its superlevel set is an interval: either ``[lambda_1,
-        lambda_2]``, a ray ``[lambda_1, inf)``, or empty.  Every crossing of
-        ``f`` with zero satisfies the single quadratic
-
-            A(lambda) = (p_0 + lambda p_1)^2
-                        - beta^2 (q_0 + 2 lambda q_1 + lambda^2 q_2) = 0
-
-        with ``p_0 = u^T a``, ``p_1 = ||u||^2``, ``q_0 = a^T Sigma a``,
-        ``q_1 = a^T Sigma u`` and ``q_2 = u^T Sigma u``, so both endpoints are
-        available in closed form and no root search is needed.
-
-        The sign of the large-``lambda`` slope ``p_1 - beta sqrt(q_2)`` decides
-        the shape.  When it is negative the feasible set is the bounded interval
-        ``[lambda_1, lambda_2]``; when it is positive the set is the ray
-        ``[lambda_1, inf)``.
-
-        PILOT takes the smallest step the design allows, not the largest: the
-        failure mode being guarded against is an under-correction caused by
-        estimation error, and the smallest step that certifies non-increase over
-        the whole ellipsoid is exactly the amount of over-correction needed to
-        absorb that error.  On a ray it is ``lambda_1``.  On a bounded interval
-        the outer root ``lambda_2`` is available and is the largest
-        over-correction the guarantee still pays for, but the difference
-        between the two endpoints buys no additional guarantee -- both sit on
-        ``f = 0`` -- so ``lambda_2`` is guarded by the amplification budget of
-        :meth:`_amplification_cap` and the interval is an exceptional branch
-        anyway (it requires the estimated gradient direction to be statistically
-        insignificant at level ``beta``).
-
-        The strictness of the guarantee relative to the gate is set by the
-        radius: ``beta`` is built from the correction's own conservatism, so
-        choosing it above the gate's radius leaves a positive worst-case margin
-        ``(beta - beta_gate) sqrt(x^T Sigma x)`` at the returned step.  A raw
-        candidate that already certifies non-increase is left untouched, and a
-        ray the amplification budget cuts before it becomes feasible falls back
-        to the cone-constrained minimum-change projection, which is always
-        feasible because the cone contains the origin.
-        """
-        empty = {
-            "success": 0.0,
-            "margin": 0.0,
-            "fallback": 1.0,
-            "lambda": 0.0,
-            "lambda1": 0.0,
-            "lambda2": -1.0,
-            "lambda_cap": -1.0,
-            "lambda_span": 0.0,
-            "regime": 3.0,
-        }
-        if coordinate_samples.ndim != 2:
-            raise ValueError("coordinate_samples must have shape [n, rank]")
-        sample_count, _ = coordinate_samples.shape
-        if sample_count < 2:
-            return torch.zeros_like(update_coordinates), dict(empty)
-
-        mean, covariance_mean, beta = JointModel._worst_case_stats(
-            coordinate_samples, delta, radius_kind
-        )
-        raw = update_coordinates.detach().to(dtype=torch.float64)
-        direction = mean
-        p1 = float(direction @ direction)
-        if p1 <= 1e-24:
-            return torch.zeros_like(update_coordinates), dict(empty)
-
-        p0 = float(mean @ raw)
-        q0 = float(raw @ covariance_mean @ raw)
-        q1 = float(raw @ covariance_mean @ direction)
-        q2 = float(direction @ covariance_mean @ direction)
-
-        def margin(lam: float) -> float:
-            value = raw + lam * direction
-            variance = torch.clamp(value @ covariance_mean @ value, min=0.0)
-            return float(mean @ value - beta * torch.sqrt(variance).item())
-
-        def roots(alpha: float, gamma: float, constant: float) -> list[float]:
-            """Real roots of ``alpha * t^2 + 2 * gamma * t + constant``."""
-            scale = max(abs(alpha), abs(gamma), abs(constant), 1e-300)
-            if abs(alpha) > 1e-12 * scale:
-                discriminant = gamma * gamma - alpha * constant
-                if discriminant < 0.0:
-                    return []
-                square_root = math.sqrt(discriminant)
-                pivot = -(gamma + math.copysign(square_root, gamma))
-                if pivot == 0.0:
-                    return [0.0]
-                return [pivot / alpha, constant / pivot]
-            if abs(gamma) > 1e-12 * scale:
-                return [-constant / (2.0 * gamma)]
-            return []
-
-        alpha = p1 * p1 - beta * beta * q2
-        gamma = p0 * p1 - beta * beta * q1
-        constant = p0 * p0 - beta * beta * q0
-        tolerance = 1e-9 * max(p1, 1.0)
-        feasible = sorted(
-            lam
-            for lam in roots(alpha, gamma, constant)
-            if lam >= -tolerance and margin(lam) >= -tolerance
-        )
-        raw_margin = margin(0.0)
-
-        if raw_margin >= -tolerance:
-            # The raw candidate already certifies non-increase: keep it.
-            solution = raw.clone()
-            lambda_star, lambda1 = 0.0, 0.0
-            lambda2 = feasible[-1] if feasible else -1.0
-            regime, fallback = 0.0, 0.0
-            lambda_cap = -1.0
-        elif not feasible:
-            # No point on the ray certifies non-increase.  The ray is only a
-            # one-dimensional restriction of the feasible cone, which always
-            # contains the origin, so fall back to the minimum-change cone
-            # projection rather than skipping a step that a feasible
-            # correction may still exist for.
-            solution, cone_diagnostics = JointModel._robust_subspace_projection(
-                update_coordinates, coordinate_samples, delta, radius_kind
-            )
-            lambda_star = lambda1 = 0.0
-            lambda2 = -1.0
-            fallback = 0.0 if cone_diagnostics.get("fallback", 1.0) == 0.0 else 1.0
-            regime = 3.0
-            output = solution.to(
-                dtype=update_coordinates.dtype,
-                device=update_coordinates.device,
-            )
-            return output, {
-                "success": cone_diagnostics.get("success", 0.0),
-                "margin": cone_diagnostics.get("margin", 0.0),
-                "fallback": fallback,
-                "lambda": lambda_star,
-                "lambda1": lambda1,
-                "lambda2": lambda2,
-                "lambda_cap": -1.0,
-                "lambda_span": 0.0,
-                "regime": regime,
-            }
-        else:
-            slope = p1 - beta * math.sqrt(max(q2, 0.0))
-            bounded = slope <= 1e-12 * p1
-            lambda1 = feasible[0]
-            lambda2 = feasible[-1] if bounded else -1.0
-            # Largest over-correction the chance constraint pays for: the outer
-            # root on a bounded interval, and no bound at all on a ray.
-            constraint_upper = feasible[-1] if bounded else math.inf
-            # The budget that keeps the correction a modification of the
-            # optimizer's step rather than an amplification of it.
-            lambda_cap = JointModel._amplification_cap(raw, direction)
-            lambda_star = min(constraint_upper, lambda_cap)
-            if margin(lambda_star) >= -tolerance:
-                solution = raw + lambda_star * direction
-                fallback = 0.0
-                regime = 1.0 if bounded and lambda_star >= lambda2 else 2.0
-            else:
-                # The amplification budget bites before the interval becomes
-                # feasible along the ray: fall back to the cone-constrained
-                # minimum-change projection, which is always feasible.
-                solution, cone_diagnostics = (
-                    JointModel._robust_subspace_projection(
-                        update_coordinates, coordinate_samples, delta, radius_kind
-                    )
-                )
-                lambda_star = lambda1 = 0.0
-                lambda2 = -1.0
-                fallback = (
-                    0.0 if cone_diagnostics.get("fallback", 1.0) == 0.0 else 1.0
-                )
-                regime = 3.0
-                output = solution.to(
-                    dtype=update_coordinates.dtype,
-                    device=update_coordinates.device,
-                )
-                return output, {
-                    "success": cone_diagnostics.get("success", 0.0),
-                    "margin": cone_diagnostics.get("margin", 0.0),
-                    "fallback": fallback,
-                    "lambda": lambda_star,
-                    "lambda1": lambda1,
-                    "lambda2": lambda2,
-                    "lambda_cap": float(lambda_cap),
-                    "lambda_span": 0.0,
-                    "regime": regime,
-                }
-
-        output = solution.to(
-            dtype=update_coordinates.dtype,
-            device=update_coordinates.device,
-        )
-        span = lambda2 - lambda1 if regime == 1.0 else 0.0
-        return output, {
-            "success": 0.0 if fallback else 1.0,
-            "margin": margin(lambda_star),
-            "fallback": fallback,
-            "lambda": float(lambda_star),
-            "lambda1": float(lambda1),
-            "lambda2": float(lambda2),
-            "lambda_cap": float(lambda_cap),
-            "lambda_span": float(max(span, 0.0)),
-            "regime": regime,
-        }
-
-    @staticmethod
-    def _amplification_cap(raw: torch.Tensor, direction: torch.Tensor) -> float:
-        """Largest ``lambda`` that keeps the correction no larger than the candidate.
-
-        The chance constraint alone does not bound the step: on a ray it is
-        satisfied for every large enough ``lambda``, and even on a bounded
-        interval the outer root can demand a correction far beyond the size of
-        the optimizer's own proposal -- which destroys the reconstruction
-        objective the step was supposed to serve.  The one scale available
-        without a new hyper-parameter is the proposal itself, so the budget is
-
-            ||x(lambda) - a|| = lambda * ||c_bar|| <= ||a||,
-
-        i.e. the correction may replace the candidate but may never amplify it.
-        This budget is strictly stronger than keeping the first-order
-        reconstruction change non-positive: at the cap
-        ``a^T x = ||a||^2 (1 - cos(a, c_bar)) >= 0`` whenever the cosine is at
-        most one, so a step inside the budget is still a reconstruction descent
-        step.
-        """
-        direction_norm = float(torch.linalg.vector_norm(direction).item())
-        raw_norm = float(torch.linalg.vector_norm(raw).item())
-        if direction_norm <= 0.0:
-            return math.inf
-        return raw_norm / direction_norm
-
     @staticmethod
     def _robust_cone_margin(
         coordinates: torch.Tensor,
         coordinate_samples: torch.Tensor,
         delta: float,
-        radius_kind: str = "chi2",
     ) -> float:
         """Value of the robust cone constraint at ``coordinates``.
 
@@ -1136,9 +789,7 @@ class JointModel(nn.Module):
         covariance = np.atleast_2d(covariance)
         ridge = max(float(np.trace(covariance)) / max(rank, 1) * 1e-8, 1e-12)
         covariance = covariance + ridge * np.eye(rank)
-        beta = JointModel._ellipsoid_radius(
-            rank, samples.shape[0], delta, radius_kind
-        )
+        beta = float(student_t.ppf(1.0 - delta, df=samples.shape[0] - 1))
         variance = max(float(trial @ covariance @ trial), 0.0)
         return float(mean @ trial - beta * math.sqrt(variance))
 
@@ -1734,7 +1385,6 @@ class JointModel(nn.Module):
         subspace_rank=4,
         epsilon=1e-3,
         confidence_delta=0.05,
-        cone_radius="chi2",
         accum_steps=None,
         on_epoch_end=None,
     ):
@@ -1745,11 +1395,6 @@ class JointModel(nn.Module):
             raise ValueError("epsilon must be positive")
         if not 0.0 < confidence_delta < 1.0:
             raise ValueError("confidence_delta must lie in (0, 1)")
-        if cone_radius not in JointModel.CONE_RADIUS_KINDS:
-            raise ValueError(
-                f"cone_radius must be one of {JointModel.CONE_RADIUS_KINDS}"
-            )
-        self.cone_radius_kind = cone_radius
         if accum_steps is None:
             accum_steps = self.accum_steps
         prediction_gradient_loader = data_loader.get(
@@ -1811,14 +1456,7 @@ class JointModel(nn.Module):
                 and torch.linalg.vector_norm(prediction_coordinates).item() > 1e-12
             )
             candidate_coordinates = update_coordinates
-            if project and correction_mode == "worst_case":
-                candidate_coordinates, _ = self._worst_case_correction(
-                    update_coordinates,
-                    coordinate_samples,
-                    confidence_delta,
-                    getattr(self, "cone_radius_kind", "chi2"),
-                )
-            elif project and correction_mode == "robust":
+            if project and correction_mode == "robust":
                 candidate_coordinates, _ = self._robust_subspace_projection(
                     update_coordinates, coordinate_samples, confidence_delta
                 )
@@ -1877,9 +1515,9 @@ class JointModel(nn.Module):
                     model, microbatches, history_basis, history_coordinates
                 )
                 for stage, correction_mode, gate_mode in (
-                    ("B2", "worst_case", "ucb"),
+                    ("B2", "robust", "ucb"),
                     ("B4", "point", "ucb"),
-                    ("B5", "worst_case", "mean"),
+                    ("B5", "robust", "mean"),
                 ):
                     outputs[stage], step_metadata[stage] = candidate(
                         g_i,
@@ -1904,7 +1542,7 @@ class JointModel(nn.Module):
                     pred,
                     samples,
                     z_samples,
-                    correction_mode="worst_case",
+                    correction_mode="robust",
                     gate_mode="ucb",
                 )
 
@@ -1997,7 +1635,6 @@ class JointModel(nn.Module):
         ranks,
         epsilons,
         gate_deltas,
-        cone_radius="chi2",
         accum_steps=None,
         on_epoch_end=None,
     ):
@@ -2013,11 +1650,6 @@ class JointModel(nn.Module):
             raise ValueError("all RQ4 gate deltas must lie in (0, 1)")
         if base_rank < 2 or base_epsilon <= 0 or not 0.0 < cone_delta < 1.0:
             raise ValueError("invalid RQ4 base parameters")
-        if cone_radius not in JointModel.CONE_RADIUS_KINDS:
-            raise ValueError(
-                f"cone_radius must be one of {JointModel.CONE_RADIUS_KINDS}"
-            )
-        self.cone_radius_kind = cone_radius
         if accum_steps is None:
             accum_steps = self.accum_steps
         prediction_gradient_loader = data_loader.get(
@@ -2074,11 +1706,10 @@ class JointModel(nn.Module):
             )
             candidate_coordinates = update_coordinates
             if project:
-                candidate_coordinates, _ = self._worst_case_correction(
+                candidate_coordinates, _ = self._robust_subspace_projection(
                     update_coordinates,
                     coordinate_samples,
                     cone_delta,
-                    self.cone_radius_kind,
                 )
             update = g_i + basis @ (candidate_coordinates - update_coordinates)
             return update if project else g_i, {
@@ -2247,7 +1878,6 @@ class JointModel(nn.Module):
         epsilon=1e-3, confidence_delta=0.05, accum_steps=None,
         on_epoch_end=None, basis_mode="history", correction_mode="robust",
         gate_mode="ucb", anchor_delta=0.0, gate_delta=None, cone_delta=None,
-        cone_radius="chi2",
         accept_only_if_improves=False, prediction_probe_batches=1,
     ):
         if gate_delta is None:
@@ -2270,30 +1900,8 @@ class JointModel(nn.Module):
             raise ValueError("prediction_probe_batches must be non-negative")
         if basis_mode not in {"history", "random"}:
             raise ValueError("basis_mode must be 'history' or 'random'")
-        if correction_mode not in {"robust", "point", "worst_case"}:
-            raise ValueError(
-                "correction_mode must be 'robust', 'point', or 'worst_case'"
-            )
-        if cone_radius not in JointModel.CONE_RADIUS_KINDS:
-            raise ValueError(
-                f"cone_radius must be one of {JointModel.CONE_RADIUS_KINDS}"
-            )
-        if (
-            correction_mode == "worst_case"
-            and cone_radius == "student_t"
-            and cone_delta >= gate_delta
-        ):
-            # Same quantile family and the same degrees of freedom, so a larger
-            # delta is a strictly smaller radius: the correction would then be
-            # certified at a weaker confidence level than the gate that
-            # triggered it, the opposite of the intended over-correction margin.
-            self.logger.warning(
-                "cone_delta=%g >= gate_delta=%g under the univariate Student-t "
-                "radius: the correction is certified at a weaker confidence "
-                "level than the gate. Lower cone_delta or use cone_radius=chi2.",
-                cone_delta, gate_delta,
-            )
-        self.cone_radius_kind = cone_radius
+        if correction_mode not in {"robust", "point"}:
+            raise ValueError("correction_mode must be 'robust' or 'point'")
         if gate_mode not in {"ucb", "lcb", "mean", "any", "cone"}:
             raise ValueError(
                 "gate_mode must be 'ucb', 'lcb', 'mean', 'any', or 'cone'"
@@ -2305,15 +1913,13 @@ class JointModel(nn.Module):
             "finite_difference_directions_per_step=%d | "
             "gradient_scope=current_optimizer_batch_plus_%d_probe_batches | "
             "step_monitor_scope=current_optimizer_batch | "
-            "epsilon=%g | gate_delta=%g | cone_delta=%g | cone_radius=%s | "
-            "basis_mode=%s | "
+            "epsilon=%g | gate_delta=%g | cone_delta=%g | basis_mode=%s | "
             "correction_mode=%s | gate_mode=%s | "
             "accept_only_if_improves=%s | "
             "update_space=adamw_parameter_displacement | "
             "prediction_rng=common_random_numbers",
             subspace_rank, 2 * subspace_rank, prediction_probe_batches,
-            epsilon, gate_delta, cone_delta, cone_radius, basis_mode,
-            correction_mode, gate_mode,
+            epsilon, gate_delta, cone_delta, basis_mode, correction_mode, gate_mode,
             accept_only_if_improves,
         )
 
@@ -2344,11 +1950,6 @@ class JointModel(nn.Module):
             "robust_margin": 0.0,
             "robust_solver_success": 0.0,
             "robust_fallback": 0.0,
-            "worst_case_lambda": 0.0,
-            "worst_case_lambda_cap": 0.0,
-            "worst_case_lambda_span": 0.0,
-            "worst_case_regime_ray": 0.0,
-            "worst_case_regime_bounded": 0.0,
         }
         prediction_change_stats = {
             "observed": 0,
@@ -2505,16 +2106,7 @@ class JointModel(nn.Module):
                 "fallback": 0.0,
             }
             if project:
-                if correction_mode == "worst_case":
-                    candidate_coordinates, robust_diagnostics = (
-                        model._worst_case_correction(
-                            update_coordinates,
-                            coordinate_samples,
-                            cone_delta,
-                            model.cone_radius_kind,
-                        )
-                    )
-                elif correction_mode == "robust":
+                if correction_mode == "robust":
                     candidate_coordinates, robust_diagnostics = (
                         model._robust_subspace_projection(
                             update_coordinates,
@@ -2549,31 +2141,16 @@ class JointModel(nn.Module):
                 realized = anchor_delta
                 for _ in range(6):
                     anchored = candidate_coordinates + realized * direction
-                    stays_feasible = True
-                    if correction_mode == "robust":
-                        stays_feasible = (
-                            model._robust_cone_margin(
-                                anchored,
-                                coordinate_samples,
-                                cone_delta,
-                                model.cone_radius_kind,
-                            )
-                            >= 0.0
+                    if (
+                        correction_mode != "robust"
+                        or model._robust_cone_margin(
+                            anchored, coordinate_samples, cone_delta
                         )
-                    elif correction_mode == "worst_case":
-                        stays_feasible = (
-                            model._worst_case_margin(
-                                anchored,
-                                coordinate_samples,
-                                cone_delta,
-                                model.cone_radius_kind,
-                            )
-                            >= 0.0
-                        )
-                    if stays_feasible:
+                        >= 0.0
+                    ):
                         candidate_coordinates = anchored
                         break
-                    realized *= 0.5   # backtrack to stay feasible
+                    realized *= 0.5  # backtrack to stay inside the cone
                     stats["anchor_backtrack"] += 1
                 stats["anchor_requested"] += float(anchor_delta)
                 stats["anchor_applied"] += float(
@@ -2629,16 +2206,6 @@ class JointModel(nn.Module):
             stats["robust_margin"] += robust_diagnostics["margin"]
             stats["robust_solver_success"] += robust_diagnostics["success"]
             stats["robust_fallback"] += robust_diagnostics["fallback"]
-            stats["worst_case_lambda"] += robust_diagnostics.get("lambda", 0.0)
-            stats["worst_case_lambda_cap"] += robust_diagnostics.get(
-                "lambda_cap", 0.0
-            )
-            stats["worst_case_lambda_span"] += robust_diagnostics.get(
-                "lambda_span", 0.0
-            )
-            regime = robust_diagnostics.get("regime", 0.0)
-            stats["worst_case_regime_ray"] += float(regime == 2.0)
-            stats["worst_case_regime_bounded"] += float(regime == 1.0)
 
             # The local model should follow directions actually presented to
             # the optimizer, including robust corrections.
@@ -2791,17 +2358,6 @@ class JointModel(nn.Module):
                     averages["applied_correction_ratio"],
                     stats["robust_margin"] / projected,
                     stats["robust_solver_success"] / projected,
-                    stats["robust_fallback"] / projected,
-                )
-                model.logger.info(
-                    "TIP worst-case: lambda=%.6g | lambda_cap=%.6g | "
-                    "lambda_span=%.6g | bounded_rate=%.4f | ray_rate=%.4f | "
-                    "fallback_rate=%.4f",
-                    stats["worst_case_lambda"] / projected,
-                    stats["worst_case_lambda_cap"] / projected,
-                    stats["worst_case_lambda_span"] / projected,
-                    stats["worst_case_regime_bounded"] / projected,
-                    stats["worst_case_regime_ray"] / projected,
                     stats["robust_fallback"] / projected,
                 )
                 observed = max(prediction_change_stats["observed"], 1)

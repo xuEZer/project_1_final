@@ -31,7 +31,7 @@ loader:
 training:
   optimizer: AdamW
   lr: 0.001
-  max_epochs: 10
+  max_epochs: 20
 
 tip:
   subspace_rank: 3
@@ -39,9 +39,5 @@ tip:
   gate_mode: ucb
   gate_delta: 0.1
   cone_delta: 0.3
-  # Radius of the covariance-weighted coordinate ellipsoid: the multivariate
-  # chi-square quantile sqrt(chi2_{rank,1-delta}) rather than the univariate
-  # Student-t quantile, which is the rank=1 special case.
-  cone_radius: chi2
   accept_only_if_improves: false
   prediction_probe_batches: 3
