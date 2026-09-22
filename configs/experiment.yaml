@@ -60,9 +60,9 @@ loader:
 training:
   optimizer: AdamW
   lr: 0.0001
-  # Fixed horizon: every run trains exactly this many epochs, then evaluation
-  # uses the checkpoint with the lowest validation prediction loss.
-  max_epochs: 10
+  # Fixed horizon: every run trains exactly this many epochs and the
+  # final-epoch imputer is evaluated directly (no checkpoint selection).
+  max_epochs: 5
 
 tip:
   subspace_rank: 3

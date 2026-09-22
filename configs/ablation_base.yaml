@@ -26,7 +26,7 @@ loader:
 training:
   optimizer: AdamW
   lr: 0.0001
-  max_epochs: 10
+  max_epochs: 5
 
 tip:
   subspace_rank: 3
