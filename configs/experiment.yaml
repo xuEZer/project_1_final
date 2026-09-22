@@ -59,14 +59,14 @@ loader:
 
 training:
   optimizer: AdamW
-  lr: 0.0001
+  lr: 0.001
   # Fixed horizon: every run trains exactly this many epochs and the
   # final-epoch imputer is evaluated directly (no checkpoint selection).
   max_epochs: 5
 
 tip:
   subspace_rank: 3
-  epsilon: 0.0001
+  epsilon: 0.001
   gate_mode: ucb
   gate_delta: 0.1
   cone_delta: 0.1
