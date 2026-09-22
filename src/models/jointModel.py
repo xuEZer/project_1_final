@@ -2048,7 +2048,7 @@ class JointModel(nn.Module):
         on_epoch_end=None, basis_mode="history", correction_mode="robust",
         gate_mode="ucb", anchor_delta=0.0, gate_delta=None, cone_delta=None,
         cone_radius="hotelling", finite_difference_third_derivative=0.0,
-        preserve_norm=False,
+        preserve_norm=False, warmup_epochs=0,
         accept_only_if_improves=False, prediction_probe_batches=1,
     ):
         if gate_delta is None:
@@ -2086,6 +2086,8 @@ class JointModel(nn.Module):
             raise ValueError(
                 "finite_difference_third_derivative must be non-negative"
             )
+        if warmup_epochs < 0:
+            raise ValueError("warmup_epochs must be non-negative if set")
         self.cone_radius_kind = cone_radius
         if accum_steps is None:
             accum_steps = self.accum_steps
@@ -2095,14 +2097,14 @@ class JointModel(nn.Module):
             "gradient_scope=current_optimizer_batch_plus_%d_probe_batches | "
             "step_monitor_scope=current_optimizer_batch | "
             "epsilon=%g | gate_delta=%g | cone_delta=%g | cone_radius=%s | "
-            "preserve_norm=%s | basis_mode=%s | "
+            "preserve_norm=%s | warmup_epochs=%d | basis_mode=%s | "
             "correction_mode=%s | gate_mode=%s | "
             "accept_only_if_improves=%s | "
             "update_space=adamw_parameter_displacement | "
             "prediction_rng=common_random_numbers",
             subspace_rank, 2 * subspace_rank, prediction_probe_batches,
             epsilon, gate_delta, cone_delta, cone_radius, preserve_norm,
-            basis_mode, correction_mode, gate_mode,
+            warmup_epochs, basis_mode, correction_mode, gate_mode,
             accept_only_if_improves,
         )
 
@@ -2139,6 +2141,7 @@ class JointModel(nn.Module):
             "norm_scale": 0.0,
             "norm_rescaled": 0,
             "norm_scale_skipped": 0,
+            "warmup_steps": 0,
         }
         prediction_change_stats = {
             "observed": 0,
@@ -2356,6 +2359,13 @@ class JointModel(nn.Module):
             else:
                 gate_conflict = dot.item() < 0.0
             project = rank_ready and gate_conflict and gp_norm.item() > 1e-12
+            if warmup_epochs > 0 and epoch_number <= warmup_epochs:
+                # Warm-up: let the reconstruction objective train the imputer on
+                # its own for the first ``warmup_epochs`` epochs, then engage the
+                # forecast mechanism.  The measurement still runs so the
+                # diagnostics stay comparable across the boundary.
+                project = False
+                stats["warmup_steps"] += 1
             last_step_projected = project
 
             candidate_coordinates = update_coordinates

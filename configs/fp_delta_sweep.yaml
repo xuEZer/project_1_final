@@ -1,27 +1,30 @@
-# cone_delta sweep for the finite-population design, 20 epochs.
+# cone_delta sweep for the finite-population design.
 #
-# The conservatism level 1 - delta is the only methodological knob the revised
-# theory leaves free: it sets the radius beta and therefore how often the raw
-# optimizer step fails to be certified safe for the confidence set of the
-# full-training mean.  The radius FAMILY is pinned to hotelling --- it is a
-# statistical specification fixed by (rank, probe size, delta), not a method
-# choice, so sweeping it would amount to selecting a radius by its endpoint
-# score (see configs/finite_population_smoke.yaml for the coverage evidence).
+# Protocol: 20 epochs total.  The first tip.warmup_epochs = 10 let the
+# reconstruction objective train the imputer on its own; the forecast
+# mechanism (gate_mode safe_release) is engaged only for the remaining 10.
+# B1 runs the same 20 epochs, so the two arms stay at matched steps and the
+# only difference at the endpoint is the mechanism's second half.
 #
-# Probe budget.  This cell runs 10 optimizer batches per epoch (the run logs
-# report candidate_count = 9, i.e. num_batches - 1 accumulation window), so
-# "half of the total batches minus one" is prediction_probe_batches = 10/2 - 1
-# = 4, which puts half of the training set through the forecaster at each step
-# (the current optimizer batch plus four probe batches).  Recompute this if the
-# dataset or the loader batch size changes.
+# Probe budget: this cell runs 10 optimizer batches per epoch (the run logs
+# report num_batches = 10, candidate_count = 9), so
+# prediction_probe_batches = 4 puts the current batch plus four probe batches
+# through the forecaster, i.e. half of the training set at each step.  The
+# probe draw is uniform without replacement from the complement of the current
+# optimizer batch, which is what makes the finite-population identities in
+# Theorem 5 apply.
 #
-# The probe draw is uniform without replacement from the complement of the
-# current optimizer batch, which is what makes Theorem 5 (finite-population
-# mean and covariance) applicable.
+# The ellipsoid radius is pinned to hotelling: it is a statistical
+# specification fixed by (rank, probe size, delta), not a method choice.
+#
+# preserve_norm gives the corrected displacement the same length as the
+# optimizer's own proposal, so the two arms differ only in the direction of the
+# step.  It is safe for the guarantee because the robust lower alignment is
+# positively homogeneous of degree one, R(t x) = t R(x) for t > 0.
 #
 #   python run_expman.py --config configs/fp_delta_sweep.yaml
 #
-# 4 tip settings x 2 stages x 3 seeds = 24 runs at 20 epochs.
+# 4 tip settings x 2 stages x 3 seeds = 24 runs.
 
 name: ablation_base
 
@@ -46,6 +49,8 @@ tip:
   gate_mode: safe_release
   cone_radius: hotelling
   cone_delta: 0.1
+  preserve_norm: true
+  warmup_epochs: 10
 
 sweep:
   mode: ofat

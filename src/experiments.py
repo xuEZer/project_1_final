@@ -285,6 +285,9 @@ def _run_b2(
     # Fairness control: give B2 the same displacement norm as B1 so the two
     # arms differ only in the direction of the step.
     preserve_norm = config.getboolean("tip", "preserve_norm", fallback=False)
+    # Let reconstruction train the imputer alone for this many epochs before the
+    # forecast mechanism is engaged.
+    warmup_epochs = config.getint("tip", "warmup_epochs", fallback=0)
 
     robust_gate_mode = config.get("tip", "gate_mode", fallback="ucb")
     variants = {
@@ -310,10 +313,11 @@ def _run_b2(
     logger.info(
         "  subspace_rank=%d, epsilon=%g, gate_delta=%g, cone_delta=%g, "
         "cone_radius=%s, fd_third_derivative=%g, preserve_norm=%s, "
+        "warmup_epochs=%d,"
         "basis_mode=%s, correction_mode=%s, gate_mode=%s",
         subspace_rank, epsilon, gate_delta, cone_delta, cone_radius,
-        finite_difference_third_derivative, preserve_norm, basis_mode,
-        correction_mode, gate_mode,
+        finite_difference_third_derivative, preserve_norm, warmup_epochs,
+        basis_mode, correction_mode, gate_mode,
     )
     joint_model.fit_tip(
         data_loader=train_loader,
@@ -328,6 +332,7 @@ def _run_b2(
         cone_radius=cone_radius,
         finite_difference_third_derivative=finite_difference_third_derivative,
         preserve_norm=preserve_norm,
+        warmup_epochs=warmup_epochs,
         basis_mode=basis_mode,
         correction_mode=correction_mode,
         gate_mode=gate_mode,
