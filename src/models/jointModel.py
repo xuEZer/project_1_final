@@ -2048,6 +2048,7 @@ class JointModel(nn.Module):
         on_epoch_end=None, basis_mode="history", correction_mode="robust",
         gate_mode="ucb", anchor_delta=0.0, gate_delta=None, cone_delta=None,
         cone_radius="hotelling", finite_difference_third_derivative=0.0,
+        preserve_norm=False,
         accept_only_if_improves=False, prediction_probe_batches=1,
     ):
         if gate_delta is None:
@@ -2094,14 +2095,14 @@ class JointModel(nn.Module):
             "gradient_scope=current_optimizer_batch_plus_%d_probe_batches | "
             "step_monitor_scope=current_optimizer_batch | "
             "epsilon=%g | gate_delta=%g | cone_delta=%g | cone_radius=%s | "
-            "basis_mode=%s | "
+            "preserve_norm=%s | basis_mode=%s | "
             "correction_mode=%s | gate_mode=%s | "
             "accept_only_if_improves=%s | "
             "update_space=adamw_parameter_displacement | "
             "prediction_rng=common_random_numbers",
             subspace_rank, 2 * subspace_rank, prediction_probe_batches,
-            epsilon, gate_delta, cone_delta, cone_radius, basis_mode,
-            correction_mode, gate_mode,
+            epsilon, gate_delta, cone_delta, cone_radius, preserve_norm,
+            basis_mode, correction_mode, gate_mode,
             accept_only_if_improves,
         )
 
@@ -2135,6 +2136,9 @@ class JointModel(nn.Module):
             "fd_sampling_fraction": 0.0,
             "fd_residual_windows": 0.0,
             "fd_steps": 0,
+            "norm_scale": 0.0,
+            "norm_rescaled": 0,
+            "norm_scale_skipped": 0,
         }
         prediction_change_stats = {
             "observed": 0,
@@ -2393,6 +2397,31 @@ class JointModel(nn.Module):
                         "margin": 0.0,
                         "fallback": 0.0,
                     }
+            if project and preserve_norm:
+                # Fairness control: restore the corrected displacement to the
+                # norm of the optimizer's own proposal, so B1 and B2 take steps
+                # of identical length and differ only in direction.  Without it
+                # a correction that shrinks the step would be confounded with a
+                # correction that changes its direction.
+                #
+                # Rescaling is safe for the guarantee: the robust lower
+                # alignment is positively homogeneous, R(t x) = t R(x) for
+                # t > 0, because both terms are degree one in x.  A feasible
+                # correction therefore stays feasible at any positive scale,
+                # and only its length changes.
+                raw_norm = float(
+                    torch.linalg.vector_norm(update_coordinates).item()
+                )
+                corrected_norm = float(
+                    torch.linalg.vector_norm(candidate_coordinates).item()
+                )
+                if corrected_norm > 1e-12 and raw_norm > 0.0:
+                    scale = raw_norm / corrected_norm
+                    candidate_coordinates = candidate_coordinates * scale
+                    stats["norm_scale"] += scale
+                    stats["norm_rescaled"] += 1
+                else:
+                    stats["norm_scale_skipped"] += 1
             if project and anchor_delta > 0.0 and gp_norm.item() > 1e-12:
                 # Task anchor.  The minimum-change projection lands exactly on
                 # the boundary g_P^T d = 0, so it can only stop the forecast
@@ -2616,6 +2645,14 @@ class JointModel(nn.Module):
                     cone_radius,
                     gate_mode,
                 )
+                if preserve_norm:
+                    model.logger.info(
+                        "TIP norm preservation: rescaled=%d | skipped=%d | "
+                        "mean_scale=%.4f",
+                        stats["norm_rescaled"],
+                        stats["norm_scale_skipped"],
+                        stats["norm_scale"] / max(stats["norm_rescaled"], 1),
+                    )
                 anchor_requests = float(stats.get("anchor_requested", 0.0))
                 model.logger.info(
                     "TIP anchor: delta=%.6g | fired_requests=%d | "
