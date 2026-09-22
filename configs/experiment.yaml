@@ -62,7 +62,7 @@ training:
   lr: 0.001
   # Fixed horizon: every run trains exactly this many epochs and the
   # final-epoch imputer is evaluated directly (no checkpoint selection).
-  max_epochs: 5
+  max_epochs: 10
 
 tip:
   subspace_rank: 3
