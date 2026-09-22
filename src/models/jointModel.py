@@ -413,10 +413,9 @@ class JointModel(nn.Module):
                 torch.stack(q_plus_samples) + torch.stack(q_minus_samples)
             ),
             "coordinate_samples": per_sample_coordinates,
-            # One probe batch is one statistically independent unit: its mean
-            # alignment summarises the whole batch, and units are what the
-            # gate's t-margin must run on (windows inside a unit are allowed
-            # to be arbitrarily correlated).
+            # Mean over one probe batch: the covariance cone consumes these
+            # as unit-level samples, whose between-batch spread honestly
+            # reflects dependence inside a batch.
             "unit_coordinate_samples": per_sample_coordinates.mean(dim=0),
         }
         return gradient_coordinates, z_samples, diagnostics
@@ -1412,17 +1411,12 @@ class JointModel(nn.Module):
                 coordinate_samples = torch.cat([
                     item["coordinate_samples"] for item in diagnostic_batches
                 ])
-                unit_coordinate_samples = torch.stack([
-                    item["unit_coordinate_samples"]
-                    for item in diagnostic_batches
-                ])
                 prediction_coordinates = coordinate_samples.mean(dim=0)
             else:
                 prediction_coordinates = torch.stack(coordinate_batches).mean(dim=0)
                 coordinate_samples = prediction_coordinates.unsqueeze(0)
-                unit_coordinate_samples = coordinate_samples
-            unit_z_samples = unit_coordinate_samples @ update_coordinates
-            return prediction_coordinates, unit_coordinate_samples, unit_z_samples
+            z_samples = coordinate_samples @ update_coordinates
+            return prediction_coordinates, coordinate_samples, z_samples
 
         def candidate(
             g_i,
@@ -1673,16 +1667,11 @@ class JointModel(nn.Module):
                 coordinate_samples = torch.cat([
                     item["coordinate_samples"] for item in diagnostic_batches
                 ])
-                unit_coordinate_samples = torch.stack([
-                    item["unit_coordinate_samples"]
-                    for item in diagnostic_batches
-                ])
                 prediction_coordinates = coordinate_samples.mean(dim=0)
             else:
                 prediction_coordinates = torch.stack(coordinate_batches).mean(dim=0)
                 coordinate_samples = prediction_coordinates.unsqueeze(0)
-                unit_coordinate_samples = coordinate_samples
-            return prediction_coordinates, unit_coordinate_samples
+            return prediction_coordinates, coordinate_samples
 
         def build_candidate(
             g_i,
@@ -2053,14 +2042,17 @@ class JointModel(nn.Module):
                 unit_coordinate_samples = coordinate_samples
             unit_z_samples = unit_coordinate_samples @ update_coordinates
             dot = torch.dot(update_coordinates, prediction_coordinates)
-            # The gate's sample unit is the probe batch, not the window:
-            # windows overlap and share this step's perturbation, so a
-            # window-level t-margin would run on pseudo-replicated samples.
+            # The gate treats the probed windows as a simple random sample of
+            # the training stream: their number, not the batch partition,
+            # sets the t-margin (full coverage would make sampling error
+            # vanish).  The covariance cone below still consumes unit-level
+            # (batch-mean) samples, whose between-batch spread honestly
+            # reflects dependence inside a probe batch.
             upper = model._student_t_upper_confidence_bound(
-                unit_z_samples, gate_delta
+                z_samples, gate_delta
             )
             lower = model._student_t_lower_confidence_bound(
-                unit_z_samples, gate_delta
+                z_samples, gate_delta
             )
             gi_norm = torch.linalg.vector_norm(g_i)
             gp_norm = torch.linalg.vector_norm(prediction_coordinates)
