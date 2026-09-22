@@ -2359,7 +2359,8 @@ class JointModel(nn.Module):
             else:
                 gate_conflict = dot.item() < 0.0
             project = rank_ready and gate_conflict and gp_norm.item() > 1e-12
-            if warmup_epochs > 0 and epoch_number <= warmup_epochs:
+            current_epoch = model.global_epoch + 1
+            if warmup_epochs > 0 and current_epoch <= warmup_epochs:
                 # Warm-up: let the reconstruction objective train the imputer on
                 # its own for the first ``warmup_epochs`` epochs, then engage the
                 # forecast mechanism.  The measurement still runs so the
