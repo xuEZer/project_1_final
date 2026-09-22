@@ -2597,13 +2597,21 @@ class JointModel(nn.Module):
                     averages["z_sem"], averages["coordinate_variation"],
                     averages["q_center"],
                 )
+                fd_mean_residual = (
+                    stats["fd_residual_windows"] / fd_steps
+                )
+                fd_mean_fraction = (
+                    stats["fd_sampling_fraction"] / fd_steps
+                )
                 model.logger.info(
                     "TIP finite population: training_windows=%s | "
                     "residual_windows=%.1f | sampling_fraction=%.4f | "
-                    "fd_steps=%d | cone_radius=%s | gate_mode=%s",
+                    "optimizer_steps=%d | fd_steps=%d | "
+                    "cone_radius=%s | gate_mode=%s",
                     tip_population_size,
-                    stats["fd_residual_windows"] / fd_steps,
-                    stats["fd_sampling_fraction"] * steps / fd_steps,
+                    fd_mean_residual,
+                    fd_mean_fraction,
+                    steps,
                     stats.get("fd_steps", 0),
                     cone_radius,
                     gate_mode,
