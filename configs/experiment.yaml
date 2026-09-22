@@ -67,8 +67,10 @@ training:
 tip:
   subspace_rank: 3
   epsilon: 0.001
-  gate_mode: ucb
-  gate_delta: 0.1
-  cone_delta: 0.3
+  gate_mode: safe_release
+  cone_radius: hotelling
+  cone_delta: 0.1
   accept_only_if_improves: false
-  prediction_probe_batches: 3
+  prediction_probe_batches: 4
+  preserve_norm: true
+  warmup_epochs: 10

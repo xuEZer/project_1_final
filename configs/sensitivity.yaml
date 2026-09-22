@@ -1,0 +1,34 @@
+# Parameter sensitivity around the validated recipe, on the c1 cell.
+# OFAT: baseline + one-axis-at-a-time variants, B1 paired in-batch.
+# 7 variants x 2 stages x 5 seeds = 70 runs.
+
+name: ablation_base
+
+stage: !choice [B1, B2]
+
+dataset:
+  name: azure2019_I_5T
+imputer:
+  name: SAITS
+predictor:
+  name: Toto2
+
+device: [0]
+seed: !choice [102, 103, 104, 105, 106]
+
+tip:
+  subspace_rank: 3
+  epsilon: 0.001
+  cone_delta: 0.1
+  prediction_probe_batches: 4
+  warmup_epochs: 10
+
+sweep:
+  mode: ofat
+  include_baseline: true
+  axes:
+    tip.cone_delta: [0.05, 0.3]
+    tip.prediction_probe_batches: [2, 6]
+    tip.warmup_epochs: [0, 5]
+    tip.subspace_rank: [2, 4]
+    tip.epsilon: [0.0001, 0.01]
