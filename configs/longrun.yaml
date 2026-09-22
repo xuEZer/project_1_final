@@ -1,0 +1,26 @@
+# Long-horizon mechanism demonstration, c1 cell.
+#
+# The 10-epoch ablation stays in the "both objectives improve together"
+# regime; the first-decrease-then-increase of the forecast loss needs the
+# reconstruction objective to saturate.  20 epochs should reach it.  Only
+# B1 (raw), B2 (full method) and B5 (no margin gate) run: B1 supplies the
+# rise, B2 the pinned flat line, B5 the uncontrolled-intervention counter.
+# Protocol fields come from ablation_base (via the root name) with the
+# horizon overridden.
+
+name: ablation_base
+
+stage: !choice [B1, B2, B5]
+
+dataset:
+  name: azure2019_I_5T
+imputer:
+  name: SAITS
+predictor:
+  name: Toto2
+
+device: [0]
+seed: !choice [102, 103, 104]
+
+training:
+  max_epochs: 20
