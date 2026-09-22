@@ -278,6 +278,10 @@ def _run_b2(
     cone_delta = config.getfloat(
         "tip", "cone_delta", fallback=confidence_delta,
     )
+    cone_radius = config.get("tip", "cone_radius", fallback="hotelling")
+    finite_difference_third_derivative = config.getfloat(
+        "tip", "finite_difference_third_derivative", fallback=0.0,
+    )
 
     robust_gate_mode = config.get("tip", "gate_mode", fallback="ucb")
     variants = {
@@ -302,8 +306,10 @@ def _run_b2(
     )
     logger.info(
         "  subspace_rank=%d, epsilon=%g, gate_delta=%g, cone_delta=%g, "
+        "cone_radius=%s, fd_third_derivative=%g, "
         "basis_mode=%s, correction_mode=%s, gate_mode=%s",
-        subspace_rank, epsilon, gate_delta, cone_delta, basis_mode, correction_mode,
+        subspace_rank, epsilon, gate_delta, cone_delta, cone_radius,
+        finite_difference_third_derivative, basis_mode, correction_mode,
         gate_mode,
     )
     joint_model.fit_tip(
@@ -316,6 +322,8 @@ def _run_b2(
         confidence_delta=confidence_delta,
         gate_delta=gate_delta,
         cone_delta=cone_delta,
+        cone_radius=cone_radius,
+        finite_difference_third_derivative=finite_difference_third_derivative,
         basis_mode=basis_mode,
         correction_mode=correction_mode,
         gate_mode=gate_mode,

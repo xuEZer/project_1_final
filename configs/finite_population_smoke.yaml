@@ -1,0 +1,53 @@
+# Finite-population smoke sweep on the c1 cell.
+#
+# Validates the revised statistical design end to end on real data before any
+# full rerun.  Three axes are the ones the revised theory actually moves:
+#
+#   tip.prediction_probe_batches  probe size m_t (hence the sampling fraction
+#                                 f_t = m_t / M_t and the FPC factor 1 - f_t)
+#   tip.cone_radius               ellipsoid radius family; the self-test shows
+#                                 hotelling/chi2 hit their nominal coverage on
+#                                 a rank-8 population while the univariate
+#                                 student_t radius collapses to ~0
+#   tip.cone_delta                conservatism level 1 - delta
+#
+# B1 runs alongside B2 so every setting keeps a paired endpoint reference.
+#
+#   python run_expman.py --config configs/finite_population_smoke.yaml
+#
+# The same file documents the default method configuration: gate_mode
+# safe_release releases the raw optimizer step only when it is certified
+# feasible for the confidence set of the full-training mean, and corrects
+# otherwise.
+
+name: ablation_base
+
+stage: !choice [B1, B2]
+
+dataset:
+  name: azure2019_I_5T
+imputer:
+  name: SAITS
+predictor:
+  name: Toto2
+
+device: [0]
+seed: !choice [102, 103]
+
+training:
+  max_epochs: 10
+
+tip:
+  subspace_rank: 3
+  prediction_probe_batches: 3
+  gate_mode: safe_release
+  cone_radius: hotelling
+  cone_delta: 0.1
+
+sweep:
+  mode: ofat
+  include_baseline: true
+  axes:
+    tip.prediction_probe_batches: [1, 6]
+    tip.cone_radius: [chi2, student_t]
+    tip.cone_delta: [0.3]

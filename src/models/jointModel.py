@@ -14,6 +14,8 @@ import math
 import time
 
 import numpy as np
+from scipy.stats import chi2 as chi2_dist
+from scipy.stats import f as f_dist
 from scipy.stats import t as student_t
 import torch
 import torch.nn as nn
@@ -35,6 +37,9 @@ def _discard_metric(name: str, value: float, step: int) -> None:
 
 class JointModel(nn.Module):
     """Wrap an imputer (trainable) and predictor (inference-only)."""
+
+    # Radius families for the covariance-weighted coordinate ellipsoid.
+    CONE_RADIUS_KINDS = ("hotelling", "chi2", "student_t")
 
     def __init__(
         self,
@@ -616,57 +621,149 @@ class JointModel(nn.Module):
         return samples.mean() - critical * standard_error
 
     @staticmethod
-    def _robust_subspace_projection(
-        update_coordinates: torch.Tensor,
-        coordinate_samples: torch.Tensor,
+    def _ellipsoid_radius(
+        rank: int,
+        sample_count: int,
         delta: float,
+        radius_kind: str = "hotelling",
+    ) -> float:
+        """Radius of a rank-dimensional confidence ellipsoid at level 1-delta.
+
+        ``hotelling`` is the exact normal-theory radius
+        ``sqrt(rank (n-1)/(n-rank) F_{rank,n-rank,1-delta})``, ``chi2`` its
+        large-sample limit, and ``student_t`` the univariate quantile of the
+        original implementation (the rank = 1 special case).  The radius of a
+        rank-dimensional ellipsoid must grow like ``sqrt(rank)``, which the
+        Student-t choice does not.
+        """
+        if radius_kind == "student_t":
+            return float(student_t.ppf(1.0 - delta, df=max(sample_count - 1, 1)))
+        if radius_kind == "hotelling":
+            degrees = max(sample_count - 1, 1)
+            if degrees - rank + 1 <= 0:
+                return JointModel._ellipsoid_radius(
+                    rank, sample_count, delta, "chi2"
+                )
+            scale = rank * degrees / (degrees - rank + 1)
+            return float(
+                np.sqrt(scale * f_dist.ppf(1.0 - delta, rank, degrees - rank + 1))
+            )
+        if radius_kind != "chi2":
+            raise ValueError(
+                f"radius_kind must be one of {JointModel.CONE_RADIUS_KINDS}, "
+                f"got {radius_kind!r}"
+            )
+        return float(np.sqrt(chi2_dist.ppf(1.0 - delta, df=max(rank, 1))))
+
+    @staticmethod
+    def _finite_population_ellipsoid(
+        batch_coordinates: torch.Tensor,
+        probe_coordinates: torch.Tensor,
+        population_size: int,
+        delta: float,
+        radius_kind: str = "hotelling",
+        epsilon: float = 0.0,
+        third_derivative_bound: float = 0.0,
+    ) -> tuple[torch.Tensor, torch.Tensor, float, dict[str, float]]:
+        """Window-level finite-population estimator, covariance and radius.
+
+        Implements the revised statistical analysis.  ``batch_coordinates``
+        holds the per-window finite-difference coordinates of the windows in
+        the current optimizer batch and ``probe_coordinates`` those of the
+        probe windows, which were drawn uniformly without replacement from the
+        complement of that batch.  Conditioning on the optimizer batch makes
+        the un-queried residual windows a fixed finite population, so the
+        full-training mean is estimated by
+
+            c_hat = (b/N) mean(batch) + (M/N) mean(probe),   M = N - b,
+
+        which is conditionally unbiased, with finite-population covariance
+
+            (M/N)^2 (1 - f)/m S_probe,   f = m/M,
+
+        estimated without bias by the probe sample covariance when ``m >= 2``.
+        The radius is inflated by the deterministic central-difference bound
+        ``sqrt(rank) M_3 epsilon^2 / 6`` measured in the ellipsoid's own metric,
+        ``beta_eff = beta + rho_eps / sqrt(lambda_min(Sigma))``.
+        """
+        batch = batch_coordinates.detach().to(dtype=torch.float64)
+        probe = probe_coordinates.detach().to(dtype=torch.float64)
+        if batch.ndim != 2 or probe.ndim != 2:
+            raise ValueError("coordinate blocks must have shape [n, rank]")
+        if batch.shape[1] != probe.shape[1]:
+            raise ValueError("batch and probe blocks must share the rank")
+        rank = batch.shape[1]
+        device = probe.device
+        batch_windows = float(batch.shape[0])
+        probe_windows = float(probe.shape[0])
+        total = float(max(int(population_size), int(batch_windows + probe_windows)))
+        residual = max(total - batch_windows, 1.0)
+        fraction = min(probe_windows / residual, 1.0)
+
+        probe_mean = probe.mean(dim=0)
+        estimate = (batch_windows / total) * batch.mean(dim=0) + (
+            residual / total
+        ) * probe_mean
+        if probe.shape[0] >= 2:
+            centered = probe - probe_mean
+            sample_covariance = centered.T @ centered / (probe_windows - 1.0)
+        else:
+            sample_covariance = torch.zeros(
+                (rank, rank), dtype=torch.float64, device=device
+            )
+        covariance = (
+            (residual / total) ** 2
+            * (1.0 - fraction)
+            / max(probe_windows, 1.0)
+            * sample_covariance
+        )
+        ridge = max(
+            float(torch.trace(covariance).item()) / max(rank, 1) * 1e-8, 1e-12
+        )
+        covariance = covariance + ridge * torch.eye(
+            rank, dtype=torch.float64, device=device
+        )
+        beta = JointModel._ellipsoid_radius(
+            rank, max(int(probe_windows), 2), delta, radius_kind
+        )
+        if third_derivative_bound > 0.0 and epsilon > 0.0:
+            smallest = float(
+                torch.linalg.eigvalsh(covariance)[0].clamp_min(1e-300).item()
+            )
+            beta += (
+                np.sqrt(rank)
+                * third_derivative_bound
+                * epsilon**2
+                / 6.0
+                / np.sqrt(smallest)
+            )
+        return estimate, covariance, beta, {
+            "population_windows": total,
+            "batch_windows": batch_windows,
+            "probe_windows": probe_windows,
+            "residual_windows": residual,
+            "sampling_fraction": fraction,
+            "beta": beta,
+        }
+
+    @staticmethod
+    def _robust_cone_solve(
+        raw: torch.Tensor,
+        mean: torch.Tensor,
+        covariance_mean: torch.Tensor,
+        beta: float,
     ) -> tuple[torch.Tensor, dict[str, float]]:
-        """Project onto a confidence cone for the prediction direction.
+        """Min-change coordinate inside the robust cone, by KKT.
 
-        The returned coordinates minimise Euclidean deviation from the raw
-        imputation update subject to
-
-            mean(c)^T x - beta * sqrt(x^T Cov(mean(c)) x) >= 0.
-
-        This accounts for uncertainty in the *whole* subspace direction,
-        whereas the scalar UCB only decides whether the raw update conflicts.
-        The projection is solved in Torch from the KKT system of the equivalent
-        quadratic cone.  Diagonalising that tiny system reduces the constrained
-        problem to a monotone one-dimensional root, avoiding a per-step SciPy
+        Solves ``min ||x - raw||^2`` subject to
+        ``mean^T x - beta sqrt(x^T Cov x) >= 0``.  The KKT system of the
+        equivalent quadratic cone is diagonalised, which reduces the constrained
+        problem to a monotone one-dimensional root and avoids a per-step SciPy
         optimiser and its Python callbacks.  A statistically unidentified cone
         falls back to the zero coordinate vector, which safely skips the
         conflicting step.
         """
-        if coordinate_samples.ndim != 2:
-            raise ValueError("coordinate_samples must have shape [n, rank]")
-        sample_count, rank = coordinate_samples.shape
-        if sample_count < 2:
-            return torch.zeros_like(update_coordinates), {
-                "success": 0.0,
-                "margin": 0.0,
-                "fallback": 1.0,
-            }
-
-        work_device = update_coordinates.device
-        mean = coordinate_samples.detach().to(
-            device=work_device, dtype=torch.float64,
-        ).mean(dim=0)
-        samples = coordinate_samples.detach().to(
-            device=work_device, dtype=torch.float64,
-        )
-        raw = update_coordinates.detach().to(dtype=torch.float64)
-        centered = samples - mean
-        covariance_mean = centered.T @ centered
-        covariance_mean /= sample_count * (sample_count - 1)
-        ridge = max(
-            float(torch.trace(covariance_mean).item()) / max(rank, 1) * 1e-8,
-            1e-12,
-        )
-        covariance_mean.add_(
-            torch.eye(rank, dtype=torch.float64, device=work_device),
-            alpha=ridge,
-        )
-        beta = float(student_t.ppf(1.0 - delta, df=sample_count - 1))
+        work_device = raw.device
 
         def robust_margin(value: torch.Tensor) -> torch.Tensor:
             variance = torch.clamp(value @ covariance_mean @ value, min=0.0)
@@ -757,15 +854,80 @@ class JointModel(nn.Module):
         if not success:
             solution.zero_()
         fallback = float(torch.linalg.vector_norm(solution).item() <= 1e-10)
-        output = solution.to(
-            dtype=update_coordinates.dtype,
-            device=update_coordinates.device,
-        )
-        return output, {
+        return solution, {
             "success": success,
             "margin": float(robust_margin(solution).item()),
             "fallback": fallback,
         }
+
+    @staticmethod
+    def _robust_subspace_projection(
+        update_coordinates: torch.Tensor,
+        coordinate_samples: torch.Tensor,
+        delta: float,
+        radius_kind: str = "student_t",
+    ) -> tuple[torch.Tensor, dict[str, float]]:
+        """Legacy entry point: ellipsoid fitted to the raw probe samples.
+
+        The mean covariance ``S/n`` of the original implementation is the
+        standard error of a mean over an infinite population.  The revised
+        finite-population design runs through
+        :meth:`_finite_population_ellipsoid`; this path is kept for the
+        ablation arms and for reproducing the earlier runs.
+        """
+        if coordinate_samples.ndim != 2:
+            raise ValueError("coordinate_samples must have shape [n, rank]")
+        sample_count, rank = coordinate_samples.shape
+        if sample_count < 2:
+            return torch.zeros_like(update_coordinates), {
+                "success": 0.0,
+                "margin": 0.0,
+                "fallback": 1.0,
+            }
+        work_device = update_coordinates.device
+        samples = coordinate_samples.detach().to(
+            device=work_device, dtype=torch.float64
+        )
+        raw = update_coordinates.detach().to(dtype=torch.float64)
+        mean = samples.mean(dim=0)
+        centered = samples - mean
+        covariance_mean = centered.T @ centered
+        covariance_mean /= sample_count * (sample_count - 1)
+        ridge = max(
+            float(torch.trace(covariance_mean).item()) / max(rank, 1) * 1e-8,
+            1e-12,
+        )
+        covariance_mean.add_(
+            torch.eye(rank, dtype=torch.float64, device=work_device),
+            alpha=ridge,
+        )
+        beta = JointModel._ellipsoid_radius(
+            rank, sample_count, delta, radius_kind
+        )
+        solution, diagnostics = JointModel._robust_cone_solve(
+            raw, mean, covariance_mean, beta
+        )
+        output = solution.to(
+            dtype=update_coordinates.dtype,
+            device=update_coordinates.device,
+        )
+        return output, diagnostics
+
+    @staticmethod
+    def _ellipsoid_robust_margin(
+        coordinates: torch.Tensor,
+        mean: torch.Tensor,
+        covariance_mean: torch.Tensor,
+        beta: float,
+    ) -> float:
+        """Robust lower alignment of ``coordinates`` for a given ellipsoid.
+
+        This is the safe-release statistic: the raw coordinate is released only
+        when it is non-negative.
+        """
+        value = coordinates.detach().to(dtype=torch.float64)
+        variance = torch.clamp(value @ covariance_mean @ value, min=0.0)
+        return float(mean @ value - beta * torch.sqrt(variance).item())
 
     @staticmethod
     def _robust_cone_margin(
@@ -1026,7 +1188,10 @@ class JointModel(nn.Module):
                             selected_probe_indices.append(
                                 remaining_candidates.pop(probe_choice)
                             )
-                        prediction_gradient_microbatches = list(accum_microbatches)
+                        prediction_gradient_microbatches = [
+                            dict(microbatch, is_probe=False)
+                            for microbatch in accum_microbatches
+                        ]
                         for probe_index in selected_probe_indices:
                             (
                                 probe_X_N,
@@ -1045,6 +1210,7 @@ class JointModel(nn.Module):
                                 "X_A_mask": probe_X_A_mask,
                                 "Y_N": probe_Y_N,
                                 "Y_N_mask": probe_Y_N_mask,
+                                "is_probe": True,
                             })
                         self.logger.info(
                             "TIP probe batch: epoch=%d | step=%d | "
@@ -1878,6 +2044,7 @@ class JointModel(nn.Module):
         epsilon=1e-3, confidence_delta=0.05, accum_steps=None,
         on_epoch_end=None, basis_mode="history", correction_mode="robust",
         gate_mode="ucb", anchor_delta=0.0, gate_delta=None, cone_delta=None,
+        cone_radius="hotelling", finite_difference_third_derivative=0.0,
         accept_only_if_improves=False, prediction_probe_batches=1,
     ):
         if gate_delta is None:
@@ -1902,10 +2069,20 @@ class JointModel(nn.Module):
             raise ValueError("basis_mode must be 'history' or 'random'")
         if correction_mode not in {"robust", "point"}:
             raise ValueError("correction_mode must be 'robust' or 'point'")
-        if gate_mode not in {"ucb", "lcb", "mean", "any", "cone"}:
+        if gate_mode not in {"ucb", "lcb", "mean", "any", "cone", "safe_release"}:
             raise ValueError(
-                "gate_mode must be 'ucb', 'lcb', 'mean', 'any', or 'cone'"
+                "gate_mode must be 'ucb', 'lcb', 'mean', 'any', 'cone', or "
+                "'safe_release'"
             )
+        if cone_radius not in JointModel.CONE_RADIUS_KINDS:
+            raise ValueError(
+                f"cone_radius must be one of {JointModel.CONE_RADIUS_KINDS}"
+            )
+        if finite_difference_third_derivative < 0.0:
+            raise ValueError(
+                "finite_difference_third_derivative must be non-negative"
+            )
+        self.cone_radius_kind = cone_radius
         if accum_steps is None:
             accum_steps = self.accum_steps
         self.logger.info(
@@ -1913,13 +2090,15 @@ class JointModel(nn.Module):
             "finite_difference_directions_per_step=%d | "
             "gradient_scope=current_optimizer_batch_plus_%d_probe_batches | "
             "step_monitor_scope=current_optimizer_batch | "
-            "epsilon=%g | gate_delta=%g | cone_delta=%g | basis_mode=%s | "
+            "epsilon=%g | gate_delta=%g | cone_delta=%g | cone_radius=%s | "
+            "basis_mode=%s | "
             "correction_mode=%s | gate_mode=%s | "
             "accept_only_if_improves=%s | "
             "update_space=adamw_parameter_displacement | "
             "prediction_rng=common_random_numbers",
             subspace_rank, 2 * subspace_rank, prediction_probe_batches,
-            epsilon, gate_delta, cone_delta, basis_mode, correction_mode, gate_mode,
+            epsilon, gate_delta, cone_delta, cone_radius, basis_mode,
+            correction_mode, gate_mode,
             accept_only_if_improves,
         )
 
@@ -1950,6 +2129,8 @@ class JointModel(nn.Module):
             "robust_margin": 0.0,
             "robust_solver_success": 0.0,
             "robust_fallback": 0.0,
+            "fd_sampling_fraction": 0.0,
+            "fd_residual_windows": 0.0,
         }
         prediction_change_stats = {
             "observed": 0,
@@ -2028,6 +2209,7 @@ class JointModel(nn.Module):
             coordinate_batches = []
             z_batches = []
             diagnostic_batches = []
+            diagnostic_is_probe = []
             for rng_index, microbatch in enumerate(microbatches):
                 coordinates, z_samples, diagnostics = (
                     model._compute_subspace_prediction_gradient(
@@ -2047,6 +2229,9 @@ class JointModel(nn.Module):
                 z_batches.append(z_samples)
                 if diagnostics:
                     diagnostic_batches.append(diagnostics)
+                    diagnostic_is_probe.append(
+                        bool(microbatch.get("is_probe", False))
+                    )
 
             if diagnostic_batches:
                 coordinate_samples = torch.cat([
@@ -2066,6 +2251,50 @@ class JointModel(nn.Module):
                 coordinate_samples = prediction_coordinates.unsqueeze(0)
                 unit_coordinate_samples = coordinate_samples
             unit_z_samples = unit_coordinate_samples @ update_coordinates
+
+            # Finite-population statistics of the full-training coordinate
+            # mean.  The probe batches were drawn without replacement from the
+            # complement of the current optimizer batch, so conditioning on
+            # that batch makes the unqueried windows a fixed finite population
+            # and the weighted estimator below conditionally unbiased.
+            finite_population = None
+            if (
+                diagnostic_batches
+                and tip_population_size
+                and any(diagnostic_is_probe)
+                and not all(diagnostic_is_probe)
+            ):
+                batch_windows = torch.cat([
+                    item["coordinate_samples"]
+                    for item, is_probe in zip(
+                        diagnostic_batches, diagnostic_is_probe, strict=True
+                    )
+                    if not is_probe
+                ])
+                probe_windows = torch.cat([
+                    item["coordinate_samples"]
+                    for item, is_probe in zip(
+                        diagnostic_batches, diagnostic_is_probe, strict=True
+                    )
+                    if is_probe
+                ])
+                if probe_windows.shape[0] >= 2:
+                    finite_population = model._finite_population_ellipsoid(
+                        batch_windows,
+                        probe_windows,
+                        tip_population_size,
+                        cone_delta,
+                        cone_radius,
+                        epsilon,
+                        finite_difference_third_derivative,
+                    )
+                    prediction_coordinates = finite_population[0]
+                    stats["fd_sampling_fraction"] += finite_population[3][
+                        "sampling_fraction"
+                    ]
+                    stats["fd_residual_windows"] += finite_population[3][
+                        "residual_windows"
+                    ]
             dot = torch.dot(update_coordinates, prediction_coordinates)
             # The gate treats the probed windows as a simple random sample of
             # the training stream: their number, not the batch partition,
@@ -2084,7 +2313,25 @@ class JointModel(nn.Module):
             cosine = dot / (gi_norm * gp_norm).clamp_min(1e-12)
             raw_conflict = dot.item() < 0.0
             rank_ready = effective_rank >= subspace_rank
-            if gate_mode == "ucb":
+            finite_population_margin = None
+            if finite_population is not None:
+                finite_population_margin = (
+                    model._ellipsoid_robust_margin(
+                        update_coordinates,
+                        finite_population[0],
+                        finite_population[1],
+                        finite_population[2],
+                    )
+                )
+            if gate_mode == "safe_release":
+                # Release the raw coordinate only when it is certified feasible
+                # for the confidence set of the full-training mean; uncertainty
+                # triggers correction rather than suppressing it.
+                if finite_population_margin is not None:
+                    gate_conflict = finite_population_margin < 0.0
+                else:
+                    gate_conflict = dot.item() < 0.0
+            elif gate_mode == "ucb":
                 gate_conflict = upper.item() < 0.0
             elif gate_mode == "lcb":
                 gate_conflict = lower.item() < 0.0
@@ -2106,7 +2353,18 @@ class JointModel(nn.Module):
                 "fallback": 0.0,
             }
             if project:
-                if correction_mode == "robust":
+                if correction_mode == "robust" and finite_population is not None:
+                    solution, robust_diagnostics = model._robust_cone_solve(
+                        update_coordinates.detach().to(dtype=torch.float64),
+                        finite_population[0],
+                        finite_population[1],
+                        finite_population[2],
+                    )
+                    candidate_coordinates = solution.to(
+                        dtype=update_coordinates.dtype,
+                        device=update_coordinates.device,
+                    )
+                elif correction_mode == "robust":
                     candidate_coordinates, robust_diagnostics = (
                         model._robust_subspace_projection(
                             update_coordinates,
@@ -2329,6 +2587,14 @@ class JointModel(nn.Module):
                     averages["ucb"], averages["z_mean"], averages["z_std"],
                     averages["z_sem"], averages["coordinate_variation"],
                     averages["q_center"],
+                )
+                model.logger.info(
+                    "TIP finite population: sampling_fraction=%.6g | "
+                    "residual_windows=%.6g | cone_radius=%s | gate_mode=%s",
+                    averages["fd_sampling_fraction"] * steps / max(projected, 1),
+                    stats["fd_residual_windows"] / max(projected, 1),
+                    cone_radius,
+                    gate_mode,
                 )
                 anchor_requests = float(stats.get("anchor_requested", 0.0))
                 model.logger.info(
