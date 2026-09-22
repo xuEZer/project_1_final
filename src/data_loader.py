@@ -19,31 +19,68 @@ _logger = logging.getLogger(__name__)
 _MAX_EXPERIMENT_SERIES_POINTS = 2_000
 
 
-def _cached_snapshot(repo_id: str, allow_patterns: str) -> str:
-    """Resolve a dataset snapshot from the local cache, downloading only if needed.
+def _snapshot_subtree(allow_patterns: str) -> str:
+    """The single directory ``allow_patterns`` selects, as a relative path."""
+    return allow_patterns.split("/*", 1)[0].strip("/")
 
-    ``revision="main"`` has to be resolved against the Hub, which is a network
-    round trip on every call -- and the Hub is not always reachable, in which
-    case the client waits out its timeout and retries.  A machine that already
-    holds the snapshot should not pay that: the local cache is tried first, and
-    the network is used only when it does not have this revision.
+
+def _require_subtree(snapshot_dir: str, allow_patterns: str) -> str:
+    """Fail loudly when a resolved snapshot does not hold the requested files.
+
+    A snapshot directory that resolves successfully says nothing about its
+    contents, so the subtree is checked explicitly before it is handed to
+    ``load_from_disk``.  Without this the caller dies on a bare
+    ``FileNotFoundError`` naming a directory that was simply never downloaded.
+    """
+    subtree = _snapshot_subtree(allow_patterns)
+    resolved = Path(snapshot_dir) / subtree
+    if not resolved.is_dir():
+        raise FileNotFoundError(
+            f"snapshot {snapshot_dir} does not contain {subtree!r} "
+            f"(allow_patterns={allow_patterns!r})"
+        )
+    return snapshot_dir
+
+
+def _cached_snapshot(repo_id: str, allow_patterns: str) -> str:
+    """Resolve a dataset snapshot, asking the Hub on every call.
+
+    The Hub is authoritative here.  An earlier version tried the local cache
+    first and fell back to the network only on a miss, but cache resolution
+    does not consider ``allow_patterns``: once the revision is cached,
+    huggingface_hub hands back the snapshot directory even when not one file
+    matched, so a machine holding an incomplete snapshot never fell through to
+    the network and every run on a missing dataset failed with a bare
+    ``FileNotFoundError``.  The directory list is now always re-resolved, and
+    the requested subtree is verified before the path is returned.
+
+    Only when the Hub itself is unreachable does a locally cached snapshot
+    serve the request -- and then only after the same subtree check, so a
+    partial cache fails loudly instead of silently.
     """
     try:
-        return snapshot_download(
-            repo_id=repo_id,
-            repo_type="dataset",
-            revision="main",
-            allow_patterns=allow_patterns,
-            local_files_only=True,
-        )
-    except Exception as error:  # noqa: BLE001 - any miss means "fetch it"
-        _logger.info("snapshot %s not in the local cache (%s); fetching", repo_id, error)
-        return snapshot_download(
+        snapshot_dir = snapshot_download(
             repo_id=repo_id,
             repo_type="dataset",
             revision="main",
             allow_patterns=allow_patterns,
         )
+        return _require_subtree(snapshot_dir, allow_patterns)
+    except Exception as error:  # noqa: BLE001 - any failure means "try the cache"
+        _logger.warning(
+            "snapshot %s could not be fetched from the Hub (%s); falling back "
+            "to the local cache",
+            repo_id,
+            error,
+        )
+    snapshot_dir = snapshot_download(
+        repo_id=repo_id,
+        repo_type="dataset",
+        revision="main",
+        allow_patterns=allow_patterns,
+        local_files_only=True,
+    )
+    return _require_subtree(snapshot_dir, allow_patterns)
 
 
 def preprocess_dataset(
