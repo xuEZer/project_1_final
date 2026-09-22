@@ -2071,8 +2071,10 @@ class JointModel(nn.Module):
             raise ValueError("prediction_probe_batches must be non-negative")
         if basis_mode not in {"history", "random"}:
             raise ValueError("basis_mode must be 'history' or 'random'")
-        if correction_mode not in {"robust", "point"}:
-            raise ValueError("correction_mode must be 'robust' or 'point'")
+        if correction_mode not in {"robust", "point", "gradient"}:
+            raise ValueError(
+                "correction_mode must be 'robust', 'point', or 'gradient'"
+            )
         if gate_mode not in {"ucb", "lcb", "mean", "any", "cone", "safe_release"}:
             raise ValueError(
                 "gate_mode must be 'ucb', 'lcb', 'mean', 'any', 'cone', or "
@@ -2376,7 +2378,25 @@ class JointModel(nn.Module):
                 "fallback": 0.0,
             }
             if project:
-                if correction_mode == "robust" and finite_population is not None:
+                if correction_mode == "gradient":
+                    # Direct-application control: replace the proposal with the
+                    # estimated forecast-gradient direction (norm-preserved
+                    # below), the "descend Q" arm theory predicts to be weaker.
+                    scale = (
+                        torch.linalg.vector_norm(update_coordinates)
+                        / gp_norm.clamp_min(1e-12)
+                        if preserve_norm
+                        else 1.0
+                    )
+                    candidate_coordinates = (
+                        -scale * prediction_coordinates
+                    )
+                    robust_diagnostics = {
+                        "success": 1.0,
+                        "margin": float(dot.item()),
+                        "fallback": 0.0,
+                    }
+                elif correction_mode == "robust" and finite_population is not None:
                     solution, robust_diagnostics = model._robust_cone_solve(
                         update_coordinates.detach().to(dtype=torch.float64),
                         finite_population[0],

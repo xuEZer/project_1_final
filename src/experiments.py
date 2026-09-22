@@ -166,7 +166,7 @@ def run_experiment(
         trained_model = _run_rq4(
             joint_model, train_loader, config, logger, on_epoch_end
         )
-    elif exp_type in {"B2", "B3", "B4", "B5"}:
+    elif exp_type in {"B2", "B3", "B4", "B5", "B6", "B7"}:
         trained_model = _run_b2(
             joint_model, train_loader, config, logger, on_epoch_end,
             exp_type=exp_type,
@@ -174,7 +174,7 @@ def run_experiment(
     else:
         raise ValueError(
             f"Unknown experiment type {exp_type}. "
-            "Available types: B1, B2, B3, B4, B5, RQ3, RQ4"
+            "Available types: B1, B2, B3, B4, B5, B6, B7, RQ3, RQ4"
         )
 
     if final_epoch is not None and final_val_pred is not None:
@@ -290,11 +290,17 @@ def _run_b2(
     warmup_epochs = config.getint("tip", "warmup_epochs", fallback=0)
 
     robust_gate_mode = config.get("tip", "gate_mode", fallback="ucb")
+    # B6: the full mechanism without the warm-up (engaged from epoch 0).
+    # B7: same gate, but the fired correction is replaced by the estimated
+    # forecast-gradient direction itself (norm-preserved), the direct
+    # "descend Q" control that theory predicts to be weaker.
     variants = {
-        "B2": ("history", "robust", robust_gate_mode),
-        "B3": ("random", "robust", robust_gate_mode),
-        "B4": ("history", "point", robust_gate_mode),
-        "B5": ("history", "robust", "mean"),
+        "B2": ("history", "robust", robust_gate_mode, {}),
+        "B3": ("random", "robust", robust_gate_mode, {}),
+        "B4": ("history", "point", robust_gate_mode, {}),
+        "B5": ("history", "robust", "mean", {}),
+        "B6": ("history", "robust", robust_gate_mode, {"warmup_epochs": 0}),
+        "B7": ("history", "gradient", robust_gate_mode, {}),
     }
     anchor_delta = config.getfloat("tip", "anchor_delta", fallback=0.0)
     accept_only_if_improves = config.getboolean(
@@ -303,11 +309,11 @@ def _run_b2(
     prediction_probe_batches = config.getint(
         "tip", "prediction_probe_batches", fallback=1,
     )
-    basis_mode, correction_mode, gate_mode = variants[exp_type]
+    basis_mode, correction_mode, gate_mode, overrides = variants[exp_type]
     log_phase(
         logger,
         f"{exp_type} — TIP ({basis_mode} subspace, {correction_mode} "
-        f"correction, {gate_mode} gate)",
+        f"correction, {gate_mode} gate, overrides={overrides or 'none'})",
         num_epoch,
     )
     logger.info(
@@ -319,6 +325,10 @@ def _run_b2(
         finite_difference_third_derivative, preserve_norm, warmup_epochs,
         basis_mode, correction_mode, gate_mode,
     )
+    tip_kwargs = dict(
+        warmup_epochs=warmup_epochs,
+    )
+    tip_kwargs.update(overrides)
     joint_model.fit_tip(
         data_loader=train_loader,
         phase_name=exp_type.lower(),
@@ -332,12 +342,12 @@ def _run_b2(
         cone_radius=cone_radius,
         finite_difference_third_derivative=finite_difference_third_derivative,
         preserve_norm=preserve_norm,
-        warmup_epochs=warmup_epochs,
         basis_mode=basis_mode,
         correction_mode=correction_mode,
         gate_mode=gate_mode,
         anchor_delta=anchor_delta,
         accept_only_if_improves=accept_only_if_improves,
+        **tip_kwargs,
         prediction_probe_batches=prediction_probe_batches,
     )
 
