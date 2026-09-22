@@ -69,6 +69,6 @@ tip:
   epsilon: 0.0001
   gate_mode: ucb
   gate_delta: 0.1
-  cone_delta: 0.03
+  cone_delta: 0.1
   accept_only_if_improves: false
   prediction_probe_batches: 15
