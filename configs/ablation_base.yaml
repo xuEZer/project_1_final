@@ -34,10 +34,18 @@ training:
   max_epochs: 20
 
 tip:
+  # Validated recipe (configs/fp_delta_sweep.yaml, 24/24 succeeded, B2 -6..-9%
+  # below B1 on c1): the forecast mechanism sleeps for the first half of
+  # training and engages only for the second half; the safe_release gate and
+  # the Hotelling ellipsoid implement the finite-population theory; the
+  # corrected displacement keeps the optimizer's step norm so the two arms
+  # differ in direction only.
   subspace_rank: 3
   epsilon: 0.001
-  gate_mode: ucb
-  gate_delta: 0.1
-  cone_delta: 0.3
+  gate_mode: safe_release
+  cone_radius: hotelling
+  cone_delta: 0.1
   accept_only_if_improves: false
-  prediction_probe_batches: 3
+  prediction_probe_batches: 4
+  preserve_norm: true
+  warmup_epochs: 10
