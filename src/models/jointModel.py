@@ -2288,7 +2288,10 @@ class JointModel(nn.Module):
                         epsilon,
                         finite_difference_third_derivative,
                     )
-                    prediction_coordinates = finite_population[0]
+                    prediction_coordinates = finite_population[0].to(
+                        dtype=update_coordinates.dtype,
+                        device=update_coordinates.device,
+                    )
                     stats["fd_sampling_fraction"] += finite_population[3][
                         "sampling_fraction"
                     ]
