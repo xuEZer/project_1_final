@@ -1,0 +1,54 @@
+# cone_delta sweep for the finite-population design, 20 epochs.
+#
+# The conservatism level 1 - delta is the only methodological knob the revised
+# theory leaves free: it sets the radius beta and therefore how often the raw
+# optimizer step fails to be certified safe for the confidence set of the
+# full-training mean.  The radius FAMILY is pinned to hotelling --- it is a
+# statistical specification fixed by (rank, probe size, delta), not a method
+# choice, so sweeping it would amount to selecting a radius by its endpoint
+# score (see configs/finite_population_smoke.yaml for the coverage evidence).
+#
+# Probe budget.  This cell runs 10 optimizer batches per epoch (the run logs
+# report candidate_count = 9, i.e. num_batches - 1 accumulation window), so
+# "half of the total batches minus one" is prediction_probe_batches = 10/2 - 1
+# = 4, which puts half of the training set through the forecaster at each step
+# (the current optimizer batch plus four probe batches).  Recompute this if the
+# dataset or the loader batch size changes.
+#
+# The probe draw is uniform without replacement from the complement of the
+# current optimizer batch, which is what makes Theorem 5 (finite-population
+# mean and covariance) applicable.
+#
+#   python run_expman.py --config configs/fp_delta_sweep.yaml
+#
+# 4 tip settings x 2 stages x 3 seeds = 24 runs at 20 epochs.
+
+name: ablation_base
+
+stage: !choice [B1, B2]
+
+dataset:
+  name: azure2019_I_5T
+imputer:
+  name: SAITS
+predictor:
+  name: Toto2
+
+device: [0]
+seed: !choice [102, 103, 104]
+
+training:
+  max_epochs: 20
+
+tip:
+  subspace_rank: 3
+  prediction_probe_batches: 4
+  gate_mode: safe_release
+  cone_radius: hotelling
+  cone_delta: 0.1
+
+sweep:
+  mode: ofat
+  include_baseline: true
+  axes:
+    tip.cone_delta: [0.05, 0.3, 0.5]
