@@ -1214,10 +1214,13 @@ class JointModel(nn.Module):
                             })
                         self.logger.info(
                             "TIP probe batch: epoch=%d | step=%d | "
+                            "num_batches=%d | accum_count=%d | "
                             "current_batch=%d | probe_batches=%s | "
                             "candidate_count=%d",
                             epoch_number,
                             self.global_optim_step + 1,
+                            num_batches,
+                            accum_count,
                             batch_idx,
                             selected_probe_indices,
                             len(probe_candidates),
@@ -2131,6 +2134,7 @@ class JointModel(nn.Module):
             "robust_fallback": 0.0,
             "fd_sampling_fraction": 0.0,
             "fd_residual_windows": 0.0,
+            "fd_steps": 0,
         }
         prediction_change_stats = {
             "observed": 0,
@@ -2298,6 +2302,7 @@ class JointModel(nn.Module):
                     stats["fd_residual_windows"] += finite_population[3][
                         "residual_windows"
                     ]
+                    stats["fd_steps"] += 1
             dot = torch.dot(update_coordinates, prediction_coordinates)
             # The gate treats the probed windows as a simple random sample of
             # the training stream: their number, not the batch partition,
@@ -2566,6 +2571,7 @@ class JointModel(nn.Module):
                 projected = max(
                     stats["projected"] + stats["projection_rejected"], 1
                 )
+                fd_steps = max(stats.get("fd_steps", 0), 1)
                 averages = {
                     key: value / steps
                     for key, value in stats.items()
@@ -2592,10 +2598,13 @@ class JointModel(nn.Module):
                     averages["q_center"],
                 )
                 model.logger.info(
-                    "TIP finite population: sampling_fraction=%.6g | "
-                    "residual_windows=%.6g | cone_radius=%s | gate_mode=%s",
-                    averages["fd_sampling_fraction"] * steps / max(projected, 1),
-                    stats["fd_residual_windows"] / max(projected, 1),
+                    "TIP finite population: training_windows=%s | "
+                    "residual_windows=%.1f | sampling_fraction=%.4f | "
+                    "fd_steps=%d | cone_radius=%s | gate_mode=%s",
+                    tip_population_size,
+                    stats["fd_residual_windows"] / fd_steps,
+                    stats["fd_sampling_fraction"] * steps / fd_steps,
+                    stats.get("fd_steps", 0),
                     cone_radius,
                     gate_mode,
                 )
