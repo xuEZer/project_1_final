@@ -6,9 +6,7 @@ from typing import Any
 
 import torch.nn as nn
 
-from .BRITS import BRITS
 from .DeepMVI import DeepMVI
-from .FITS import FITS
 from .ModernTCN import ModernTCN
 from .SAITS import SAITS
 from .TSLANet import TSLANet
@@ -16,9 +14,7 @@ from .TimesNet import TimesNet
 
 IMPUTATOR_REGISTRY: dict[str, type] = {
     "SAITS": SAITS,
-    "BRITS": BRITS,
     "DeepMVI": DeepMVI,
-    "FITS": FITS,
     "ModernTCN": ModernTCN,
     "TimesNet": TimesNet,
     "TSLANet": TSLANet,
@@ -41,14 +37,6 @@ def config2param_dict4SAITS(config: ConfigParser) -> dict[str, Any]:
         "diagonal_attention_mask": config["imputer"].getboolean(
             "diagonal_attention_mask"
         ),
-        "device": config["training"]["device"],
-    }
-
-
-def config2param_dict4BRITS(config: ConfigParser) -> dict[str, Any]:
-    return {
-        "d_feature": int(config["data"]["d_feature"]),
-        "d_model": int(config["imputer"]["d_model"]),
         "device": config["training"]["device"],
     }
 
@@ -78,16 +66,6 @@ def config2param_dict4TimesNet(config: ConfigParser) -> dict[str, Any]:
         "dropout": float(config["imputer"]["dropout"]),
         "embed": config["imputer"]["embed"],
         "freq": config["imputer"]["freq"],
-        "device": config["training"]["device"],
-    }
-
-
-def config2param_dict4FITS(config: ConfigParser) -> dict[str, Any]:
-    return {
-        "d_feature": int(config["data"]["d_feature"]),
-        "d_time": int(config["data"]["lookback"]),
-        "cut_freq": int(config["imputer"]["cut_freq"]),
-        "individual": config["imputer"].getboolean("individual"),
         "device": config["training"]["device"],
     }
 
@@ -127,9 +105,7 @@ def config2param_dict4TSLANet(config: ConfigParser) -> dict[str, Any]:
 
 CONFIG_CONVERTER_REGISTRY: dict[str, Callable] = {
     "SAITS": config2param_dict4SAITS,
-    "BRITS": config2param_dict4BRITS,
     "DeepMVI": config2param_dict4DeepMVI,
-    "FITS": config2param_dict4FITS,
     "ModernTCN": config2param_dict4ModernTCN,
     "TimesNet": config2param_dict4TimesNet,
     "TSLANet": config2param_dict4TSLANet,

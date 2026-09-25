@@ -1,6 +1,21 @@
-# Shared protocol for the RQ3 component ablation (see ablation.yaml).
-# Every root !choice candidate pulls this file through its root `name`.
+# current_velocity_10T / ModernTCN / Chronos, seed=missing_seed=42.
+# Shared forecast-validation patience=5 warm-up; each branch continues 1 epoch.
+stage: B2
+
+dataset:
+  name: current_velocity_10T
+
+imputer:
+  name: ModernTCN
+
+predictor:
+  name: Chronos
+
+# GPU resource list for expman's scheduler; [training] device is derived
+# from it by src.pipeline.build_config.
 device: [0]
+
+seed: 42
 missing_seed: 42
 
 paths:
@@ -15,11 +30,6 @@ data:
   pred_len: 8
   val_ratio: 0.1
   test_ratio: 0.2
-  # Random window split holding the 7:1:2 sample counts, instead of a
-  # contiguous time-ordered cut.  The whole series is windowed first and the
-  # windows are permuted; the synthetic natural mask is then spread over the
-  # whole series, since there is no test span left to confine it to.
-  split_mode: shuffled
 
 loader:
   batch_size: 128
@@ -31,21 +41,22 @@ loader:
 training:
   optimizer: AdamW
   lr: 0.001
+  # Generic trainer compatibility; the staged protocol uses the values below.
   max_epochs: 20
 
 tip:
-  # Validated recipe (configs/fp_delta_sweep.yaml, 24/24 succeeded, B2 -6..-9%
-  # below B1 on c1): the forecast mechanism sleeps for the first half of
-  # training and engages only for the second half; the safe_release gate and
-  # the Hotelling ellipsoid implement the finite-population theory; the
-  # corrected displacement keeps the optimizer's step norm so the two arms
-  # differ in direction only.
   subspace_rank: 3
   epsilon: 0.001
   gate_mode: safe_release
   cone_radius: hotelling
-  cone_delta: 0.1
+  gate_delta: 0.1
+  cone_delta: 0.3
   accept_only_if_improves: false
   prediction_probe_batches: 4
   preserve_norm: true
-  warmup_epochs: 10
+  warmup_epochs: 0
+
+protocol:
+  patience: 5
+  continuation_epochs: 1
+  history_size: 2

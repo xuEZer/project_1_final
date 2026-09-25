@@ -6,7 +6,7 @@ from typing import Any
 
 import numpy as np
 import torch
-from datasets import load_dataset, load_from_disk
+from datasets import load_from_disk
 from huggingface_hub import snapshot_download
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -108,8 +108,7 @@ def preprocess_dataset(
     second store here would only duplicate it.
 
     Args:
-        source: Dataset storage format (``huggingface`` or
-            ``huggingface_table``).
+        source: Dataset storage format (``huggingface``).
         repo_name: Hugging Face dataset repository name.
         dataset_name: Dataset name or configuration in the repository.
         frequency: Sampling frequency subfolder under the dataset.
@@ -169,17 +168,13 @@ def preprocess_dataset(
             "'shuffled'."
         )
 
-    # Conventional ETT boundaries describe the full series and are invalid
-    # after applying the common prefix policy.
-    ett_boundaries = None
-
     # A complete dataset is asked to impute block missing where it is measured:
     # the synthetic natural mask is laid down over the test range only, while
     # the artificial mask -- block missing from the same sampler, spread over
     # the whole series -- is what training and validation splits carry.  A
     # dataset that brings its own NaNs keeps them everywhere -- those are real.
     bounds = split_boundaries(
-        len(data), lookback_len, pred_len, val_ratio, test_ratio, ett_boundaries
+        len(data), lookback_len, pred_len, val_ratio, test_ratio, None
     )
     data, N_data, NA_data, N_mask, A_mask, NA_mask = generate_missing(
         data,
@@ -202,7 +197,7 @@ def preprocess_dataset(
         pred_len,
         val_ratio,
         test_ratio,
-        fixed_boundaries=ett_boundaries,
+        fixed_boundaries=None,
     )
 
     train_data, val_data, test_data, scaler = standardize_data(
@@ -246,46 +241,8 @@ def load_raw_series(
         series = target[column_index, :] if target.ndim > 1 else target
         return np.asarray(series, dtype=np.float64).reshape(-1, 1)
 
-    if source == "huggingface_table":
-        dataset = load_dataset(repo_name, dataset_name, split="train")
-        numeric_columns = [
-            name for name, feature in dataset.features.items()
-            if name != "date" and feature.dtype in {
-                "float16", "float32", "float64",
-                "int8", "int16", "int32", "int64",
-                "uint8", "uint16", "uint32", "uint64",
-            }
-        ]
-        if column_index == "all":
-            return np.column_stack(
-                [np.asarray(dataset[column], dtype=np.float64) for column in numeric_columns]
-            )
-        if not 0 <= column_index < len(numeric_columns):
-            raise IndexError(
-                f"column_index={column_index} is out of range for numeric "
-                f"columns {numeric_columns}"
-            )
-        column = numeric_columns[column_index]
-        return np.asarray(dataset[column], dtype=np.float64).reshape(-1, 1)
-
     raise ValueError(
-        f"Unsupported dataset source '{source}'. Expected 'huggingface' or "
-        "'huggingface_table'."
-    )
-
-
-def get_ett_split_boundaries(dataset_name: str) -> tuple[int, int, int] | None:
-    """Return the conventional 12/4/4-month boundaries for ETT datasets."""
-    if dataset_name in {"ETTh1", "ETTh2"}:
-        points_per_month = 30 * 24
-    elif dataset_name in {"ETTm1", "ETTm2"}:
-        points_per_month = 30 * 24 * 4
-    else:
-        return None
-    return (
-        12 * points_per_month,
-        16 * points_per_month,
-        20 * points_per_month,
+        f"Unsupported dataset source {source!r}. Expected 'huggingface'."
     )
 
 

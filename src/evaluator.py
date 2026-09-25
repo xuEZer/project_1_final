@@ -172,8 +172,9 @@ def evaluate(
     no_gt: bool,
     logger: logging.Logger,
     split_name: str = "test",
+    run_predictor: bool = True,
 ) -> dict[str, float | None]:
-    """Evaluate a trained joint model on the evaluation dataloader."""
+    """Evaluate a split, optionally skipping forecast metrics."""
     logger.info("Starting evaluation on %s split...", split_name)
 
     totals = {
@@ -207,13 +208,16 @@ def evaluate(
         for X_N, X_N_mask, X, X_mask, Y, Y_mask in _iter_eval_batches(
             best_joint_model, eval_loader, no_gt
         ):
-            outputs = best_joint_model.forward(X_N, X_N_mask)
+            outputs = best_joint_model.forward(
+                X_N, X_N_mask, run_predictor=run_predictor
+            )
             imputed = outputs["imp_data"]
-            pred = _require_prediction(outputs, "evaluation")
 
             if X is not None and X_mask is not None:
                 accumulate("imp", imputed, X, X_mask)
-            accumulate("pred", pred, Y, Y_mask)
+            if run_predictor:
+                pred = _require_prediction(outputs, "evaluation")
+                accumulate("pred", pred, Y, Y_mask)
 
     logger.info("-" * 50)
     logger.info("Evaluation Results Summary: split=%s", split_name)
@@ -233,8 +237,8 @@ def evaluate(
         }
 
     imp_metrics = finalize("imp")
-    pred_metrics = finalize("pred")
-    if pred_metrics is None:
+    pred_metrics = finalize("pred") if run_predictor else None
+    if run_predictor and pred_metrics is None:
         # A split can have no observed prediction targets (all masks missing);
         # that is a valid outcome, not an error — report pred_* as N/A.
         logger.info(
@@ -250,7 +254,8 @@ def evaluate(
         avg_imp = imp_metrics[name] if imp_metrics is not None else None
         avg_pred = pred_metrics[name] if pred_metrics is not None else None
         metrics[f"imp_{name}"] = avg_imp
-        metrics[f"pred_{name}"] = avg_pred
+        if run_predictor:
+            metrics[f"pred_{name}"] = avg_pred
         logger.info(f"{name.upper():<10} {_fmt(avg_imp)} {_fmt(avg_pred)}")
 
     logger.info("-" * 50)

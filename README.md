@@ -1,6 +1,6 @@
-# FOTSI
+# PILOT
 
-Time-series forecasting with imputation. Impute-then-predict (B1) and TIP joint training (B2).
+Time-series imputation with a frozen forecaster. B1 trains the imputer on reconstruction; B2 applies PILOT after a shared warm-up.
 
 ## Setup
 
@@ -9,20 +9,13 @@ uv sync
 cd src/models/predictors/Sundial && uv sync && cd -
 ```
 
-The root environment includes the official TimesFM 3 PyTorch runtime.
+The root environment includes the official TimesFM 3 PyTorch runtime. For users in mainland China, set `HF_ENDPOINT=https://hf-mirror.com`.
 
-For users in mainland China:
-
-```bash
-export HF_ENDPOINT=https://hf-mirror.com
-```
-
-## Run
+## Experiments
 
 ```bash
-./scripts/run_experiments.sh                  # B1 + B2, all 7 datasets
-./scripts/run_experiments.sh --failed-only    # skip completed
-./scripts/run_experiments.sh --dataset CPHL_30T --exp B2
-./scripts/run_k_sweep.sh                      # TIP k ablation
-./scripts/run_epsilon_sweep.sh                # TIP epsilon ablation
+python run_expman.py --staged --config configs/experiment.yaml
+python run_expman.py --staged --config configs/ablation.yaml
+python run_expman.py --staged --config configs/sensitivity.yaml
 ```
+

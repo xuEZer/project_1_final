@@ -1,3 +1,0 @@
-model: Timer
-model_name: 'thuml/timer-base-84m'
-normalize_inputs: true

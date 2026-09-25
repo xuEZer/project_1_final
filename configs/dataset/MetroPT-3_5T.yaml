@@ -1,6 +1,0 @@
-source: huggingface
-repo_name: 'Real-TSF/TIME'
-dataset_name: MetroPT-3
-frequency: 5T
-item_id: item0
-column_index: 5

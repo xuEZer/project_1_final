@@ -1,20 +1,15 @@
-# Main experiment matrix.
-#
-# Equivalent to the former configs/main_exp.json + configs/global.ini pair:
-# 160 runs = 2 stages x 4 datasets x 5 imputers x 4 predictors, with the same
-# fixed protocol.  Everything the old global.ini supplied implicitly is now an
-# explicit field, so a run's identity covers its whole configuration.
-#
-# `name:` selects defaults from configs/<field path>/<name>.yaml.
+# Main experiment: 2 stages x 5 datasets x 5 imputers x 4 predictors.
+# Each B1/B2 pair shares the best forecast-validation warm-up checkpoint.
 
 stage: !choice [B1, B2]
 
 dataset:
   name: !choice
-    - azure2019_I_5T
     - EWELD_Load_15T
     - Coastal_T_S_15T
-    - MetroPT-3_5T
+    - Port_Activity_D
+    - Supply_Chain_Customer_D_Amazon
+    - current_velocity_10T
 
 imputer:
   name: !choice
@@ -36,6 +31,7 @@ predictor:
 device: [0]
 
 seed: 42
+missing_seed: 42
 
 paths:
   cache_dir: ./cache
@@ -60,8 +56,7 @@ loader:
 training:
   optimizer: AdamW
   lr: 0.001
-  # Fixed horizon: every run trains exactly this many epochs and the
-  # final-epoch imputer is evaluated directly (no checkpoint selection).
+  # Generic trainer compatibility; the staged protocol uses the values below.
   max_epochs: 20
 
 tip:
@@ -69,8 +64,14 @@ tip:
   epsilon: 0.001
   gate_mode: safe_release
   cone_radius: hotelling
-  cone_delta: 0.1
+  gate_delta: 0.1
+  cone_delta: 0.3
   accept_only_if_improves: false
   prediction_probe_batches: 4
   preserve_norm: true
-  warmup_epochs: 10
+  warmup_epochs: 0
+
+protocol:
+  patience: 5
+  continuation_epochs: 1
+  history_size: 2

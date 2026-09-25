@@ -1,0 +1,6 @@
+source: huggingface
+repo_name: Real-TSF/TIME
+dataset_name: current_velocity
+frequency: 10T
+item_id: 'QLD_NWSBAR_Quartermaster-Workhorse-ADCP-158.5_210511To211013'
+column_index: 0

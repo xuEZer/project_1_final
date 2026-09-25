@@ -1,0 +1,4 @@
+# Default point used to align the refined local scan with the saved sensitivity run.
+!choice
+- name: ablation_base
+  stage: B2

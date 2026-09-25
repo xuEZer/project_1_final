@@ -387,8 +387,6 @@ class JointModel(nn.Module):
             batch_size = X_NA.shape[0]
             sample_denom = pred_mask.sum(dim=(1, 2)).clamp_min(1.0)
             coordinate_samples: list[torch.Tensor] = []
-            q_plus_samples: list[torch.Tensor] = []
-            q_minus_samples: list[torch.Tensor] = []
             for coordinate in range(rank):
                 plus = plus_data[
                     coordinate * batch_size : (coordinate + 1) * batch_size
@@ -402,8 +400,6 @@ class JointModel(nn.Module):
                 q_minus = ((minus - Y_N).square() * pred_mask).sum(
                     dim=(1, 2)
                 ) / sample_denom
-                q_plus_samples.append(q_plus)
-                q_minus_samples.append(q_minus)
                 coordinate_samples.append((q_plus - q_minus) / (2.0 * epsilon))
         finally:
             for p, base in zip(params, theta, strict=True):
@@ -414,9 +410,6 @@ class JointModel(nn.Module):
         gradient_coordinates = per_sample_coordinates.mean(dim=0)
         z_samples = per_sample_coordinates @ update_coordinates
         diagnostics = {
-            "q_center": 0.5 * (
-                torch.stack(q_plus_samples) + torch.stack(q_minus_samples)
-            ),
             "coordinate_samples": per_sample_coordinates,
             # Mean over one probe batch: the covariance cone consumes these
             # as unit-level samples, whose between-batch spread honestly
@@ -523,54 +516,6 @@ class JointModel(nn.Module):
             return weighted_error_sum / target_count
         finally:
             self._restore_training_modes(training_modes)
-
-    def record_prediction_optimizer_step(
-        self,
-        *,
-        pred_loss_before: float,
-        pred_loss_after_raw_adamw: float,
-        pred_loss_after_applied_update: float,
-        projection_applied: bool = False,
-    ) -> None:
-        step = self.global_optim_step + 1
-        denominator = max(abs(pred_loss_before), 1e-12)
-        raw_delta = pred_loss_after_raw_adamw - pred_loss_before
-        applied_delta = pred_loss_after_applied_update - pred_loss_before
-        projection_gain = (
-            pred_loss_after_raw_adamw - pred_loss_after_applied_update
-        )
-        values = {
-            "pred_loss_before": pred_loss_before,
-            "pred_loss_delta": applied_delta,
-            "pred_loss_decrease": -applied_delta,
-            "pred_loss_relative_delta": applied_delta / denominator,
-            "raw_adamw_pred_loss_delta": raw_delta,
-            "raw_adamw_pred_loss_decrease": -raw_delta,
-            "raw_adamw_pred_loss_relative_delta": raw_delta / denominator,
-            "tip_projection_gain": projection_gain,
-            # The gate's decision, not ``tip_projection_gain != 0``: a
-            # projection that changes nothing numerically is still a step the
-            # gate selected, and the per-projection statistics need it.
-            "projection_applied": float(projection_applied),
-        }
-        for name, value in values.items():
-            self.record_metric(f"prediction_step/{name}", value, step)
-        self.logger.info(
-            "Prediction optimizer step: step=%d | "
-            "pred_loss_before=%.9g | raw_adamw_pred_loss_delta=%.9g | "
-            "pred_loss_delta=%.9g | pred_loss_relative_delta=%.9g | "
-            "tip_projection_gain=%.9g | projection_applied=%d | "
-            "pred_loss_decrease=%.9g | raw_adamw_pred_loss_decrease=%.9g",
-            step,
-            pred_loss_before,
-            raw_delta,
-            applied_delta,
-            applied_delta / denominator,
-            projection_gain,
-            int(projection_applied),
-            -applied_delta,
-            -raw_delta,
-        )
 
     @staticmethod
     def _student_t_upper_confidence_bound(
@@ -1027,18 +972,14 @@ class JointModel(nn.Module):
             torch.Tensor,
         ]
         | None = None,
-        optimizer_step_observer: collections.abc.Callable[
-            [float, float, float], None
-        ]
-        | None = None,
         optimizer_update_acceptance_observer: collections.abc.Callable[
             [bool], None
         ]
         | None = None,
-        accept_modified_update_if_better: bool = False,
         prediction_probe_batches: int = 1,
         counterfactual_update_generator: collections.abc.Callable | None = None,
         counterfactual_step_observer: collections.abc.Callable | None = None,
+        applied_update_observer: collections.abc.Callable[[torch.Tensor], None] | None = None,
     ) -> float:
         """Train the imputer for a fixed number of epochs.
 
@@ -1058,10 +999,6 @@ class JointModel(nn.Module):
                 accumulated micro-batches, and the actual optimizer update vector
                 ``theta_before - theta_after``. It returns the update vector
                 that will be applied to the parameters.
-            optimizer_step_observer: Optional callback receiving the current
-                optimizer batch's prediction loss before the update,
-                after the raw optimizer proposal, and after the TIP-projected
-                update.
             counterfactual_update_generator: Optional callback that returns a
                 mapping of named candidate updates. Every candidate is
                 evaluated from the same pre-step parameters, while only the
@@ -1351,10 +1288,6 @@ class JointModel(nn.Module):
                             parameter.detach().clone()
                             for parameter in parameters
                         ]
-                        pred_loss_before = self._prediction_loss_on_microbatches(
-                            accum_microbatches,
-                            rng_namespace="prediction_step_monitor",
-                        )
                         # Advance the optimizer exactly once, including any
                         # state and weight decay, then extract its true parameter-space
                         # proposal before TIP changes the applied displacement.
@@ -1363,12 +1296,6 @@ class JointModel(nn.Module):
                             parameter.detach().clone()
                             for parameter in parameters
                         ]
-                        pred_loss_after_raw_adamw = (
-                            self._prediction_loss_on_microbatches(
-                                accum_microbatches,
-                                rng_namespace="prediction_step_monitor",
-                            )
-                        )
                         raw_adamw_update = torch.cat([
                             (before - parameter).flatten()
                             for before, parameter in zip(
@@ -1416,90 +1343,27 @@ class JointModel(nn.Module):
                         modified_update = not torch.equal(
                             final_update, raw_adamw_update
                         )
-                        if not modified_update:
-                            # The applied parameters are exactly the already
-                            # evaluated raw AdamW parameters, so another
-                            # predictor forward would duplicate the same CRN
-                            # measurement.
-                            pred_loss_after_tip_adamw = (
-                                pred_loss_after_raw_adamw
-                            )
-                        else:
-                            pred_loss_after_tip_adamw = (
-                                self._prediction_loss_on_microbatches(
-                                    accum_microbatches,
-                                    rng_namespace="prediction_step_monitor",
-                                )
-                            )
-                        modified_update_applied = modified_update
-                        if (
-                            modified_update
-                            and accept_modified_update_if_better
-                            and pred_loss_after_tip_adamw is not None
-                            and pred_loss_after_raw_adamw is not None
-                            and pred_loss_after_tip_adamw
-                            >= pred_loss_after_raw_adamw
-                        ):
-                            # The exact AdamW proposal and its optimizer state
-                            # are still available. Reject a TIP candidate that
-                            # does not improve prediction loss on the current
-                            # optimizer batch, without another forward pass.
-                            with torch.no_grad():
-                                for parameter, after in zip(
-                                    parameters,
-                                    parameters_after_raw_adamw,
-                                    strict=True,
-                                ):
-                                    parameter.copy_(after)
-                            pred_loss_after_tip_adamw = pred_loss_after_raw_adamw
-                            modified_update_applied = False
-                        elif modified_update:
-                            # Synchronise AdamW's first moment only with a
-                            # modified displacement that was actually accepted.
+                        if modified_update:
                             self._sync_first_moment_to_applied_update(
                                 parameters, parameters_before, final_update
                             )
                         if optimizer_update_acceptance_observer is not None:
-                            optimizer_update_acceptance_observer(
-                                modified_update_applied
-                            )
-                        if (
-                            optimizer_step_observer is not None
-                            and pred_loss_before is not None
-                            and pred_loss_after_raw_adamw is not None
-                            and pred_loss_after_tip_adamw is not None
-                        ):
-                            optimizer_step_observer(
-                                pred_loss_before,
-                                pred_loss_after_raw_adamw,
-                                pred_loss_after_tip_adamw,
-                            )
+                            optimizer_update_acceptance_observer(modified_update)
                     else:
-                        pred_loss_before = None
-                        if optimizer_step_observer is not None:
-                            pred_loss_before = (
-                                self._prediction_loss_on_microbatches(
-                                    accum_microbatches,
-                                    rng_namespace="prediction_step_monitor",
-                                )
-                            )
+                        parameters_before = (
+                            [parameter.detach().clone() for parameter in self.imputer.parameters()]
+                            if applied_update_observer is not None else None
+                        )
                         self.optimizer.step()
-                        if optimizer_step_observer is not None:
-                            pred_loss_after = (
-                                self._prediction_loss_on_microbatches(
-                                    accum_microbatches,
-                                    rng_namespace="prediction_step_monitor",
+                        if parameters_before is not None:
+                            applied_update_observer(torch.cat([
+                                (before - parameter.detach()).flatten()
+                                for before, parameter in zip(
+                                    parameters_before,
+                                    self.imputer.parameters(),
+                                    strict=True,
                                 )
-                            )
-                            if (
-                                pred_loss_before is not None
-                                and pred_loss_after is not None
-                            ):
-                                optimizer_step_observer(
-                                    pred_loss_before,
-                                    pred_loss_after,
-                                    pred_loss_after,
-                                )
+                            ]))
                     self.optimizer.zero_grad()
 
                     self.global_optim_step += 1
@@ -2050,6 +1914,7 @@ class JointModel(nn.Module):
         cone_radius="hotelling", finite_difference_third_derivative=0.0,
         preserve_norm=False, warmup_epochs=0,
         accept_only_if_improves=False, prediction_probe_batches=1,
+        initial_history=None,
     ):
         if gate_delta is None:
             gate_delta = confidence_delta
@@ -2090,6 +1955,11 @@ class JointModel(nn.Module):
             )
         if warmup_epochs < 0:
             raise ValueError("warmup_epochs must be non-negative if set")
+        if accept_only_if_improves:
+            raise ValueError(
+                "accept_only_if_improves requires per-step forecast forwards, "
+                "which are disabled for training"
+            )
         self.cone_radius_kind = cone_radius
         if accum_steps is None:
             accum_steps = self.accum_steps
@@ -2097,20 +1967,20 @@ class JointModel(nn.Module):
             "TIP local subspace: target_rank=%d | "
             "finite_difference_directions_per_step=%d | "
             "gradient_scope=current_optimizer_batch_plus_%d_probe_batches | "
-            "step_monitor_scope=current_optimizer_batch | "
             "epsilon=%g | gate_delta=%g | cone_delta=%g | cone_radius=%s | "
             "preserve_norm=%s | warmup_epochs=%d | basis_mode=%s | "
             "correction_mode=%s | gate_mode=%s | "
-            "accept_only_if_improves=%s | "
             "update_space=adamw_parameter_displacement | "
             "prediction_rng=common_random_numbers",
             subspace_rank, 2 * subspace_rank, prediction_probe_batches,
             epsilon, gate_delta, cone_delta, cone_radius, preserve_norm,
             warmup_epochs, basis_mode, correction_mode, gate_mode,
-            accept_only_if_improves,
         )
 
-        history: list[torch.Tensor] = []
+        history: list[torch.Tensor] = [
+            displacement.detach().clone()
+            for displacement in (initial_history or [])[-(subspace_rank - 1):]
+        ]
         stats = {
             "steps": 0,
             "anchor_applied": 0.0,
@@ -2133,7 +2003,6 @@ class JointModel(nn.Module):
             "candidate_correction_ratio": 0.0,
             "applied_correction_ratio": 0.0,
             "coordinate_variation": 0.0,
-            "q_center": 0.0,
             "robust_margin": 0.0,
             "robust_solver_success": 0.0,
             "robust_fallback": 0.0,
@@ -2144,28 +2013,6 @@ class JointModel(nn.Module):
             "norm_rescaled": 0,
             "norm_scale_skipped": 0,
             "warmup_steps": 0,
-        }
-        prediction_change_stats = {
-            "observed": 0,
-            "before": 0.0,
-            "raw_adamw_after": 0.0,
-            "raw_adamw_delta": 0.0,
-            "raw_adamw_relative_delta": 0.0,
-            "raw_adamw_nonincrease": 0,
-            "tip_adamw_after": 0.0,
-            "tip_adamw_delta": 0.0,
-            "tip_adamw_relative_delta": 0.0,
-            "tip_adamw_nonincrease": 0,
-            "projected_observed": 0,
-            "projected_raw_adamw_delta": 0.0,
-            "projected_raw_adamw_relative_delta": 0.0,
-            "projected_raw_adamw_nonincrease": 0,
-            "projected_tip_adamw_delta": 0.0,
-            "projected_tip_adamw_relative_delta": 0.0,
-            "projected_tip_adamw_nonincrease": 0,
-            "projected_tip_improved_over_raw": 0,
-            "projected_gain_ratio": 0.0,
-            "projected_gain_ratio_sq": 0.0,
         }
         last_step_projected = False
         last_correction_ratio = 0.0
@@ -2331,13 +2178,29 @@ class JointModel(nn.Module):
             raw_conflict = dot.item() < 0.0
             rank_ready = effective_rank >= subspace_rank
             finite_population_margin = None
-            if finite_population is not None:
+            if finite_population is not None and gate_mode == "safe_release":
+                # The correction keeps the cone_delta radius in
+                # finite_population[2].  The release gate uses its own
+                # gate_delta radius over the same estimate and covariance.
+                # The finite-difference remainder is independent of delta,
+                # so it cancels when replacing only the statistical radius.
+                coordinate_rank = finite_population[1].shape[0]
+                probe_count = max(int(probe_windows.shape[0]), 2)
+                gate_beta = (
+                    finite_population[2]
+                    + model._ellipsoid_radius(
+                        coordinate_rank, probe_count, gate_delta, cone_radius
+                    )
+                    - model._ellipsoid_radius(
+                        coordinate_rank, probe_count, cone_delta, cone_radius
+                    )
+                )
                 finite_population_margin = (
                     model._ellipsoid_robust_margin(
                         update_coordinates,
                         finite_population[0],
                         finite_population[1],
-                        finite_population[2],
+                        gate_beta,
                     )
                 )
             if gate_mode == "safe_release":
@@ -2388,12 +2251,16 @@ class JointModel(nn.Module):
                         if preserve_norm
                         else 1.0
                     )
+                    # The optimizer applies theta <- theta - d, so d must
+                    # align with the forecast gradient to descend forecast loss.
                     candidate_coordinates = (
-                        -scale * prediction_coordinates
+                        scale * prediction_coordinates
                     )
                     robust_diagnostics = {
                         "success": 1.0,
-                        "margin": float(dot.item()),
+                        "margin": float(torch.dot(
+                            prediction_coordinates, candidate_coordinates
+                        ).item()),
                         "fallback": 0.0,
                     }
                 elif correction_mode == "robust" and finite_population is not None:
@@ -2526,9 +2393,6 @@ class JointModel(nn.Module):
                     coordinate_spread.norm()
                     / coordinate_mean.norm().clamp_min(1e-12)
                 ).item()
-                stats["q_center"] += torch.cat([
-                    item["q_center"].flatten() for item in diagnostic_batches
-                ]).mean().item()
             stats["robust_margin"] += robust_diagnostics["margin"]
             stats["robust_solver_success"] += robust_diagnostics["success"]
             stats["robust_fallback"] += robust_diagnostics["fallback"]
@@ -2552,78 +2416,6 @@ class JointModel(nn.Module):
                 stats["applied_correction_ratio"] -= last_correction_ratio
                 if history and last_raw_update is not None:
                     history[-1] = last_raw_update
-
-        def observe_optimizer_step(
-            pred_loss_before: float,
-            pred_loss_after_raw_adamw: float,
-            pred_loss_after_tip_adamw: float,
-        ) -> None:
-            self.record_prediction_optimizer_step(
-                pred_loss_before=pred_loss_before,
-                pred_loss_after_raw_adamw=pred_loss_after_raw_adamw,
-                pred_loss_after_applied_update=pred_loss_after_tip_adamw,
-                projection_applied=last_step_projected,
-            )
-            denominator = max(abs(pred_loss_before), 1e-12)
-            raw_adamw_delta = pred_loss_after_raw_adamw - pred_loss_before
-            tip_adamw_delta = pred_loss_after_tip_adamw - pred_loss_before
-            raw_adamw_relative_delta = raw_adamw_delta / denominator
-            tip_adamw_relative_delta = tip_adamw_delta / denominator
-            prediction_change_stats["observed"] += 1
-            prediction_change_stats["before"] += pred_loss_before
-            prediction_change_stats["raw_adamw_after"] += (
-                pred_loss_after_raw_adamw
-            )
-            prediction_change_stats["raw_adamw_delta"] += raw_adamw_delta
-            prediction_change_stats["raw_adamw_relative_delta"] += (
-                raw_adamw_relative_delta
-            )
-            prediction_change_stats["raw_adamw_nonincrease"] += int(
-                raw_adamw_delta <= 0.0
-            )
-            prediction_change_stats["tip_adamw_after"] += (
-                pred_loss_after_tip_adamw
-            )
-            prediction_change_stats["tip_adamw_delta"] += tip_adamw_delta
-            prediction_change_stats["tip_adamw_relative_delta"] += (
-                tip_adamw_relative_delta
-            )
-            prediction_change_stats["tip_adamw_nonincrease"] += int(
-                tip_adamw_delta <= 0.0
-            )
-            if last_step_projected:
-                projection_gain_ratio = (
-                    (raw_adamw_delta - tip_adamw_delta)
-                    / max(abs(raw_adamw_delta), 1e-12)
-                )
-                prediction_change_stats["projected_observed"] += 1
-                prediction_change_stats[
-                    "projected_raw_adamw_delta"
-                ] += raw_adamw_delta
-                prediction_change_stats[
-                    "projected_raw_adamw_relative_delta"
-                ] += raw_adamw_relative_delta
-                prediction_change_stats[
-                    "projected_raw_adamw_nonincrease"
-                ] += int(raw_adamw_delta <= 0.0)
-                prediction_change_stats[
-                    "projected_tip_adamw_delta"
-                ] += tip_adamw_delta
-                prediction_change_stats[
-                    "projected_tip_adamw_relative_delta"
-                ] += tip_adamw_relative_delta
-                prediction_change_stats[
-                    "projected_tip_adamw_nonincrease"
-                ] += int(tip_adamw_delta <= 0.0)
-                prediction_change_stats[
-                    "projected_tip_improved_over_raw"
-                ] += int(tip_adamw_delta < raw_adamw_delta)
-                prediction_change_stats[
-                    "projected_gain_ratio"
-                ] += projection_gain_ratio
-                prediction_change_stats[
-                    "projected_gain_ratio_sq"
-                ] += projection_gain_ratio ** 2
 
         def epoch_end(epoch, train_loss, model):
             steps = stats["steps"]
@@ -2651,11 +2443,9 @@ class JointModel(nn.Module):
                 )
                 model.logger.info(
                     "TIP confidence: mean_ucb=%.6g | z_mean=%.6g | "
-                    "z_std=%.6g | z_sem=%.6g | coordinate_variation=%.6g | "
-                    "q_center=%.6g",
+                    "z_std=%.6g | z_sem=%.6g | coordinate_variation=%.6g",
                     averages["ucb"], averages["z_mean"], averages["z_std"],
                     averages["z_sem"], averages["coordinate_variation"],
-                    averages["q_center"],
                 )
                 fd_mean_residual = (
                     stats["fd_residual_windows"] / fd_steps
@@ -2714,194 +2504,6 @@ class JointModel(nn.Module):
                     stats["robust_solver_success"] / projected,
                     stats["robust_fallback"] / projected,
                 )
-                observed = max(prediction_change_stats["observed"], 1)
-                projected_observed = max(
-                    prediction_change_stats["projected_observed"], 1
-                )
-                prediction_change_values = {
-                    "pred_loss_before": (
-                        prediction_change_stats["before"] / observed
-                    ),
-                    "raw_adamw_pred_loss_after": (
-                        prediction_change_stats["raw_adamw_after"] / observed
-                    ),
-                    "raw_adamw_pred_loss_delta": (
-                        prediction_change_stats["raw_adamw_delta"] / observed
-                    ),
-                    "raw_adamw_pred_loss_relative_delta": (
-                        prediction_change_stats["raw_adamw_relative_delta"]
-                        / observed
-                    ),
-                    "raw_adamw_pred_loss_nonincrease_rate": (
-                        prediction_change_stats["raw_adamw_nonincrease"]
-                        / observed
-                    ),
-                    "tip_adamw_pred_loss_after": (
-                        prediction_change_stats["tip_adamw_after"] / observed
-                    ),
-                    "tip_adamw_pred_loss_delta": (
-                        prediction_change_stats["tip_adamw_delta"] / observed
-                    ),
-                    "tip_adamw_pred_loss_relative_delta": (
-                        prediction_change_stats["tip_adamw_relative_delta"]
-                        / observed
-                    ),
-                    "tip_adamw_pred_loss_nonincrease_rate": (
-                        prediction_change_stats["tip_adamw_nonincrease"]
-                        / observed
-                    ),
-                    "projected_raw_adamw_pred_loss_delta": (
-                        prediction_change_stats[
-                            "projected_raw_adamw_delta"
-                        ] / projected_observed
-                    ),
-                    "projected_raw_adamw_pred_loss_relative_delta": (
-                        prediction_change_stats[
-                            "projected_raw_adamw_relative_delta"
-                        ] / projected_observed
-                    ),
-                    "projected_raw_adamw_pred_loss_nonincrease_rate": (
-                        prediction_change_stats[
-                            "projected_raw_adamw_nonincrease"
-                        ] / projected_observed
-                    ),
-                    "projected_tip_adamw_pred_loss_delta": (
-                        prediction_change_stats["projected_tip_adamw_delta"]
-                        / projected_observed
-                    ),
-                    "projected_tip_adamw_pred_loss_relative_delta": (
-                        prediction_change_stats[
-                            "projected_tip_adamw_relative_delta"
-                        ]
-                        / projected_observed
-                    ),
-                    "projected_tip_adamw_pred_loss_nonincrease_rate": (
-                        prediction_change_stats[
-                            "projected_tip_adamw_nonincrease"
-                        ]
-                        / projected_observed
-                    ),
-                }
-                prediction_change_values["tip_projection_gain"] = (
-                    prediction_change_values["raw_adamw_pred_loss_delta"]
-                    - prediction_change_values["tip_adamw_pred_loss_delta"]
-                )
-                prediction_change_values["projected_tip_projection_gain"] = (
-                    prediction_change_values[
-                        "projected_raw_adamw_pred_loss_delta"
-                    ]
-                    - prediction_change_values[
-                        "projected_tip_adamw_pred_loss_delta"
-                    ]
-                )
-                projected_count = prediction_change_stats["projected_observed"]
-                gain_ratio_mean = (
-                    prediction_change_stats["projected_gain_ratio"]
-                    / projected_count
-                    if projected_count
-                    else float("nan")
-                )
-                if projected_count > 1:
-                    gain_ratio_variance = max(
-                        0.0,
-                        (
-                            prediction_change_stats["projected_gain_ratio_sq"]
-                            - projected_count * gain_ratio_mean ** 2
-                        )
-                        / (projected_count - 1),
-                    )
-                    gain_ratio_std = math.sqrt(gain_ratio_variance)
-                elif projected_count == 1:
-                    gain_ratio_std = 0.0
-                else:
-                    gain_ratio_std = float("nan")
-                prediction_change_values[
-                    "projected_tip_improvement_rate"
-                ] = (
-                    prediction_change_stats["projected_tip_improved_over_raw"]
-                    / projected_count
-                    if projected_count
-                    else float("nan")
-                )
-                prediction_change_values[
-                    "projected_tip_relative_gain_mean"
-                ] = gain_ratio_mean
-                prediction_change_values[
-                    "projected_tip_relative_gain_std"
-                ] = gain_ratio_std
-                model.logger.info(
-                    "TIP raw optimizer proposal: pred_loss_before=%.6g | "
-                    "pred_loss_after=%.6g | pred_loss_delta=%.6g | "
-                    "pred_loss_relative_delta=%.6g | "
-                    "pred_loss_nonincrease_rate=%.4f | "
-                    "projected_pred_loss_delta=%.6g | "
-                    "projected_pred_loss_relative_delta=%.6g | "
-                    "projected_pred_loss_nonincrease_rate=%.4f",
-                    prediction_change_values["pred_loss_before"],
-                    prediction_change_values["raw_adamw_pred_loss_after"],
-                    prediction_change_values["raw_adamw_pred_loss_delta"],
-                    prediction_change_values[
-                        "raw_adamw_pred_loss_relative_delta"
-                    ],
-                    prediction_change_values[
-                        "raw_adamw_pred_loss_nonincrease_rate"
-                    ],
-                    prediction_change_values[
-                        "projected_raw_adamw_pred_loss_delta"
-                    ],
-                    prediction_change_values[
-                        "projected_raw_adamw_pred_loss_relative_delta"
-                    ],
-                    prediction_change_values[
-                        "projected_raw_adamw_pred_loss_nonincrease_rate"
-                    ],
-                )
-                model.logger.info(
-                    "TIP projected optimizer step: pred_loss_after=%.6g | "
-                    "pred_loss_delta=%.6g | pred_loss_relative_delta=%.6g | "
-                    "pred_loss_nonincrease_rate=%.4f | "
-                    "projected_pred_loss_delta=%.6g | "
-                    "projected_pred_loss_relative_delta=%.6g | "
-                    "projected_pred_loss_nonincrease_rate=%.4f | "
-                    "tip_projection_gain=%.6g | "
-                    "projected_tip_projection_gain=%.6g | "
-                    "projected_tip_improvement_rate=%.4f | "
-                    "projected_tip_relative_gain_mean=%.6g | "
-                    "projected_tip_relative_gain_std=%.6g | "
-                    "observed_steps=%d | projected_observed_steps=%d",
-                    prediction_change_values["tip_adamw_pred_loss_after"],
-                    prediction_change_values["tip_adamw_pred_loss_delta"],
-                    prediction_change_values[
-                        "tip_adamw_pred_loss_relative_delta"
-                    ],
-                    prediction_change_values[
-                        "tip_adamw_pred_loss_nonincrease_rate"
-                    ],
-                    prediction_change_values[
-                        "projected_tip_adamw_pred_loss_delta"
-                    ],
-                    prediction_change_values[
-                        "projected_tip_adamw_pred_loss_relative_delta"
-                    ],
-                    prediction_change_values[
-                        "projected_tip_adamw_pred_loss_nonincrease_rate"
-                    ],
-                    prediction_change_values["tip_projection_gain"],
-                    prediction_change_values[
-                        "projected_tip_projection_gain"
-                    ],
-                    prediction_change_values[
-                        "projected_tip_improvement_rate"
-                    ],
-                    prediction_change_values[
-                        "projected_tip_relative_gain_mean"
-                    ],
-                    prediction_change_values[
-                        "projected_tip_relative_gain_std"
-                    ],
-                    prediction_change_stats["observed"],
-                    prediction_change_stats["projected_observed"],
-                )
                 tb_values = {
                     "raw_conflict_rate": stats["raw"] / steps,
                     "ucb_conflict_rate": stats["ucb_conflict"] / steps,
@@ -2915,13 +2517,6 @@ class JointModel(nn.Module):
                         stats["robust_solver_success"] / projected
                     ),
                     "robust_fallback": stats["robust_fallback"] / projected,
-                    **prediction_change_values,
-                    "prediction_change_observed_steps": (
-                        prediction_change_stats["observed"]
-                    ),
-                    "prediction_change_projected_observed_steps": (
-                        prediction_change_stats["projected_observed"]
-                    ),
                 }
                 for name, value in tb_values.items():
                     model.record_metric(f"tip/{phase_name}/{name}", value, epoch)
@@ -2930,22 +2525,12 @@ class JointModel(nn.Module):
                     "steps", "raw", "ucb_conflict", "projected",
                     "projection_rejected",
                 } else 0.0
-            for key in prediction_change_stats:
-                prediction_change_stats[key] = 0 if key in {
-                    "observed", "raw_adamw_nonincrease",
-                    "tip_adamw_nonincrease", "projected_observed",
-                    "projected_raw_adamw_nonincrease",
-                    "projected_tip_adamw_nonincrease",
-                    "projected_tip_improved_over_raw",
-                } else 0.0
             if on_epoch_end is not None:
                 on_epoch_end(epoch, train_loss, model)
 
         return self.fit(
             data_loader, phase_name, num_epoch, accum_steps=accum_steps,
             on_epoch_end=epoch_end, optimizer_update_modifier=modifier,
-            optimizer_step_observer=observe_optimizer_step,
             optimizer_update_acceptance_observer=observe_update_acceptance,
-            accept_modified_update_if_better=accept_only_if_improves,
             prediction_probe_batches=prediction_probe_batches,
         )

@@ -19,23 +19,7 @@ from src.models.jointModel import JointModel
 
 
 class EpochMonitor:
-    """Log the imputation and prediction loss on both splits every epoch.
-
-    Training runs to a fixed horizon and the caller restores the checkpoint
-    with the lowest validation prediction loss.  Both splits are measured with
-    the same pair of helpers on the same training-format loaders, so
-    ``train_*`` and ``val_*`` are directly comparable; the loader also carries
-    the artificial masks that make the imputation loss well defined.
-
-    Parameters
-    ----------
-    joint_model : JointModel
-    train_loader : DataLoader or None
-        Unshuffled view of the training split, in the training tensor layout.
-    val_loader : DataLoader or None
-    num_epoch : int
-    logger : logging.Logger
-    """
+    """Log training imputation and validation losses after each epoch."""
 
     def __init__(
         self,
@@ -50,44 +34,32 @@ class EpochMonitor:
         self._val_loader = val_loader
         self._num_epoch = num_epoch
         self._logger = logger
-        # Last epoch's metrics, for the observer that forwards them to expman.
-        self.last_metrics: dict[str, float | None] = {}
-
-    @staticmethod
-    def _losses(
-        model: JointModel,
-        loader: DataLoader | None,
-        *,
-        split: str,
-        epoch: int,
-    ) -> tuple[float, float]:
-        """Imputation and prediction loss on one split, same convention for both."""
-        if loader is None:
-            return float("inf"), float("inf")
-        return (
-            model.compute_val_loss(loader),
-            model.compute_val_prediction_loss(
-                loader,
-                rng_namespace=f"epoch_prediction_monitor_{split}",
-                rng_step=epoch,
-            ),
-        )
+        self.last_metrics: dict[str, float] = {}
 
     def on_epoch_end(
         self, epoch: int, train_loss: float, model: JointModel
     ) -> None:
-        """Log the four losses for one finished epoch."""
-        train_imp, train_pred = self._losses(
-            model, self._train_loader, split="train", epoch=epoch
+        """Log reconstruction loss and validation forecast loss."""
+        train_imp = (
+            model.compute_val_loss(self._train_loader)
+            if self._train_loader is not None else float("inf")
         )
-        val_imp, val_pred = self._losses(
-            model, self._val_loader, split="validation", epoch=epoch
+        val_imp = (
+            model.compute_val_loss(self._val_loader)
+            if self._val_loader is not None else float("inf")
+        )
+        val_pred = (
+            model.compute_val_prediction_loss(
+                self._val_loader,
+                rng_namespace="epoch_prediction_monitor_validation",
+                rng_step=epoch,
+            )
+            if self._val_loader is not None else float("inf")
         )
 
         parts = [f"train_loss={train_loss:.6f}"]
         for name, value in (
             ("train_imp_loss", train_imp),
-            ("train_pred_loss", train_pred),
             ("val_imp_loss", val_imp),
             ("val_pred_loss", val_pred),
         ):
@@ -97,7 +69,6 @@ class EpochMonitor:
 
         self.last_metrics = {
             "train_imp_loss": train_imp,
-            "train_pred_loss": train_pred,
             "val_imp_loss": val_imp,
             "val_pred_loss": val_pred,
         }
@@ -217,38 +188,16 @@ def _run_b1(
     logger: logging.Logger,
     on_epoch_end=None,
 ) -> JointModel:
-    """B1: Two-stage baseline — train imputer only with reconstruction loss.
-
-    The predictor takes no part in the update, but the full training prediction
-    objective is evaluated before and after every optimizer step so the
-    reconstruction-only trajectory carries the same one-step prediction-loss
-    record the TIP branches do.  Its third
-    argument repeats ``pred_loss_after_raw_adamw`` because B1 applies the raw
-    update unchanged, so ``tip_projection_gain`` is zero on every step by
-    construction and the non-increase rate is read off
-    ``prediction_step/raw_adamw_pred_loss_delta``.
-    """
+    """B1: Train the imputer with reconstruction loss."""
     num_epoch = config.getint("training", "max_epochs")
 
     log_phase(logger, "B1 — Standard Imputer Training", num_epoch)
-
-    def observe_optimizer_step(
-        pred_loss_before: float,
-        pred_loss_after_raw_adamw: float,
-        pred_loss_after_applied_update: float,
-    ) -> None:
-        joint_model.record_prediction_optimizer_step(
-            pred_loss_before=pred_loss_before,
-            pred_loss_after_raw_adamw=pred_loss_after_raw_adamw,
-            pred_loss_after_applied_update=pred_loss_after_applied_update,
-        )
 
     joint_model.fit(
         data_loader=train_loader,
         phase_name="b1",
         num_epoch=num_epoch,
         on_epoch_end=on_epoch_end,
-        optimizer_step_observer=observe_optimizer_step,
     )
 
     return joint_model
@@ -261,6 +210,7 @@ def _run_b2(
     logger: logging.Logger,
     on_epoch_end=None,
     exp_type: str = "B2",
+    initial_history=None,
 ) -> JointModel:
     """Run TIP or a matched subspace/correction ablation."""
     num_epoch = config.getint("training", "max_epochs")
@@ -349,6 +299,7 @@ def _run_b2(
         accept_only_if_improves=accept_only_if_improves,
         **tip_kwargs,
         prediction_probe_batches=prediction_probe_batches,
+        initial_history=initial_history,
     )
 
     return joint_model

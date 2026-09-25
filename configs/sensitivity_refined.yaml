@@ -1,0 +1,26 @@
+# Additional one-factor sensitivity points for Current Velocity / ModernTCN / Chronos-2, seed 42.
+!choice
+- name: ablation_base
+  stage: B2
+  tip:
+    epsilon: 0.0002
+- name: ablation_base
+  stage: B2
+  tip:
+    epsilon: 0.0005
+- name: ablation_base
+  stage: B2
+  tip:
+    epsilon: 0.002
+- name: ablation_base
+  stage: B2
+  tip:
+    epsilon: 0.005
+- name: ablation_base
+  stage: B2
+  tip:
+    prediction_probe_batches: 3
+- name: ablation_base
+  stage: B2
+  tip:
+    prediction_probe_batches: 5

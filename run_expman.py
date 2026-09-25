@@ -5,7 +5,7 @@ The matrix comes from a YAML,
 scheduling and resume come from expman.Batch, and each run lives in its own
 output directory with per-stage snapshots.
 
-  python run_expman.py                            # the full 160-run matrix
+  python run_expman.py                            # the configured main matrix
   python run_expman.py --config my.yaml           # a different matrix
   python run_expman.py --resume --output-dir runs/<id>   # continue
 """
@@ -65,6 +65,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", default=None, help="batch output directory")
     parser.add_argument("--max-retries", type=int, default=1)
     parser.add_argument(
+        "--staged", action="store_true",
+        help="use shared warm-up and staged B1/B2 branches",
+    )
+    parser.add_argument(
         "--resume", action="store_true",
         help="continue an existing --output-dir instead of reading the YAML",
     )
@@ -73,7 +77,11 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    pipeline = build_pipeline()
+    if args.staged:
+        from src.staged_pipeline import build_staged_pipeline
+        pipeline = build_staged_pipeline()
+    else:
+        pipeline = build_pipeline()
 
     if args.resume:
         if not args.output_dir:

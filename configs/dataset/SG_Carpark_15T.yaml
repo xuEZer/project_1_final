@@ -1,6 +1,0 @@
-source: huggingface
-repo_name: 'Real-TSF/TIME'
-dataset_name: SG_Carpark
-frequency: 15T
-item_id: BE42
-column_index: 0

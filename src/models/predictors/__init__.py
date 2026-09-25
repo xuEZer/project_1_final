@@ -16,14 +16,12 @@ os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
 
 from .Chronos.model import ChronosPredictor
 from .Sundial.model import SundialPredictor
-from .Timer.model import TimerPredictor
 from .TimesFM3.model import TimesFM3Predictor
 from .Toto2.model import Toto2Predictor
 
 PREDICTOR_REGISTRY: dict[str, type] = {
     "Sundial": SundialPredictor,
     "Chronos": ChronosPredictor,
-    "Timer": TimerPredictor,
     "TimesFM3": TimesFM3Predictor,
     "Toto2": Toto2Predictor,
 }
@@ -48,18 +46,6 @@ def _config2chronos(config: ConfigParser) -> dict[str, Any]:
     }
 
 
-def _config2timer(config: ConfigParser) -> dict[str, Any]:
-    return {
-        "model_name": config.get("predictor", "model_name"),
-        "forecast_length": config.getint("data", "pred_len"),
-        "normalize_inputs": config.getboolean("predictor", "normalize_inputs"),
-        "device": config.get("training", "device"),
-        "inference_device": config.get(
-            "predictor", "inference_device", fallback=None,
-        ),
-    }
-
-
 def _config2toto2(config: ConfigParser) -> dict[str, Any]:
     return {
         "model_name": config.get("predictor", "model_name"),
@@ -80,7 +66,6 @@ def _config2timesfm3(config: ConfigParser) -> dict[str, Any]:
 CONFIG_CONVERTER_REGISTRY: dict[str, Callable] = {
     "Sundial": _config2sundial,
     "Chronos": _config2chronos,
-    "Timer": _config2timer,
     "TimesFM3": _config2timesfm3,
     "Toto2": _config2toto2,
 }

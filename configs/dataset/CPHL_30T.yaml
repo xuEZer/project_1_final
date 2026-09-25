@@ -1,6 +1,0 @@
-source: huggingface
-repo_name: 'Real-TSF/TIME'
-dataset_name: CPHL
-frequency: 30T
-item_id: TAN100
-column_index: 0

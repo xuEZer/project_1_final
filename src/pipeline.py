@@ -2,15 +2,12 @@
 
 Three Stage boundaries.  :class:`PrepareData` returns the prepared tensors,
 :class:`Train` fits the imputer and returns its weights, and :class:`Evaluate`
-scores every split with the frozen forecaster.
+scores training imputation and validation/test forecasting.
 
-Training and scoring are separate Stages so that each one declares only what it
-reads.  Both training branches evaluate the frozen predictor around every
-optimizer step -- B1 to record what the reconstruction update does to the
-prediction loss, the TIP branches to measure the projection against it -- so
-:class:`Train` names the predictor, and the TIP branches additionally name the
-``tip`` section.  :class:`Evaluate`, which runs the predictor for every metric,
-names it unconditionally.
+Training and scoring are separate Stages so each declares the configuration it
+reads. B1 trains on reconstruction alone; PILOT branches query the frozen
+forecaster to estimate local forecast-gradient coordinates. Evaluation runs the
+forecaster on validation and test splits.
 
 :class:`Evaluate` rebuilds the tensors from the configuration instead of
 receiving them from :class:`PrepareData`.  expman snapshots every Stage's return
@@ -265,11 +262,8 @@ def runtime_from_dataset(dataset: dict) -> dict:
 class Train(Stage):
     """Train the imputer for the configured branch and return its weights.
 
-    Only the trained imputer state leaves this Stage.  The declaration names
-    every configuration path the training and its per-step diagnostics read:
-    both branches evaluate the frozen predictor around each optimizer step, so
-    the recorded prediction losses -- and hence this Stage's output -- depend on
-    the predictor, and only the TIP branches read the ``tip`` section.
+    Only the trained imputer state leaves this Stage. Its dependency declaration
+    covers training and the per-epoch validation measurements.
     """
 
     @classmethod
@@ -420,7 +414,7 @@ class Evaluate(Stage):
                 continue
             metrics = evaluate(
                 cfg, model, loader, getattr(loader, "no_gt", False),
-                logger, split_name=split,
+                logger, split_name=split, run_predictor=(split != "train"),
             )
             results[split] = metrics
             measured = {
