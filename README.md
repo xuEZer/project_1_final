@@ -47,7 +47,6 @@ src/
 scripts/
   run_rq0_controlled.py     Fully controlled mechanism validation (analytic objectives, 6-panel figure)
   run_pilot_controlled.py   Paired single-step controlled experiment (population seeds, probe draws)
-figures/plot_*.py           Optional analysis/plotting utilities used for the paper's figures
 ```
 
 `runs/`, `results/`, `logs/`, `cache/` and `tmp/` are runtime artifacts and are
@@ -180,9 +179,10 @@ and fast. `run_pilot_controlled.py` additionally exposes
   `["loss", "train/val_imp_loss"]`, `["loss", "train/val_pred_loss"]` and
   `["tip", <branch>, ...]` diagnostics (projection rate, robust margin,
   correction ratio, finite-population coverage statistics).
-- **Aggregates for the paper**: `results/` holds the CSVs behind the paper's
-  tables (paired non-increase rates, endpoint losses); `figures/plot_*.py`
-  regenerate the corresponding figures from a metrics snapshot.
+- **Aggregates for the paper**: the controlled-validation scripts write their
+  own seed-level CSVs and figures under their output directories; endpoint
+  aggregates for the real-data matrices can be joined from the per-run
+  `["test", ...]` rows above.
 
 ## Reproducibility notes
 
