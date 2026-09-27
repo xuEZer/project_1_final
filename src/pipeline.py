@@ -445,6 +445,126 @@ class Warmup(Stage):
                 patience=cfg.getint("protocol", "patience"),
             )
 
+    def _process_patience(
+        model, train_loader, val_loader, ctx, logger, *,
+        max_epochs: int | None, history_size: int, patience: int,
+    ) -> dict:
+        if patience < 1:
+            raise ValueError("patience must be >=1")
+        history: list[torch.Tensor] = []
+
+        def record_update(displacement: torch.Tensor) -> None:
+            if history_size:
+                history.append(displacement.detach().cpu().clone())
+                del history[:-history_size]
+
+        initial_state = ctx.state.get("warmup_initial_snapshot")
+        if "warmup_snapshot" in ctx.state:
+            current_state = ctx.state["warmup_snapshot"]
+            current_loss = float(ctx.state["warmup_pred_loss"])
+            best_state = ctx.state["warmup_best_snapshot"]
+            best_loss = float(ctx.state["warmup_best_pred_loss"])
+            stale_epochs = int(ctx.state["warmup_stale_epochs"])
+            history = list(current_state["history"])
+            _restore(model, train_loader, current_state)
+            logger.info(
+                "warm-up resumed at epoch=%d best_epoch=%d stale_epochs=%d",
+                model.global_epoch, best_state["global_epoch"], stale_epochs,
+            )
+        else:
+            current_loss = model.compute_val_prediction_loss(
+                val_loader, rng_namespace="warmup_validation", rng_step=0,
+            )
+            if not math.isfinite(current_loss):
+                raise RuntimeError("non-finite initial validation forecast loss")
+            current_state = _capture(model, train_loader, history)
+            initial_state = current_state
+            best_state = current_state
+            best_loss = current_loss
+            stale_epochs = 0
+            ctx.state["warmup_initial_snapshot"] = initial_state
+            ctx.log_metrics({"warmup": {
+                "val_pred_loss": current_loss,
+                "best_val_pred_loss": best_loss,
+                "stale_epochs": stale_epochs,
+            }}, step=0)
+            logger.info("warm-up epoch=0 val_pred_loss=%.9g", current_loss)
+            ctx.state["warmup_snapshot"] = current_state
+            ctx.state["warmup_pred_loss"] = current_loss
+            ctx.state["warmup_best_snapshot"] = best_state
+            ctx.state["warmup_best_pred_loss"] = best_loss
+            ctx.state["warmup_stale_epochs"] = stale_epochs
+            try:
+                ctx.checkpoint.save(step=0)
+            except RuntimeError:
+                pass
+
+        while (
+            stale_epochs < patience
+            and (max_epochs is None or model.global_epoch < max_epochs)
+        ):
+            model.fit(
+                data_loader=train_loader,
+                phase_name="shared_warmup",
+                num_epoch=1,
+                applied_update_observer=record_update,
+            )
+            epoch = model.global_epoch
+            current_loss = model.compute_val_prediction_loss(
+                val_loader, rng_namespace="warmup_validation", rng_step=0,
+            )
+            if not math.isfinite(current_loss):
+                raise RuntimeError(
+                    f"non-finite warm-up validation forecast loss at epoch {epoch}"
+                )
+            current_state = _capture(model, train_loader, history)
+            if current_loss < best_loss:
+                best_loss = current_loss
+                best_state = current_state
+                stale_epochs = 0
+            else:
+                stale_epochs += 1
+            ctx.log_metrics({"warmup": {
+                "val_pred_loss": current_loss,
+                "best_val_pred_loss": best_loss,
+                "stale_epochs": stale_epochs,
+            }}, step=epoch)
+            logger.info(
+                "warm-up epoch=%d val_pred_loss=%.9g best_epoch=%d "
+                "best_loss=%.9g stale_epochs=%d/%d",
+                epoch, current_loss, best_state["global_epoch"],
+                best_loss, stale_epochs, patience,
+            )
+            ctx.state["warmup_snapshot"] = current_state
+            ctx.state["warmup_pred_loss"] = current_loss
+            ctx.state["warmup_best_snapshot"] = best_state
+            ctx.state["warmup_best_pred_loss"] = best_loss
+            ctx.state["warmup_stale_epochs"] = stale_epochs
+            try:
+                ctx.checkpoint.save(step=epoch)
+            except RuntimeError:
+                pass
+
+        stopped_by_patience = stale_epochs >= patience
+        logger.info(
+            "warm-up finished: stop_epoch=%d best_epoch=%d "
+            "best_loss=%.9g stale_epochs=%d reason=%s",
+            current_state["global_epoch"], best_state["global_epoch"],
+            best_loss, stale_epochs,
+            "patience" if stopped_by_patience else "warmup_max_epochs",
+        )
+        return {
+            "stop_state": current_state,
+            "best_state": best_state,
+            "initial_state": initial_state,
+            "stop_epoch": current_state["global_epoch"],
+            "stop_val_pred_loss": current_loss,
+            "best_epoch": best_state["global_epoch"],
+            "best_val_pred_loss": best_loss,
+            "stale_epochs": stale_epochs,
+            "stopped_by_patience": stopped_by_patience,
+        }
+
 
 class ContinueTraining(Stage):
     """Continue both branches from the same best warm-up checkpoint."""
