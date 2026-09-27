@@ -10,4 +10,4 @@
 - name: ablation_base
   stage: B5
 - name: ablation_base
-  stage: B7
+  stage: B6

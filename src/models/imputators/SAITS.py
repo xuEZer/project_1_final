@@ -25,8 +25,8 @@ Expert Systems with Applications, 219:119619, 2023. https://doi.org/10.1016/j.es
 # License: MIT
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
+from torch import nn
 
 from src.models.extern.SAITS.layers import EncoderLayer, PositionalEncoding
 from src.models.extern.SAITS.utils import masked_mse_cal

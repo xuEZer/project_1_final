@@ -77,11 +77,9 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    if args.staged:
-        from src.staged_pipeline import build_staged_pipeline
-        pipeline = build_staged_pipeline()
-    else:
-        pipeline = build_pipeline()
+    # The staged shared-warmup protocol is the only pipeline; --staged is
+    # accepted for backward compatibility and has no effect.
+    pipeline = build_pipeline()
 
     if args.resume:
         if not args.output_dir:

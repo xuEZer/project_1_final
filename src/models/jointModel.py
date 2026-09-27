@@ -9,20 +9,19 @@ from __future__ import annotations
 
 import collections.abc
 import logging
-from collections.abc import Callable
 import math
 import time
+from collections.abc import Callable
 
 import numpy as np
+import torch
 from scipy.stats import chi2 as chi2_dist
 from scipy.stats import f as f_dist
 from scipy.stats import t as student_t
-import torch
-import torch.nn as nn
+from torch import nn
 from torch.utils.data import DataLoader
 
 from src.rng import derive_seed, torch_seed_scope
-
 
 optimizer_dict = {
     "Adam": torch.optim.Adam,
@@ -518,54 +517,6 @@ class JointModel(nn.Module):
             self._restore_training_modes(training_modes)
 
     @staticmethod
-    def _student_t_upper_confidence_bound(
-        samples: torch.Tensor,
-        delta: float,
-        population_size: int | None = None,
-    ) -> torch.Tensor:
-        if samples.numel() < 2:
-            return torch.full((), float("inf"), device=samples.device)
-        if not 0.0 < delta < 1.0:
-            raise ValueError(f"confidence delta must lie in (0, 1), got {delta}")
-
-        critical = float(student_t.ppf(1.0 - delta, df=samples.numel() - 1))
-        if not math.isfinite(critical):
-            return torch.full((), float("inf"), device=samples.device)
-        standard_error = samples.std(unbiased=True) / math.sqrt(samples.numel())
-        if population_size is not None and population_size > 1:
-            # Finite-population correction: the probed windows are drawn
-            # without replacement from the training stream, so the naive
-            # SEM shrinks by sqrt of the still-unseen fraction (to zero
-            # at full coverage).
-            correction = max(population_size - samples.numel(), 0) / (
-                population_size - 1
-            )
-            standard_error *= math.sqrt(correction)
-        return samples.mean() + critical * standard_error
-
-    @staticmethod
-    def _student_t_lower_confidence_bound(
-        samples: torch.Tensor,
-        delta: float,
-        population_size: int | None = None,
-    ) -> torch.Tensor:
-        if samples.numel() < 2:
-            return torch.full((), -float("inf"), device=samples.device)
-        if not 0.0 < delta < 1.0:
-            raise ValueError(f"confidence delta must lie in (0, 1), got {delta}")
-
-        critical = float(student_t.ppf(1.0 - delta, df=samples.numel() - 1))
-        if not math.isfinite(critical):
-            return torch.full((), -float("inf"), device=samples.device)
-        standard_error = samples.std(unbiased=True) / math.sqrt(samples.numel())
-        if population_size is not None and population_size > 1:
-            correction = max(population_size - samples.numel(), 0) / (
-                population_size - 1
-            )
-            standard_error *= math.sqrt(correction)
-        return samples.mean() - critical * standard_error
-
-    @staticmethod
     def _ellipsoid_radius(
         rank: int,
         sample_count: int,
@@ -805,101 +756,6 @@ class JointModel(nn.Module):
             "fallback": fallback,
         }
 
-    @staticmethod
-    def _robust_subspace_projection(
-        update_coordinates: torch.Tensor,
-        coordinate_samples: torch.Tensor,
-        delta: float,
-        radius_kind: str = "student_t",
-    ) -> tuple[torch.Tensor, dict[str, float]]:
-        """Legacy entry point: ellipsoid fitted to the raw probe samples.
-
-        The mean covariance ``S/n`` of the original implementation is the
-        standard error of a mean over an infinite population.  The revised
-        finite-population design runs through
-        :meth:`_finite_population_ellipsoid`; this path is kept for the
-        ablation arms and for reproducing the earlier runs.
-        """
-        if coordinate_samples.ndim != 2:
-            raise ValueError("coordinate_samples must have shape [n, rank]")
-        sample_count, rank = coordinate_samples.shape
-        if sample_count < 2:
-            return torch.zeros_like(update_coordinates), {
-                "success": 0.0,
-                "margin": 0.0,
-                "fallback": 1.0,
-            }
-        work_device = update_coordinates.device
-        samples = coordinate_samples.detach().to(
-            device=work_device, dtype=torch.float64
-        )
-        raw = update_coordinates.detach().to(dtype=torch.float64)
-        mean = samples.mean(dim=0)
-        centered = samples - mean
-        covariance_mean = centered.T @ centered
-        covariance_mean /= sample_count * (sample_count - 1)
-        ridge = max(
-            float(torch.trace(covariance_mean).item()) / max(rank, 1) * 1e-8,
-            1e-12,
-        )
-        covariance_mean.add_(
-            torch.eye(rank, dtype=torch.float64, device=work_device),
-            alpha=ridge,
-        )
-        beta = JointModel._ellipsoid_radius(
-            rank, sample_count, delta, radius_kind
-        )
-        solution, diagnostics = JointModel._robust_cone_solve(
-            raw, mean, covariance_mean, beta
-        )
-        output = solution.to(
-            dtype=update_coordinates.dtype,
-            device=update_coordinates.device,
-        )
-        return output, diagnostics
-
-    @staticmethod
-    def _ellipsoid_robust_margin(
-        coordinates: torch.Tensor,
-        mean: torch.Tensor,
-        covariance_mean: torch.Tensor,
-        beta: float,
-    ) -> float:
-        """Robust lower alignment of ``coordinates`` for a given ellipsoid.
-
-        This is the safe-release statistic: the raw coordinate is released only
-        when it is non-negative.
-        """
-        value = coordinates.detach().to(dtype=torch.float64)
-        variance = torch.clamp(value @ covariance_mean @ value, min=0.0)
-        return float(mean @ value - beta * torch.sqrt(variance).item())
-
-    @staticmethod
-    def _robust_cone_margin(
-        coordinates: torch.Tensor,
-        coordinate_samples: torch.Tensor,
-        delta: float,
-    ) -> float:
-        """Value of the robust cone constraint at ``coordinates``.
-
-        Mirrors the constraint used by :meth:`_robust_subspace_projection`, so
-        the task anchor can be backtracked until it stays inside the cone
-        instead of silently leaving the feasible set.
-        """
-        if coordinate_samples.ndim != 2 or coordinate_samples.shape[0] < 2:
-            return 0.0
-        trial = coordinates.detach().double().cpu().numpy()
-        samples = coordinate_samples.detach().double().cpu().numpy()
-        rank = samples.shape[1]
-        mean = np.mean(samples, axis=0)
-        covariance = np.cov(samples, rowvar=False, ddof=1) / samples.shape[0]
-        covariance = np.atleast_2d(covariance)
-        ridge = max(float(np.trace(covariance)) / max(rank, 1) * 1e-8, 1e-12)
-        covariance = covariance + ridge * np.eye(rank)
-        beta = float(student_t.ppf(1.0 - delta, df=samples.shape[0] - 1))
-        variance = max(float(trial @ covariance @ trial), 0.0)
-        return float(mean @ trial - beta * math.sqrt(variance))
-
     def _sync_first_moment_to_applied_update(
         self,
         parameters: list[torch.nn.Parameter],
@@ -908,10 +764,10 @@ class JointModel(nn.Module):
     ) -> None:
         """Make Adam's first moment consistent with the displacement actually applied.
 
-        TIP replaces the optimizer's proposed displacement *after*
+        PILOT replaces the optimizer's proposed displacement *after*
         ``optimizer.step()`` has already advanced the moment estimates using the
         uncorrected imputation gradient.  The state therefore keeps implying the
-        raw step, so the next proposal re-injects the component TIP just removed,
+        raw step, so the next proposal re-injects the component PILOT just removed,
         and the paired B1/B2 divergence random-walks instead of drifting.
 
         AdamW proposes ``d = lr * m_hat / (sqrt(v_hat) + eps) + lr * wd * theta``,
@@ -972,13 +828,7 @@ class JointModel(nn.Module):
             torch.Tensor,
         ]
         | None = None,
-        optimizer_update_acceptance_observer: collections.abc.Callable[
-            [bool], None
-        ]
-        | None = None,
         prediction_probe_batches: int = 1,
-        counterfactual_update_generator: collections.abc.Callable | None = None,
-        counterfactual_step_observer: collections.abc.Callable | None = None,
         applied_update_observer: collections.abc.Callable[[torch.Tensor], None] | None = None,
     ) -> float:
         """Train the imputer for a fixed number of epochs.
@@ -999,10 +849,6 @@ class JointModel(nn.Module):
                 accumulated micro-batches, and the actual optimizer update vector
                 ``theta_before - theta_after``. It returns the update vector
                 that will be applied to the parameters.
-            counterfactual_update_generator: Optional callback that returns a
-                mapping of named candidate updates. Every candidate is
-                evaluated from the same pre-step parameters, while only the
-                raw optimizer proposal is finally applied.
 
         Returns:
             Final training loss from the last epoch in this phase.
@@ -1023,16 +869,13 @@ class JointModel(nn.Module):
                 self._synchronize_for_timing()
                 epoch_started = time.perf_counter()
             total_loss = 0.0
-            # TIP estimates its prediction gradient from the current optimizer
+            # PILOT estimates its prediction gradient from the current optimizer
             # batch plus one distinct, deterministically sampled probe batch.
             # Materialising the (small) epoch keeps the probe on the exact same
             # shuffled partition as the realised training trajectory without
             # advancing a second DataLoader RNG stream. B1 keeps streaming the
             # loader normally.
-            uses_prediction_gradient = (
-                optimizer_update_modifier is not None
-                or counterfactual_update_generator is not None
-            )
+            uses_prediction_gradient = optimizer_update_modifier is not None
             epoch_batches = (
                 list(train_loader) if uses_prediction_gradient else train_loader
             )
@@ -1048,9 +891,6 @@ class JointModel(nn.Module):
 
             for batch_idx, batch in enumerate(epoch_batches):
                 if accum_count == 0:
-                    if measure_wall_clock:
-                        self._synchronize_for_timing()
-                        optimizer_step_started = time.perf_counter()
                     accum_target = min(accum_steps, num_batches - batch_idx)
                 X_N, X_NA, X_NA_mask, X_A_mask, Y_N, Y_N_mask = (
                     self._move_batch_to_device(batch)
@@ -1093,9 +933,6 @@ class JointModel(nn.Module):
                     )
                     if measure_wall_clock:
                         self._synchronize_for_timing()
-                        training_prefix_seconds = (
-                            time.perf_counter() - optimizer_step_started
-                        )
 
                     prediction_gradient_microbatches = accum_microbatches
                     if (
@@ -1150,7 +987,7 @@ class JointModel(nn.Module):
                                 "is_probe": True,
                             })
                         self.logger.info(
-                            "TIP probe batch: epoch=%d | step=%d | "
+                            "PILOT probe batch: epoch=%d | step=%d | "
                             "num_batches=%d | accum_count=%d | "
                             "current_batch=%d | probe_batches=%s | "
                             "candidate_count=%d",
@@ -1163,126 +1000,7 @@ class JointModel(nn.Module):
                             len(probe_candidates),
                         )
 
-                    if counterfactual_update_generator is not None:
-                        parameters = list(self.imputer.parameters())
-                        parameters_before = [
-                            parameter.detach().clone()
-                            for parameter in parameters
-                        ]
-                        pred_loss_before = self._prediction_loss_on_microbatches(
-                            accum_microbatches,
-                            rng_namespace="prediction_step_monitor",
-                        )
-                        if measure_wall_clock:
-                            self._synchronize_for_timing()
-                            optimizer_started = time.perf_counter()
-                        self.optimizer.step()
-                        if measure_wall_clock:
-                            self._synchronize_for_timing()
-                            optimizer_seconds = (
-                                time.perf_counter() - optimizer_started
-                            )
-                        parameters_after_raw_adamw = [
-                            parameter.detach().clone()
-                            for parameter in parameters
-                        ]
-                        pred_loss_after_raw_adamw = (
-                            self._prediction_loss_on_microbatches(
-                                accum_microbatches,
-                                rng_namespace="prediction_step_monitor",
-                            )
-                        )
-                        if measure_wall_clock:
-                            base_step_seconds = (
-                                training_prefix_seconds + optimizer_seconds
-                            )
-                            self.logger.info(
-                                "Counterfactual base step timing: phase=%s | "
-                                "epoch=%d | step=%d | wall_seconds=%.9f",
-                                phase_name,
-                                epoch_number,
-                                self.global_optim_step + 1,
-                                base_step_seconds,
-                            )
-                            self.record_metric(
-                                "timing/base_step_seconds",
-                                base_step_seconds,
-                                self.global_optim_step + 1,
-                            )
-                        raw_adamw_update = torch.cat([
-                            (before - after).flatten()
-                            for before, after in zip(
-                                parameters_before,
-                                parameters_after_raw_adamw,
-                                strict=True,
-                            )
-                        ])
-                        with torch.no_grad():
-                            for parameter, before in zip(
-                                parameters, parameters_before, strict=True
-                            ):
-                                parameter.copy_(before)
-                        candidates = counterfactual_update_generator(
-                            self,
-                            prediction_gradient_microbatches,
-                            raw_adamw_update,
-                        )
-                        candidate_losses: dict[str, float | None] = {}
-                        evaluated_candidates: dict[int, float | None] = {}
-                        for name, candidate in candidates.items():
-                            if torch.equal(candidate, raw_adamw_update):
-                                candidate_losses[name] = pred_loss_after_raw_adamw
-                                continue
-                            candidate_id = id(candidate)
-                            if candidate_id in evaluated_candidates:
-                                candidate_losses[name] = evaluated_candidates[candidate_id]
-                                continue
-                            offset = 0
-                            with torch.no_grad():
-                                for parameter, before in zip(
-                                    parameters, parameters_before, strict=True
-                                ):
-                                    parameter.copy_(before)
-                                for parameter in parameters:
-                                    count = parameter.numel()
-                                    parameter.add_(
-                                        candidate[offset : offset + count].view_as(
-                                            parameter
-                                        ),
-                                        alpha=-1.0,
-                                    )
-                                    offset += count
-                            if offset != candidate.numel():
-                                raise ValueError(
-                                    f"Counterfactual update {name} has the wrong size"
-                                )
-                            candidate_losses[name] = (
-                                self._prediction_loss_on_microbatches(
-                                    accum_microbatches,
-                                    rng_namespace="prediction_step_monitor",
-                                )
-                            )
-                            evaluated_candidates[candidate_id] = candidate_losses[name]
-                        # The only realised update is the exact raw AdamW
-                        # proposal, including its original floating-point state.
-                        with torch.no_grad():
-                            for parameter, after in zip(
-                                parameters,
-                                parameters_after_raw_adamw,
-                                strict=True,
-                            ):
-                                parameter.copy_(after)
-                        if (
-                            counterfactual_step_observer is not None
-                            and pred_loss_before is not None
-                            and pred_loss_after_raw_adamw is not None
-                        ):
-                            counterfactual_step_observer(
-                                pred_loss_before,
-                                pred_loss_after_raw_adamw,
-                                candidate_losses,
-                            )
-                    elif optimizer_update_modifier is not None:
+                    if optimizer_update_modifier is not None:
                         parameters = list(self.imputer.parameters())
                         parameters_before = [
                             parameter.detach().clone()
@@ -1290,7 +1008,7 @@ class JointModel(nn.Module):
                         ]
                         # Advance the optimizer exactly once, including any
                         # state and weight decay, then extract its true parameter-space
-                        # proposal before TIP changes the applied displacement.
+                        # proposal before PILOT changes the applied displacement.
                         self.optimizer.step()
                         parameters_after_raw_adamw = [
                             parameter.detach().clone()
@@ -1317,7 +1035,7 @@ class JointModel(nn.Module):
                         with torch.no_grad():
                             if torch.equal(final_update, raw_adamw_update):
                                 # Preserve the optimizer's exact floating-point state
-                                # when TIP is a no-op; reconstructing it as
+                                # when PILOT is a no-op; reconstructing it as
                                 # before-(before-after) accumulates roundoff.
                                 for parameter, after in zip(
                                     parameters,
@@ -1338,7 +1056,7 @@ class JointModel(nn.Module):
                                     offset += count
                         if offset != final_update.numel():
                             raise ValueError(
-                                "TIP update size does not match imputer parameters"
+                                "PILOT update size does not match imputer parameters"
                             )
                         modified_update = not torch.equal(
                             final_update, raw_adamw_update
@@ -1347,8 +1065,6 @@ class JointModel(nn.Module):
                             self._sync_first_moment_to_applied_update(
                                 parameters, parameters_before, final_update
                             )
-                        if optimizer_update_acceptance_observer is not None:
-                            optimizer_update_acceptance_observer(modified_update)
                     else:
                         parameters_before = (
                             [parameter.detach().clone() for parameter in self.imputer.parameters()]
@@ -1410,528 +1126,25 @@ class JointModel(nn.Module):
 
         return final_train_loss
 
-    def fit_rq3_counterfactual(
-        self,
-        data_loader,
-        phase_name,
-        num_epoch,
-        subspace_rank=4,
-        epsilon=1e-3,
-        confidence_delta=0.05,
-        accum_steps=None,
-        on_epoch_end=None,
-    ):
-        """Evaluate B2--B5 at every step while realising only the B1 update."""
-        if subspace_rank < 2:
-            raise ValueError("subspace_rank must be at least 2")
-        if epsilon <= 0:
-            raise ValueError("epsilon must be positive")
-        if not 0.0 < confidence_delta < 1.0:
-            raise ValueError("confidence_delta must lie in (0, 1)")
-        if accum_steps is None:
-            accum_steps = self.accum_steps
-        prediction_gradient_loader = data_loader.get(
-            "train_eval", data_loader["train"]
-        )
-
-        history: list[torch.Tensor] = []
-        step_metadata: dict[str, dict[str, bool]] = {}
-
-        def measure(model, microbatches, basis, update_coordinates):
-            coordinate_batches = []
-            diagnostic_batches = []
-            for rng_index, raw_batch in enumerate(prediction_gradient_loader):
-                X_N, X_NA, X_NA_mask, X_A_mask, Y_N, Y_N_mask = (
-                    model._move_batch_to_device(raw_batch)
-                )
-                coordinates, _, diagnostics = (
-                    model._compute_subspace_prediction_gradient(
-                        X_NA, X_NA_mask, X_N, X_A_mask, Y_N, Y_N_mask,
-                        epsilon=epsilon,
-                        basis=basis,
-                        update_coordinates=update_coordinates,
-                        rng_index=rng_index,
-                    )
-                )
-                coordinate_batches.append(coordinates)
-                if diagnostics:
-                    diagnostic_batches.append(diagnostics)
-            if diagnostic_batches:
-                coordinate_samples = torch.cat([
-                    item["coordinate_samples"] for item in diagnostic_batches
-                ])
-                prediction_coordinates = coordinate_samples.mean(dim=0)
-            else:
-                prediction_coordinates = torch.stack(coordinate_batches).mean(dim=0)
-                coordinate_samples = prediction_coordinates.unsqueeze(0)
-            z_samples = coordinate_samples @ update_coordinates
-            return prediction_coordinates, coordinate_samples, z_samples
-
-        def candidate(
-            g_i,
-            basis,
-            prediction_coordinates,
-            coordinate_samples,
-            z_samples,
-            *,
-            correction_mode,
-            gate_mode,
-        ):
-            update_coordinates = basis.T @ g_i
-            dot = torch.dot(update_coordinates, prediction_coordinates)
-            upper = self._student_t_upper_confidence_bound(
-                z_samples, confidence_delta
-            )
-            conflict = upper.item() < 0.0 if gate_mode == "ucb" else dot.item() < 0.0
-            project = (
-                basis.shape[1] >= subspace_rank
-                and conflict
-                and torch.linalg.vector_norm(prediction_coordinates).item() > 1e-12
-            )
-            candidate_coordinates = update_coordinates
-            if project and correction_mode == "robust":
-                candidate_coordinates, _ = self._robust_subspace_projection(
-                    update_coordinates, coordinate_samples, confidence_delta
-                )
-            elif project:
-                denominator = torch.dot(
-                    prediction_coordinates, prediction_coordinates
-                ).clamp_min(1e-12)
-                candidate_coordinates = (
-                    update_coordinates
-                    - dot / denominator * prediction_coordinates
-                )
-            update = g_i + basis @ (candidate_coordinates - update_coordinates)
-            return update if project else g_i, {
-                "conflict": conflict,
-                "projected": project,
-            }
-
-        def generate(model, microbatches, raw_adamw_update):
-            nonlocal step_metadata
-            g_i = raw_adamw_update
-            history_basis = model._orthonormal_update_basis(
-                [g_i, *reversed(history)], subspace_rank
-            )
-            generator = torch.Generator(device=g_i.device)
-            generator.manual_seed(
-                derive_seed(
-                    model.base_seed,
-                    f"rq3_random_basis_{model.global_optim_step}",
-                )
-            )
-            random_basis = model._orthonormal_update_basis(
-                [
-                    g_i,
-                    *[
-                        torch.randn(
-                            g_i.shape,
-                            generator=generator,
-                            device=g_i.device,
-                            dtype=g_i.dtype,
-                        )
-                        for _ in range(subspace_rank - 1)
-                    ],
-                ],
-                subspace_rank,
-            )
-
-            outputs: dict[str, torch.Tensor] = {}
-            step_metadata = {}
-            if history_basis is None:
-                for stage in ("B2", "B4", "B5"):
-                    outputs[stage] = g_i
-                    step_metadata[stage] = {"conflict": False, "projected": False}
-            else:
-                history_coordinates = history_basis.T @ g_i
-                pred, samples, z_samples = measure(
-                    model, microbatches, history_basis, history_coordinates
-                )
-                for stage, correction_mode, gate_mode in (
-                    ("B2", "robust", "ucb"),
-                    ("B4", "point", "ucb"),
-                    ("B5", "robust", "mean"),
-                ):
-                    outputs[stage], step_metadata[stage] = candidate(
-                        g_i,
-                        history_basis,
-                        pred,
-                        samples,
-                        z_samples,
-                        correction_mode=correction_mode,
-                        gate_mode=gate_mode,
-                    )
-            if random_basis is None:
-                outputs["B3"] = g_i
-                step_metadata["B3"] = {"conflict": False, "projected": False}
-            else:
-                random_coordinates = random_basis.T @ g_i
-                pred, samples, z_samples = measure(
-                    model, microbatches, random_basis, random_coordinates
-                )
-                outputs["B3"], step_metadata["B3"] = candidate(
-                    g_i,
-                    random_basis,
-                    pred,
-                    samples,
-                    z_samples,
-                    correction_mode="robust",
-                    gate_mode="ucb",
-                )
-
-            history.append(g_i.detach().clone())
-            if len(history) > subspace_rank - 1:
-                del history[: -(subspace_rank - 1)]
-            return {stage: outputs[stage] for stage in ("B2", "B3", "B4", "B5")}
-
-        def observe(pred_loss_before, pred_loss_after_raw, candidate_losses):
-            step = self.global_optim_step + 1
-            raw_delta = pred_loss_after_raw - pred_loss_before
-            denominator = max(abs(pred_loss_before), 1e-12)
-
-            def record(variant, *, delta, conflict, projected, gain):
-                """Persist one variant's numbers; the log line is for humans."""
-                path = f"rq3/{variant}"
-                for name, number in (
-                    ("pred_loss_before", pred_loss_before),
-                    ("candidate_pred_loss_delta", delta),
-                    ("conflict", conflict),
-                    ("projected", projected),
-                    ("gain_vs_raw", gain),
-                    ("relative_gain", gain / denominator),
-                ):
-                    self.record_metric(f"{path}/{name}", number, step)
-
-            record("B1", delta=raw_delta, conflict=0, projected=0, gain=0.0)
-            self.logger.info(
-                "RQ3 counterfactual step: step=%d | variant=B1 |"
-                "pred_loss_before=%.9g | candidate_pred_loss_delta=%.9g | "
-                "conflict=0 | projected=0 | gain_vs_raw=0 | relative_gain=0",
-                step, pred_loss_before, raw_delta,
-            )
-            for stage in ("B2", "B3", "B4", "B5"):
-                candidate_loss = candidate_losses.get(stage)
-                if candidate_loss is None:
-                    continue
-                candidate_delta = candidate_loss - pred_loss_before
-                gain = pred_loss_after_raw - candidate_loss
-                metadata = step_metadata[stage]
-                record(
-                    stage,
-                    delta=candidate_delta,
-                    conflict=int(metadata["conflict"]),
-                    projected=int(metadata["projected"]),
-                    gain=gain,
-                )
-                self.logger.info(
-                    "RQ3 counterfactual step: step=%d | variant=%s | "
-                    "pred_loss_before=%.9g | candidate_pred_loss_delta=%.9g | "
-                    "conflict=%d | projected=%d | gain_vs_raw=%.9g | "
-                    "relative_gain=%.9g",
-                    step,
-                    stage,
-                    pred_loss_before,
-                    candidate_delta,
-                    int(metadata["conflict"]),
-                    int(metadata["projected"]),
-                    gain,
-                    gain / denominator,
-                )
-
-        self.logger.info(
-            "RQ3 shared-trajectory analysis: realised_update=B1 | "
-            "counterfactual_variants=B2,B3,B4,B5 | rank=%d | epsilon=%g | "
-            "confidence_delta=%g",
-            subspace_rank,
-            epsilon,
-            confidence_delta,
-        )
-        return self.fit(
-            data_loader,
-            phase_name,
-            num_epoch,
-            accum_steps=accum_steps,
-            on_epoch_end=on_epoch_end,
-            counterfactual_update_generator=generate,
-            counterfactual_step_observer=observe,
-        )
-
-    def fit_rq4_counterfactual(
-        self,
-        data_loader,
-        phase_name,
-        num_epoch,
-        *,
-        base_rank,
-        base_epsilon,
-        cone_delta,
-        ranks,
-        epsilons,
-        gate_deltas,
-        accum_steps=None,
-        on_epoch_end=None,
-    ):
-        """Evaluate RQ4 parameter sweeps on one realised B1 trajectory."""
-        ranks = list(dict.fromkeys(ranks))
-        epsilons = list(dict.fromkeys(epsilons))
-        gate_deltas = list(dict.fromkeys(gate_deltas))
-        if any(rank < 2 for rank in ranks):
-            raise ValueError("all RQ4 ranks must be at least 2")
-        if any(epsilon <= 0 for epsilon in epsilons):
-            raise ValueError("all RQ4 epsilons must be positive")
-        if any(not 0.0 < delta < 1.0 for delta in gate_deltas):
-            raise ValueError("all RQ4 gate deltas must lie in (0, 1)")
-        if base_rank < 2 or base_epsilon <= 0 or not 0.0 < cone_delta < 1.0:
-            raise ValueError("invalid RQ4 base parameters")
-        if accum_steps is None:
-            accum_steps = self.accum_steps
-        prediction_gradient_loader = data_loader.get(
-            "train_eval", data_loader["train"]
-        )
-
-        max_rank = max([base_rank, *ranks])
-        history: list[torch.Tensor] = []
-        step_metadata: dict[str, dict[str, bool]] = {}
-
-        def measure(model, microbatches, basis, update_coordinates, epsilon):
-            coordinate_batches = []
-            diagnostic_batches = []
-            for rng_index, raw_batch in enumerate(prediction_gradient_loader):
-                X_N, X_NA, X_NA_mask, X_A_mask, Y_N, Y_N_mask = (
-                    model._move_batch_to_device(raw_batch)
-                )
-                coordinates, _, diagnostics = (
-                    model._compute_subspace_prediction_gradient(
-                        X_NA, X_NA_mask, X_N, X_A_mask, Y_N, Y_N_mask,
-                        epsilon=epsilon,
-                        basis=basis,
-                        update_coordinates=update_coordinates,
-                        rng_index=rng_index,
-                    )
-                )
-                coordinate_batches.append(coordinates)
-                if diagnostics:
-                    diagnostic_batches.append(diagnostics)
-            if diagnostic_batches:
-                coordinate_samples = torch.cat([
-                    item["coordinate_samples"] for item in diagnostic_batches
-                ])
-                prediction_coordinates = coordinate_samples.mean(dim=0)
-            else:
-                prediction_coordinates = torch.stack(coordinate_batches).mean(dim=0)
-                coordinate_samples = prediction_coordinates.unsqueeze(0)
-            return prediction_coordinates, coordinate_samples
-
-        def build_candidate(
-            g_i,
-            basis,
-            prediction_coordinates,
-            coordinate_samples,
-            gate_delta,
-        ):
-            update_coordinates = basis.T @ g_i
-            z_samples = coordinate_samples @ update_coordinates
-            upper = self._student_t_upper_confidence_bound(z_samples, gate_delta)
-            conflict = upper.item() < 0.0
-            project = (
-                conflict
-                and torch.linalg.vector_norm(prediction_coordinates).item() > 1e-12
-            )
-            candidate_coordinates = update_coordinates
-            if project:
-                candidate_coordinates, _ = self._robust_subspace_projection(
-                    update_coordinates,
-                    coordinate_samples,
-                    cone_delta,
-                )
-            update = g_i + basis @ (candidate_coordinates - update_coordinates)
-            return update if project else g_i, {
-                "conflict": conflict,
-                "projected": project,
-            }
-
-        def generate(model, microbatches, raw_adamw_update):
-            nonlocal step_metadata
-            g_i = raw_adamw_update
-            basis_cache = {}
-            measurement_cache = {}
-            candidate_cache = {}
-            outputs = {}
-            step_metadata = {}
-
-            def evaluate_variant(name, rank, epsilon, gate_delta):
-                basis = basis_cache.get(rank)
-                if rank not in basis_cache:
-                    basis = model._orthonormal_update_basis(
-                        [g_i, *reversed(history)], rank
-                    )
-                    basis_cache[rank] = basis
-                if basis is None or basis.shape[1] < rank:
-                    outputs[name] = g_i
-                    step_metadata[name] = {"conflict": False, "projected": False}
-                    return
-                measurement_key = (rank, epsilon)
-                if measurement_key not in measurement_cache:
-                    update_coordinates = basis.T @ g_i
-                    measurement_cache[measurement_key] = measure(
-                        model,
-                        microbatches,
-                        basis,
-                        update_coordinates,
-                        epsilon,
-                    )
-                candidate_key = (rank, epsilon, gate_delta)
-                if candidate_key not in candidate_cache:
-                    pred, samples = measurement_cache[measurement_key]
-                    candidate_cache[candidate_key] = build_candidate(
-                        g_i, basis, pred, samples, gate_delta
-                    )
-                outputs[name], step_metadata[name] = candidate_cache[candidate_key]
-
-            for rank in ranks:
-                model._synchronize_for_timing()
-                rank_started = time.perf_counter()
-                evaluate_variant(f"rank={rank}", rank, base_epsilon, cone_delta)
-                model._synchronize_for_timing()
-                rank_seconds = time.perf_counter() - rank_started
-                self.logger.info(
-                    "RQ4 TIP timing: epoch=%d | step=%d | rank=%d | "
-                    "wall_seconds=%.9f",
-                    self.global_epoch + 1,
-                    self.global_optim_step + 1,
-                    rank,
-                    rank_seconds,
-                )
-                # One rank per key: several ranks share a step, so the rank
-                # belongs in the metric path or the last one would win.
-                self.record_metric(
-                    f"timing/tip_seconds/rank{rank}",
-                    rank_seconds,
-                    self.global_optim_step + 1,
-                )
-            for epsilon in epsilons:
-                evaluate_variant(
-                    f"epsilon={epsilon:.12g}",
-                    base_rank,
-                    epsilon,
-                    cone_delta,
-                )
-            for delta in gate_deltas:
-                evaluate_variant(
-                    f"gate_delta={delta:.12g}",
-                    base_rank,
-                    base_epsilon,
-                    delta,
-                )
-
-            history.append(g_i.detach().clone())
-            if len(history) > max_rank - 1:
-                del history[: -(max_rank - 1)]
-            return outputs
-
-        def observe(pred_loss_before, pred_loss_after_raw, candidate_losses):
-            step = self.global_optim_step + 1
-            denominator = max(abs(pred_loss_before), 1e-12)
-            raw_delta = pred_loss_after_raw - pred_loss_before
-
-            def record(sweep, value, *, delta, conflict, projected, gain):
-                """Persist one candidate's numbers; the log line is for humans."""
-                path = f"rq4/{sweep}/{value}"
-                for name, number in (
-                    ("pred_loss_before", pred_loss_before),
-                    ("candidate_pred_loss_delta", delta),
-                    ("conflict", conflict),
-                    ("projected", projected),
-                    ("gain_vs_raw", gain),
-                    ("relative_gain", gain / denominator),
-                ):
-                    self.record_metric(f"{path}/{name}", number, step)
-
-            record("B1", "base", delta=raw_delta, conflict=0, projected=0, gain=0.0)
-            self.logger.info(
-                "RQ4 counterfactual step: step=%d | sweep=B1 | value=base | "
-                "pred_loss_before=%.9g | candidate_pred_loss_delta=%.9g | "
-                "conflict=0 | projected=0 | gain_vs_raw=0 | relative_gain=0",
-                step, pred_loss_before, raw_delta,
-            )
-            for name, candidate_loss in candidate_losses.items():
-                if candidate_loss is None:
-                    continue
-                sweep, value = name.split("=", 1)
-                candidate_delta = candidate_loss - pred_loss_before
-                gain = pred_loss_after_raw - candidate_loss
-                metadata = step_metadata[name]
-                record(
-                    sweep,
-                    value,
-                    delta=candidate_delta,
-                    conflict=int(metadata["conflict"]),
-                    projected=int(metadata["projected"]),
-                    gain=gain,
-                )
-                self.logger.info(
-                    "RQ4 counterfactual step: step=%d | sweep=%s | value=%s | "
-                    "pred_loss_before=%.9g | candidate_pred_loss_delta=%.9g | "
-                    "conflict=%d | projected=%d | gain_vs_raw=%.9g | "
-                    "relative_gain=%.9g",
-                    step,
-                    sweep,
-                    value,
-                    pred_loss_before,
-                    candidate_delta,
-                    int(metadata["conflict"]),
-                    int(metadata["projected"]),
-                    gain,
-                    gain / denominator,
-                )
-
-        self.logger.info(
-            "RQ4 shared-trajectory sensitivity: realised_update=B1 | "
-            "ranks=%s | epsilons=%s | gate_deltas=%s | base_rank=%d | "
-            "base_epsilon=%g | cone_delta=%g",
-            ranks,
-            epsilons,
-            gate_deltas,
-            base_rank,
-            base_epsilon,
-            cone_delta,
-        )
-        return self.fit(
-            data_loader,
-            phase_name,
-            num_epoch,
-            accum_steps=accum_steps,
-            on_epoch_end=on_epoch_end,
-            counterfactual_update_generator=generate,
-            counterfactual_step_observer=observe,
-        )
-
-    def fit_tip(
+    def fit_pilot(
         self, data_loader, phase_name, num_epoch, subspace_rank=4,
-        epsilon=1e-3, confidence_delta=0.05, accum_steps=None,
+        epsilon=1e-3, accum_steps=None,
         on_epoch_end=None, basis_mode="history", correction_mode="robust",
-        gate_mode="ucb", anchor_delta=0.0, gate_delta=None, cone_delta=None,
+        gate_mode="safe_release", gate_delta=0.3, cone_delta=None,
         cone_radius="hotelling", finite_difference_third_derivative=0.0,
-        preserve_norm=False, warmup_epochs=0,
-        accept_only_if_improves=False, prediction_probe_batches=1,
+        preserve_norm=False, prediction_probe_batches=1,
         initial_history=None,
     ):
-        if gate_delta is None:
-            gate_delta = confidence_delta
         if cone_delta is None:
-            cone_delta = confidence_delta
+            cone_delta = gate_delta
         if subspace_rank < 2:
             raise ValueError("subspace_rank must be at least 2")
         if epsilon <= 0:
             raise ValueError("epsilon must be positive")
-        if not 0.0 < confidence_delta < 1.0:
-            raise ValueError("confidence_delta must lie in (0, 1)")
         if not 0.0 < gate_delta < 1.0:
             raise ValueError("gate_delta must lie in (0, 1)")
         if not 0.0 < cone_delta < 1.0:
             raise ValueError("cone_delta must lie in (0, 1)")
-        if anchor_delta < 0.0:
-            raise ValueError("anchor_delta must be non-negative")
         if prediction_probe_batches < 0:
             raise ValueError("prediction_probe_batches must be non-negative")
         if basis_mode not in {"history", "random"}:
@@ -1940,11 +1153,8 @@ class JointModel(nn.Module):
             raise ValueError(
                 "correction_mode must be 'robust', 'point', or 'gradient'"
             )
-        if gate_mode not in {"ucb", "lcb", "mean", "any", "cone", "safe_release"}:
-            raise ValueError(
-                "gate_mode must be 'ucb', 'lcb', 'mean', 'any', 'cone', or "
-                "'safe_release'"
-            )
+        if gate_mode not in {"safe_release", "mean"}:
+            raise ValueError("gate_mode must be 'safe_release' or 'mean'")
         if cone_radius not in JointModel.CONE_RADIUS_KINDS:
             raise ValueError(
                 f"cone_radius must be one of {JointModel.CONE_RADIUS_KINDS}"
@@ -1953,28 +1163,21 @@ class JointModel(nn.Module):
             raise ValueError(
                 "finite_difference_third_derivative must be non-negative"
             )
-        if warmup_epochs < 0:
-            raise ValueError("warmup_epochs must be non-negative if set")
-        if accept_only_if_improves:
-            raise ValueError(
-                "accept_only_if_improves requires per-step forecast forwards, "
-                "which are disabled for training"
-            )
         self.cone_radius_kind = cone_radius
         if accum_steps is None:
             accum_steps = self.accum_steps
         self.logger.info(
-            "TIP local subspace: target_rank=%d | "
+            "PILOT local subspace: target_rank=%d | "
             "finite_difference_directions_per_step=%d | "
             "gradient_scope=current_optimizer_batch_plus_%d_probe_batches | "
-            "epsilon=%g | gate_delta=%g | cone_delta=%g | cone_radius=%s | "
-            "preserve_norm=%s | warmup_epochs=%d | basis_mode=%s | "
+            "epsilon=%g | delta=%g | cone_radius=%s | "
+            "preserve_norm=%s | basis_mode=%s | "
             "correction_mode=%s | gate_mode=%s | "
             "update_space=adamw_parameter_displacement | "
             "prediction_rng=common_random_numbers",
             subspace_rank, 2 * subspace_rank, prediction_probe_batches,
-            epsilon, gate_delta, cone_delta, cone_radius, preserve_norm,
-            warmup_epochs, basis_mode, correction_mode, gate_mode,
+            epsilon, gate_delta, cone_radius, preserve_norm,
+            basis_mode, correction_mode, gate_mode,
         )
 
         history: list[torch.Tensor] = [
@@ -1983,14 +1186,9 @@ class JointModel(nn.Module):
         ]
         stats = {
             "steps": 0,
-            "anchor_applied": 0.0,
-            "anchor_requested": 0.0,
-            "anchor_backtrack": 0,
             "raw": 0,
-            "ucb_conflict": 0,
+            "gate_conflict": 0,
             "projected": 0,
-            "projection_rejected": 0,
-            "ucb": 0.0,
             "z_mean": 0.0,
             "z_std": 0.0,
             "z_sem": 0.0,
@@ -2012,28 +1210,21 @@ class JointModel(nn.Module):
             "norm_scale": 0.0,
             "norm_rescaled": 0,
             "norm_scale_skipped": 0,
-            "warmup_steps": 0,
         }
-        last_step_projected = False
-        last_correction_ratio = 0.0
-        last_raw_update = None
         try:
             # Training-stream size for the finite-population correction of
             # the gate's margin: the probed windows are a without-replacement
             # sample of these windows.
-            tip_population_size: int | None = len(
+            pilot_population_size: int | None = len(
                 data_loader["train"].dataset
             )
         except (KeyError, TypeError, AttributeError):
-            tip_population_size = None
+            pilot_population_size = None
 
         def modifier(model, microbatches, raw_adamw_update):
-            nonlocal last_step_projected, last_correction_ratio, last_raw_update
-            # TIP operates on the parameter-space direction proposed by the
+            # PILOT operates on the parameter-space direction proposed by the
             # configured optimizer, after any momentum, scaling, and decay.
             g_i = raw_adamw_update
-            last_raw_update = g_i.detach().clone()
-            last_correction_ratio = 0.0
             if basis_mode == "history":
                 basis_candidates = [g_i, *reversed(history)]
             else:
@@ -2060,7 +1251,6 @@ class JointModel(nn.Module):
                 basis_candidates, subspace_rank
             )
             if basis is None:
-                last_step_projected = False
                 stats["steps"] += 1
                 return g_i
             effective_rank = basis.shape[1]
@@ -2120,7 +1310,7 @@ class JointModel(nn.Module):
             finite_population = None
             if (
                 diagnostic_batches
-                and tip_population_size
+                and pilot_population_size
                 and any(diagnostic_is_probe)
                 and not all(diagnostic_is_probe)
             ):
@@ -2142,7 +1332,7 @@ class JointModel(nn.Module):
                     finite_population = model._finite_population_ellipsoid(
                         batch_windows,
                         probe_windows,
-                        tip_population_size,
+                        pilot_population_size,
                         cone_delta,
                         cone_radius,
                         epsilon,
@@ -2166,12 +1356,6 @@ class JointModel(nn.Module):
             # vanish).  The covariance cone below still consumes unit-level
             # (batch-mean) samples, whose between-batch spread honestly
             # reflects dependence inside a probe batch.
-            upper = model._student_t_upper_confidence_bound(
-                z_samples, gate_delta, population_size=tip_population_size
-            )
-            lower = model._student_t_lower_confidence_bound(
-                z_samples, gate_delta, population_size=tip_population_size
-            )
             gi_norm = torch.linalg.vector_norm(g_i)
             gp_norm = torch.linalg.vector_norm(prediction_coordinates)
             cosine = dot / (gi_norm * gp_norm).clamp_min(1e-12)
@@ -2211,28 +1395,8 @@ class JointModel(nn.Module):
                     gate_conflict = finite_population_margin < 0.0
                 else:
                     gate_conflict = dot.item() < 0.0
-            elif gate_mode == "ucb":
-                gate_conflict = upper.item() < 0.0
-            elif gate_mode == "lcb":
-                gate_conflict = lower.item() < 0.0
-            elif gate_mode == "any":
-                gate_conflict = bool(torch.any(z_samples < 0.0).item())
-            elif gate_mode == "cone":
-                # Delegate feasibility to the robust cone itself instead of
-                # synchronising it with a separate scalar gate threshold.
-                gate_conflict = True
-            else:
                 gate_conflict = dot.item() < 0.0
             project = rank_ready and gate_conflict and gp_norm.item() > 1e-12
-            current_epoch = model.global_epoch + 1
-            if warmup_epochs > 0 and current_epoch <= warmup_epochs:
-                # Warm-up: let the reconstruction objective train the imputer on
-                # its own for the first ``warmup_epochs`` epochs, then engage the
-                # forecast mechanism.  The measurement still runs so the
-                # diagnostics stay comparable across the boundary.
-                project = False
-                stats["warmup_steps"] += 1
-            last_step_projected = project
 
             candidate_coordinates = update_coordinates
             robust_diagnostics = {
@@ -2274,14 +1438,6 @@ class JointModel(nn.Module):
                         dtype=update_coordinates.dtype,
                         device=update_coordinates.device,
                     )
-                elif correction_mode == "robust":
-                    candidate_coordinates, robust_diagnostics = (
-                        model._robust_subspace_projection(
-                            update_coordinates,
-                            coordinate_samples,
-                            cone_delta,
-                        )
-                    )
                 else:
                     denominator = torch.dot(
                         prediction_coordinates, prediction_coordinates
@@ -2320,54 +1476,24 @@ class JointModel(nn.Module):
                     stats["norm_rescaled"] += 1
                 else:
                     stats["norm_scale_skipped"] += 1
-            if project and anchor_delta > 0.0 and gp_norm.item() > 1e-12:
-                # Task anchor.  The minimum-change projection lands exactly on
-                # the boundary g_P^T d = 0, so it can only stop the forecast
-                # loss from rising -- it can never push it down.  A step of
-                # fixed magnitude along the forecast-gradient direction makes
-                # the first-order change strictly negative, and because the
-                # magnitude does not scale with the current proposal it
-                # survives as the proposal shrinks (the projection alone does
-                # not: it is positively homogeneous in the proposal).
-                direction = prediction_coordinates / gp_norm
-                pre_anchor = candidate_coordinates.clone()
-                realized = anchor_delta
-                for _ in range(6):
-                    anchored = candidate_coordinates + realized * direction
-                    if (
-                        correction_mode != "robust"
-                        or model._robust_cone_margin(
-                            anchored, coordinate_samples, cone_delta
-                        )
-                        >= 0.0
-                    ):
-                        candidate_coordinates = anchored
-                        break
-                    realized *= 0.5  # backtrack to stay inside the cone
-                    stats["anchor_backtrack"] += 1
-                stats["anchor_requested"] += float(anchor_delta)
-                stats["anchor_applied"] += float(
-                    (candidate_coordinates - pre_anchor).norm().item()
-                )
             candidate = g_i + basis @ (
                 candidate_coordinates - update_coordinates
             )
             correction = candidate - g_i
-            correction_ratio = (
-                torch.linalg.vector_norm(correction) / gi_norm.clamp_min(1e-12)
-            )
-            last_correction_ratio = correction_ratio.item() if project else 0.0
 
             stats["steps"] += 1
             stats["raw"] += int(raw_conflict)
-            stats["ucb_conflict"] += int(gate_conflict)
+            stats["gate_conflict"] += int(gate_conflict)
             stats["projected"] += int(project)
-            stats["ucb"] += upper.item()
             stats["z_mean"] += z_samples.mean().item()
             z_std = z_samples.std(unbiased=z_samples.numel() > 1)
             stats["z_std"] += z_std.item()
             stats["z_sem"] += (z_std / math.sqrt(z_samples.numel())).item()
             stats["z_unit_mean"] += unit_z_samples.mean().item()
+            correction = candidate - g_i
+            correction_ratio = (
+                torch.linalg.vector_norm(correction) / gi_norm.clamp_min(1e-12)
+            )
             unit_std = unit_z_samples.std(
                 unbiased=unit_z_samples.numel() > 1
             )
@@ -2407,44 +1533,32 @@ class JointModel(nn.Module):
                 del history[:-history_limit]
             return candidate if project else g_i
 
-        def observe_update_acceptance(modified_update_applied: bool) -> None:
-            nonlocal last_step_projected
-            if last_step_projected and not modified_update_applied:
-                last_step_projected = False
-                stats["projected"] -= 1
-                stats["projection_rejected"] += 1
-                stats["applied_correction_ratio"] -= last_correction_ratio
-                if history and last_raw_update is not None:
-                    history[-1] = last_raw_update
 
         def epoch_end(epoch, train_loss, model):
             steps = stats["steps"]
             if steps:
-                projected = max(
-                    stats["projected"] + stats["projection_rejected"], 1
-                )
+                projected = max(stats["projected"], 1)
                 fd_steps = max(stats.get("fd_steps", 0), 1)
                 averages = {
                     key: value / steps
                     for key, value in stats.items()
                     if key not in {
-                        "steps", "raw", "ucb_conflict", "projected",
-                        "projection_rejected",
+                        "steps", "raw", "gate_conflict", "projected",
                     }
                 }
                 model.logger.info(
-                    "TIP subspace: raw_conflict_rate=%.4f | "
-                    "ucb_conflict_rate=%.4f | projection_rate=%.4f | "
+                    "PILOT subspace: raw_conflict_rate=%.4f | "
+                    "gate_conflict_rate=%.4f | projection_rate=%.4f | "
                     "steps=%d",
                     stats["raw"] / steps,
-                    stats["ucb_conflict"] / steps,
+                    stats["gate_conflict"] / steps,
                     stats["projected"] / steps,
                     steps,
                 )
                 model.logger.info(
-                    "TIP confidence: mean_ucb=%.6g | z_mean=%.6g | "
+                    "PILOT confidence: z_mean=%.6g | "
                     "z_std=%.6g | z_sem=%.6g | coordinate_variation=%.6g",
-                    averages["ucb"], averages["z_mean"], averages["z_std"],
+                    averages["z_mean"], averages["z_std"],
                     averages["z_sem"], averages["coordinate_variation"],
                 )
                 fd_mean_residual = (
@@ -2454,11 +1568,11 @@ class JointModel(nn.Module):
                     stats["fd_sampling_fraction"] / fd_steps
                 )
                 model.logger.info(
-                    "TIP finite population: training_windows=%s | "
+                    "PILOT finite population: training_windows=%s | "
                     "residual_windows=%.1f | sampling_fraction=%.4f | "
                     "optimizer_steps=%d | fd_steps=%d | "
                     "cone_radius=%s | gate_mode=%s",
-                    tip_population_size,
+                    pilot_population_size,
                     fd_mean_residual,
                     fd_mean_fraction,
                     steps,
@@ -2468,28 +1582,14 @@ class JointModel(nn.Module):
                 )
                 if preserve_norm:
                     model.logger.info(
-                        "TIP norm preservation: rescaled=%d | skipped=%d | "
+                        "PILOT norm preservation: rescaled=%d | skipped=%d | "
                         "mean_scale=%.4f",
                         stats["norm_rescaled"],
                         stats["norm_scale_skipped"],
                         stats["norm_scale"] / max(stats["norm_rescaled"], 1),
                     )
-                anchor_requests = float(stats.get("anchor_requested", 0.0))
                 model.logger.info(
-                    "TIP anchor: delta=%.6g | fired_requests=%d | "
-                    "requested_norm=%.6g | applied_norm=%.6g | "
-                    "applied_ratio=%.6g | backtracks=%d",
-                    anchor_delta,
-                    int(round(anchor_requests / anchor_delta))
-                    if anchor_delta > 0 else 0,
-                    anchor_requests,
-                    float(stats.get("anchor_applied", 0.0)),
-                    float(stats.get("anchor_applied", 0.0)) / anchor_requests
-                    if anchor_requests > 0 else float("nan"),
-                    int(stats.get("anchor_backtrack", 0)),
-                )
-                model.logger.info(
-                    "TIP geometry: adamw_update_norm=%.6g | "
+                    "PILOT geometry: adamw_update_norm=%.6g | "
                     "gp_subspace_norm=%.6g | "
                     "cosine=%.6g | "
                     "candidate_correction_ratio=%.6g | "
@@ -2506,11 +1606,8 @@ class JointModel(nn.Module):
                 )
                 tb_values = {
                     "raw_conflict_rate": stats["raw"] / steps,
-                    "ucb_conflict_rate": stats["ucb_conflict"] / steps,
+                    "gate_conflict_rate": stats["gate_conflict"] / steps,
                     "projection_rate": stats["projected"] / steps,
-                    "projection_rejection_rate": (
-                        stats["projection_rejected"] / steps
-                    ),
                     **averages,
                     "robust_margin": stats["robust_margin"] / projected,
                     "robust_solver_success": (
@@ -2519,10 +1616,10 @@ class JointModel(nn.Module):
                     "robust_fallback": stats["robust_fallback"] / projected,
                 }
                 for name, value in tb_values.items():
-                    model.record_metric(f"tip/{phase_name}/{name}", value, epoch)
+                    model.record_metric(f"pilot/{phase_name}/{name}", value, epoch)
             for key in stats:
                 stats[key] = 0 if key in {
-                    "steps", "raw", "ucb_conflict", "projected",
+                    "steps", "raw", "gate_conflict", "projected",
                     "projection_rejected",
                 } else 0.0
             if on_epoch_end is not None:
@@ -2531,6 +1628,5 @@ class JointModel(nn.Module):
         return self.fit(
             data_loader, phase_name, num_epoch, accum_steps=accum_steps,
             on_epoch_end=epoch_end, optimizer_update_modifier=modifier,
-            optimizer_update_acceptance_observer=observe_update_acceptance,
             prediction_probe_batches=prediction_probe_batches,
         )

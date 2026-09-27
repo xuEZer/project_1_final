@@ -8,8 +8,8 @@ from typing import Any
 
 import numpy as np
 import torch
-import torch.nn as nn
 from chronos import ChronosBoltPipeline, ChronosPipeline
+from torch import nn
 
 try:
     from chronos import Chronos2Pipeline

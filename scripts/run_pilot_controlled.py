@@ -552,7 +552,7 @@ def figure(summary, path):
               loc="center", bbox_to_anchor=(.5, .44), ncol=3,
               frameon=True, framealpha=.95, fontsize=29,
               columnspacing=.5, handlelength=1.2)
-    ax.set(title="(f) Intervention near the boundary", xlabel="Confidence parameter δ",
+    ax.set(title="(f) Intervention near the boundary", xlabel="Miscoverage δ",
            ylabel="Intervention rate", ylim=(-.03, 1.05))
 
     for axis in axs.flat:

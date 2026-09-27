@@ -1,5 +1,8 @@
 # OFAT sensitivity for Current Velocity / ModernTCN / Chronos, seed 42.
-# B1 reference plus 19 unique B2 settings; one parameter changes at a time.
+# B1 reference plus one-factor B2 arms; one parameter changes at a time.
+# A single confidence level delta drives both the release test and the
+# robust projection.
+
 !choice
 - name: ablation_base
   stage: B1
@@ -7,73 +10,53 @@
   stage: B2
 - name: ablation_base
   stage: B2
-  tip:
+  pilot:
+    delta: 0.05
+- name: ablation_base
+  stage: B2
+  pilot:
+    delta: 0.1
+- name: ablation_base
+  stage: B2
+  pilot:
+    delta: 0.2
+- name: ablation_base
+  stage: B2
+  pilot:
+    delta: 0.4
+- name: ablation_base
+  stage: B2
+  pilot:
+    delta: 0.5
+- name: ablation_base
+  stage: B2
+  pilot:
     subspace_rank: 2
 - name: ablation_base
   stage: B2
-  tip:
+  pilot:
     subspace_rank: 4
 - name: ablation_base
   stage: B2
-  tip:
+  pilot:
     subspace_rank: 5
 - name: ablation_base
   stage: B2
-  tip:
+  pilot:
     subspace_rank: 6
 - name: ablation_base
   stage: B2
-  tip:
+  pilot:
     epsilon: 0.0001
 - name: ablation_base
   stage: B2
-  tip:
+  pilot:
     epsilon: 0.01
 - name: ablation_base
   stage: B2
-  tip:
-    gate_delta: 0.05
-- name: ablation_base
-  stage: B2
-  tip:
-    gate_delta: 0.2
-- name: ablation_base
-  stage: B2
-  tip:
-    gate_delta: 0.3
-- name: ablation_base
-  stage: B2
-  tip:
-    gate_delta: 0.4
-- name: ablation_base
-  stage: B2
-  tip:
-    gate_delta: 0.5
-- name: ablation_base
-  stage: B2
-  tip:
-    cone_delta: 0.05
-- name: ablation_base
-  stage: B2
-  tip:
-    cone_delta: 0.1
-- name: ablation_base
-  stage: B2
-  tip:
-    cone_delta: 0.2
-- name: ablation_base
-  stage: B2
-  tip:
-    cone_delta: 0.4
-- name: ablation_base
-  stage: B2
-  tip:
-    cone_delta: 0.5
-- name: ablation_base
-  stage: B2
-  tip:
+  pilot:
     prediction_probe_batches: 2
 - name: ablation_base
   stage: B2
-  tip:
+  pilot:
     prediction_probe_batches: 6

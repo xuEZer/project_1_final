@@ -7,7 +7,7 @@ from collections.abc import Callable
 from configparser import ConfigParser
 from typing import Any
 
-import torch.nn as nn
+from torch import nn
 
 # huggingface_hub caches HF_ENDPOINT at import time, so the mirror must be
 # set before the predictor imports below; setdefault honors an explicit user

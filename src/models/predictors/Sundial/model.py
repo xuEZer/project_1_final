@@ -6,8 +6,8 @@ import logging
 from types import MethodType
 
 import torch
-import torch.nn as nn
 from huggingface_hub import snapshot_download
+from torch import nn
 from transformers import AutoModelForCausalLM
 
 logger = logging.getLogger(__name__)

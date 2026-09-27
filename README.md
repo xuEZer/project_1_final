@@ -31,13 +31,13 @@ run_expman.py               Entry point (expman batch runner; --staged protocol)
 configs/
   experiment.yaml           Main matrix: 2 stages x 5 datasets x 5 imputers x 4 predictors (200 runs)
   ablation.yaml             Component ablation: 6 branches on one representative cell (6 runs)
-  ablation_base.yaml        Shared protocol for ablation/sensitivity (cell + tip + staged protocol)
+  ablation_base.yaml        Shared protocol for ablation/sensitivity (cell + pilot + staged protocol)
   sensitivity.yaml          OFAT sensitivity, 19 one-factor B2 arms + B1 reference (20 runs)
   sensitivity_refined.yaml  Additional one-factor points (epsilon, probe count)
   sensitivity_reference.yaml Alignment point for the refined scan
   dataset/  imputer/  predictor/   Named defaults resolved by expman (source, item, model hparams)
 src/
-  staged_pipeline.py        Warmup / ContinueTraining / Evaluate stages (shared-checkpoint protocol)
+  pipeline.py               expman stages: PrepareData, Warmup (shared-checkpoint early stop), ContinueTraining, Evaluate
   pipeline.py               expman pipeline (data prep, config, run tags)
   experiments.py            B1--B5, B7 branch definitions and training drivers
   models/jointModel.py      The PILOT mechanism: subspace, finite-difference probing,
@@ -45,7 +45,6 @@ src/
   data_loader.py            Windowing, shuffled 7:1:2 split, block-missing generation
   evaluator.py              Test/validation metrics (forecast MSE on observed future positions)
 scripts/
-  run_rq0_controlled.py     Fully controlled mechanism validation (analytic objectives, 6-panel figure)
   run_pilot_controlled.py   Paired single-step controlled experiment (population seeds, probe draws)
 ```
 
@@ -81,8 +80,8 @@ its worker processes automatically; no manual tuning is needed.
 
 ## The staged protocol
 
-All three expman matrices below must be launched with `--staged`. The staged
-pipeline (`src/staged_pipeline.py`) is:
+All three expman matrices below run through the staged pipeline
+(`src/pipeline.py`, stages in execution order):
 
 1. **PrepareData** — window the series (lookback 256, horizon 8), apply the
    shuffled 7:1:2 split and the missingness protocol (contiguous blocks of 8
@@ -123,7 +122,7 @@ run metadata in `runs/<name>/experiments/<id>/config.pkl`).
 ### 1. Main matrix — RQ2/RQ3 (200 runs)
 
 ```bash
-python run_expman.py --staged --config configs/experiment.yaml --output-dir runs/main
+python run_expman.py --config configs/experiment.yaml --output-dir runs/main
 ```
 
 2 stages × 5 datasets (`EWELD_Load_15T`, `Coastal_T_S_15T`, `Port_Activity_D`,
@@ -136,7 +135,7 @@ batch to run for many hours — use `--resume` across sessions.
 ### 2. Component ablation (6 runs)
 
 ```bash
-python run_expman.py --staged --config configs/ablation.yaml --output-dir runs/ablation
+python run_expman.py --config configs/ablation.yaml --output-dir runs/ablation
 ```
 
 B1/B2/B3/B4/B5/B7 on the representative cell
@@ -146,9 +145,9 @@ warm-up — each branch is one continuation epoch from the same checkpoint.
 ### 3. Parameter sensitivity (~27 runs)
 
 ```bash
-python run_expman.py --staged --config configs/sensitivity.yaml           --output-dir runs/sensitivity
-python run_expman.py --staged --config configs/sensitivity_refined.yaml   --output-dir runs/sensitivity_refined
-python run_expman.py --staged --config configs/sensitivity_reference.yaml --output-dir runs/sensitivity_reference
+python run_expman.py --config configs/sensitivity.yaml           --output-dir runs/sensitivity
+python run_expman.py --config configs/sensitivity_refined.yaml   --output-dir runs/sensitivity_refined
+python run_expman.py --config configs/sensitivity_reference.yaml --output-dir runs/sensitivity_reference
 ```
 
 One-factor-at-a-time arms around the base point (subspace rank, ε, gate δ,
@@ -158,14 +157,13 @@ reference in-batch for paired comparison.
 ### 4. Controlled mechanism validation — RQ0/RQ1 (no GPU needed)
 
 ```bash
-python scripts/run_rq0_controlled.py --output-dir results/rq0
 python scripts/run_pilot_controlled.py --output-dir runs/controlled_pilot
 ```
 
-Fully analytic, paired-seed single-step experiments (the mechanism's six-panel
-figure, conflict boundary, FD scaling, finite-population coverage), CPU-only
-and fast. `run_pilot_controlled.py` additionally exposes
-`--population-seeds` and `--probe-draws` for the coverage diagnostics.
+Fully analytic, paired-seed single-step experiments over fixed finite window
+populations (the mechanism's six-panel figure, conflict boundary,
+finite-difference scaling, finite-population coverage), CPU-only and fast.
+`--population-seeds` and `--probe-draws` control the coverage diagnostics.
 
 ---
 
@@ -177,7 +175,7 @@ and fast. `run_pilot_controlled.py` additionally exposes
   (dataset, imputer, predictor, stage, seed).
 - **Process traces**: stage `[1]` rows include per-epoch
   `["loss", "train/val_imp_loss"]`, `["loss", "train/val_pred_loss"]` and
-  `["tip", <branch>, ...]` diagnostics (projection rate, robust margin,
+  `["pilot", <branch>, ...]` diagnostics (projection rate, robust margin,
   correction ratio, finite-population coverage statistics).
 - **Aggregates for the paper**: the controlled-validation scripts write their
   own seed-level CSVs and figures under their output directories; endpoint

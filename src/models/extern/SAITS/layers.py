@@ -24,8 +24,8 @@ Wenjie Du, David Cote, and Yan Liu. SAITS: Self-Attention-based Imputation for T
 
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
+from torch import nn
 
 
 class ScaledDotProductAttention(nn.Module):

@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 
 import torch
-import torch.nn as nn
+from torch import nn
 
 logger = logging.getLogger(__name__)
 

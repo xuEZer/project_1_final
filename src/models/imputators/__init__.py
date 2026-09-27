@@ -4,13 +4,13 @@ from collections.abc import Callable
 from configparser import ConfigParser
 from typing import Any
 
-import torch.nn as nn
+from torch import nn
 
 from .DeepMVI import DeepMVI
 from .ModernTCN import ModernTCN
 from .SAITS import SAITS
-from .TSLANet import TSLANet
 from .TimesNet import TimesNet
+from .TSLANet import TSLANet
 
 IMPUTATOR_REGISTRY: dict[str, type] = {
     "SAITS": SAITS,

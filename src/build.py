@@ -10,12 +10,11 @@ from __future__ import annotations
 import logging
 import math
 import re
-from pathlib import Path
+from configparser import ConfigParser
 
 import torch
 from torch.utils.data import DataLoader
 
-from src.auto_batch_size import find_max_batch_size
 from src.data_loader import get_tensor_data_loader
 from src.models.imputators import imputator
 from src.models.jointModel import JointModel
@@ -59,35 +58,6 @@ def resolve_batch_size(
             "(target=%d, accum_steps=%d)",
             micro_batch_size,
             effective_batch_size,
-            accum_steps,
-        )
-        return micro_batch_size, accum_steps
-
-    auto_batch = config.has_option("loader", "auto_batch") and config.getboolean(
-        "loader", "auto_batch"
-    )
-    if auto_batch and effective_batch_size > 1:
-        sample_loader, _, _ = get_tensor_data_loader(
-            dataset,
-            batch_size=effective_batch_size,
-            **loader_kwargs,
-        )
-        sample_batch = next(iter(sample_loader["train"]))
-
-        micro_batch_size = find_max_batch_size(
-            joint_model,
-            sample_batch,
-            effective_batch_size,
-            config.get("training", "device"),
-            logger,
-            config,
-        )
-        accum_steps = math.ceil(effective_batch_size / micro_batch_size)
-        logger.info(
-            "Effective batch_size: %d | Micro batch_size: %d | "
-            "Gradient accumulation steps: %d",
-            effective_batch_size,
-            micro_batch_size,
             accum_steps,
         )
         return micro_batch_size, accum_steps

@@ -129,15 +129,7 @@ def run_experiment(
 
     if exp_type == "B1":
         trained_model = _run_b1(joint_model, train_loader, config, logger, on_epoch_end)
-    elif exp_type == "RQ3":
-        trained_model = _run_rq3(
-            joint_model, train_loader, config, logger, on_epoch_end
-        )
-    elif exp_type == "RQ4":
-        trained_model = _run_rq4(
-            joint_model, train_loader, config, logger, on_epoch_end
-        )
-    elif exp_type in {"B2", "B3", "B4", "B5", "B6", "B7"}:
+    elif exp_type in {"B2", "B3", "B4", "B5", "B6"}:
         trained_model = _run_b2(
             joint_model, train_loader, config, logger, on_epoch_end,
             exp_type=exp_type,
@@ -145,7 +137,7 @@ def run_experiment(
     else:
         raise ValueError(
             f"Unknown experiment type {exp_type}. "
-            "Available types: B1, B2, B3, B4, B5, B6, B7, RQ3, RQ4"
+            "Available types: B1, B2, B3, B4, B5, B6"
         )
 
     if final_epoch is not None and final_val_pred is not None:
@@ -212,180 +204,69 @@ def _run_b2(
     exp_type: str = "B2",
     initial_history=None,
 ) -> JointModel:
-    """Run TIP or a matched subspace/correction ablation."""
+    """Run PILOT or a matched subspace/correction ablation."""
     num_epoch = config.getint("training", "max_epochs")
-    subspace_rank = config.getint("tip", "subspace_rank")
-    epsilon = config.getfloat("tip", "epsilon")
-    # ``confidence_delta`` is the legacy shared threshold.  Keep it as a
-    # compatibility default, but allow fully decoupled configurations to
-    # specify only ``gate_delta`` and ``cone_delta``.
-    confidence_delta = config.getfloat(
-        "tip", "confidence_delta", fallback=0.05,
-    )
-    gate_delta = config.getfloat(
-        "tip", "gate_delta", fallback=confidence_delta,
-    )
-    cone_delta = config.getfloat(
-        "tip", "cone_delta", fallback=confidence_delta,
-    )
-    cone_radius = config.get("tip", "cone_radius", fallback="hotelling")
+    subspace_rank = config.getint("pilot", "subspace_rank")
+    epsilon = config.getfloat("pilot", "epsilon")
+    # A single confidence level drives both the release test and the robust
+    # projection.
+    delta = config.getfloat("pilot", "delta", fallback=0.3)
+    cone_radius = config.get("pilot", "cone_radius", fallback="hotelling")
     finite_difference_third_derivative = config.getfloat(
-        "tip", "finite_difference_third_derivative", fallback=0.0,
+        "pilot", "finite_difference_third_derivative", fallback=0.0,
     )
     # Fairness control: give B2 the same displacement norm as B1 so the two
     # arms differ only in the direction of the step.
-    preserve_norm = config.getboolean("tip", "preserve_norm", fallback=False)
-    # Let reconstruction train the imputer alone for this many epochs before the
-    # forecast mechanism is engaged.
-    warmup_epochs = config.getint("tip", "warmup_epochs", fallback=0)
+    preserve_norm = config.getboolean("pilot", "preserve_norm", fallback=False)
 
-    robust_gate_mode = config.get("tip", "gate_mode", fallback="ucb")
-    # B6: the full mechanism without the warm-up (engaged from epoch 0).
-    # B7: same gate, but the fired correction is replaced by the estimated
-    # forecast-gradient direction itself (norm-preserved), the direct
-    # "descend Q" control that theory predicts to be weaker.
+    robust_gate_mode = config.get("pilot", "gate_mode", fallback="safe_release")
+    # B6: the fired correction is replaced by the estimated forecast-gradient
+    # direction itself (norm-preserved), the direct "descend Q" control.
     variants = {
-        "B2": ("history", "robust", robust_gate_mode, {}),
-        "B3": ("random", "robust", robust_gate_mode, {}),
-        "B4": ("history", "point", robust_gate_mode, {}),
-        "B5": ("history", "robust", "mean", {}),
-        "B6": ("history", "robust", robust_gate_mode, {"warmup_epochs": 0}),
-        "B7": ("history", "gradient", robust_gate_mode, {}),
+        "B2": ("history", "robust", robust_gate_mode),
+        "B3": ("random", "robust", robust_gate_mode),
+        "B4": ("history", "point", robust_gate_mode),
+        "B5": ("history", "robust", "mean"),
+        "B6": ("history", "gradient", robust_gate_mode),
     }
-    anchor_delta = config.getfloat("tip", "anchor_delta", fallback=0.0)
-    accept_only_if_improves = config.getboolean(
-        "tip", "accept_only_if_improves", fallback=False,
-    )
     prediction_probe_batches = config.getint(
-        "tip", "prediction_probe_batches", fallback=1,
+        "pilot", "prediction_probe_batches", fallback=1,
     )
-    basis_mode, correction_mode, gate_mode, overrides = variants[exp_type]
+    basis_mode, correction_mode, gate_mode = variants[exp_type]
     log_phase(
         logger,
-        f"{exp_type} — TIP ({basis_mode} subspace, {correction_mode} "
-        f"correction, {gate_mode} gate, overrides={overrides or 'none'})",
+        f"{exp_type} — PILOT ({basis_mode} subspace, {correction_mode} "
+        f"correction, {gate_mode} gate)",
         num_epoch,
     )
     logger.info(
-        "  subspace_rank=%d, epsilon=%g, gate_delta=%g, cone_delta=%g, "
+        "  subspace_rank=%d, epsilon=%g, delta=%g, "
         "cone_radius=%s, fd_third_derivative=%g, preserve_norm=%s, "
-        "warmup_epochs=%d,"
         "basis_mode=%s, correction_mode=%s, gate_mode=%s",
-        subspace_rank, epsilon, gate_delta, cone_delta, cone_radius,
-        finite_difference_third_derivative, preserve_norm, warmup_epochs,
+        subspace_rank, epsilon, delta, cone_radius,
+        finite_difference_third_derivative, preserve_norm,
         basis_mode, correction_mode, gate_mode,
     )
-    tip_kwargs = dict(
-        warmup_epochs=warmup_epochs,
-    )
-    tip_kwargs.update(overrides)
-    joint_model.fit_tip(
+    joint_model.fit_pilot(
         data_loader=train_loader,
         phase_name=exp_type.lower(),
         num_epoch=num_epoch,
         on_epoch_end=on_epoch_end,
         subspace_rank=subspace_rank,
         epsilon=epsilon,
-        confidence_delta=confidence_delta,
-        gate_delta=gate_delta,
-        cone_delta=cone_delta,
+        gate_delta=delta,
+        cone_delta=delta,
         cone_radius=cone_radius,
         finite_difference_third_derivative=finite_difference_third_derivative,
         preserve_norm=preserve_norm,
         basis_mode=basis_mode,
         correction_mode=correction_mode,
         gate_mode=gate_mode,
-        anchor_delta=anchor_delta,
-        accept_only_if_improves=accept_only_if_improves,
-        **tip_kwargs,
         prediction_probe_batches=prediction_probe_batches,
         initial_history=initial_history,
     )
 
     return joint_model
-
-
-def _run_rq3(
-    joint_model: JointModel,
-    train_loader: dict[str, DataLoader],
-    config: ConfigParser,
-    logger: logging.Logger,
-    on_epoch_end=None,
-) -> JointModel:
-    """Train once with B1 and evaluate B2--B5 counterfactually per step."""
-    num_epoch = config.getint("training", "max_epochs")
-    subspace_rank = config.getint("tip", "subspace_rank")
-    epsilon = config.getfloat("tip", "epsilon")
-    confidence_delta = config.getfloat("tip", "confidence_delta")
-    log_phase(logger, "RQ3 — shared B1 trajectory", num_epoch)
-    joint_model.fit_rq3_counterfactual(
-        data_loader=train_loader,
-        phase_name="rq3",
-        num_epoch=num_epoch,
-        on_epoch_end=on_epoch_end,
-        subspace_rank=subspace_rank,
-        epsilon=epsilon,
-        confidence_delta=confidence_delta,
-    )
-    return joint_model
-
-
-def _run_rq4(
-    joint_model: JointModel,
-    train_loader: dict[str, DataLoader],
-    config: ConfigParser,
-    logger: logging.Logger,
-    on_epoch_end=None,
-) -> JointModel:
-    """Train one independently realised RQ4 sensitivity configuration."""
-    num_epoch = config.getint("training", "max_epochs")
-    variant = config.get("experiment", "rq4_variant")
-
-    if variant == "B1":
-        return _run_b1(
-            joint_model, train_loader, config, logger, on_epoch_end
-        )
-
-    rank = config.getint("tip", "subspace_rank")
-    epsilon = config.getfloat("tip", "epsilon")
-    confidence_delta = config.getfloat("tip", "confidence_delta")
-    if variant == "base":
-        pass
-    elif variant.startswith("rank="):
-        rank = int(variant.split("=", 1)[1])
-    elif variant.startswith("epsilon="):
-        epsilon = float(variant.split("=", 1)[1])
-    elif variant.startswith("gate_delta="):
-        confidence_delta = float(variant.split("=", 1)[1])
-    else:
-        raise ValueError(f"Unknown RQ4 variant: {variant}")
-
-    if rank < 2:
-        raise ValueError("RQ4 rank must be at least 2")
-    if epsilon <= 0:
-        raise ValueError("RQ4 epsilon must be positive")
-    if not 0.0 < confidence_delta < 1.0:
-        raise ValueError("RQ4 gate delta must lie in (0, 1)")
-
-    log_phase(logger, f"RQ4 — independent TIP training ({variant})", num_epoch)
-    logger.info(
-        "  variant=%s, subspace_rank=%d, epsilon=%g, confidence_delta=%g",
-        variant, rank, epsilon, confidence_delta,
-    )
-    joint_model.fit_tip(
-        data_loader=train_loader,
-        phase_name="rq4",
-        num_epoch=num_epoch,
-        on_epoch_end=on_epoch_end,
-        subspace_rank=rank,
-        epsilon=epsilon,
-        confidence_delta=confidence_delta,
-        basis_mode="history",
-        correction_mode="robust",
-        gate_mode="ucb",
-    )
-    return joint_model
-
 
 def log_phase(logger: logging.Logger, phase: str, epochs: int) -> None:
     """Log a phase boundary."""

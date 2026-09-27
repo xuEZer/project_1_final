@@ -8,7 +8,7 @@ from __future__ import annotations
 from argparse import Namespace
 
 import torch
-import torch.nn as nn
+from torch import nn
 
 from src.models.extern.SAITS.utils import masked_mse_cal
 from src.models.extern.TimesNet.TimesNet import Model

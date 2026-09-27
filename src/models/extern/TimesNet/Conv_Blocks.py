@@ -1,5 +1,5 @@
 import torch
-import torch.nn as nn
+from torch import nn
 
 
 def _initialize_conv_weights(module: nn.Module) -> None:

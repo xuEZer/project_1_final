@@ -2,25 +2,25 @@
 !choice
 - name: ablation_base
   stage: B2
-  tip:
+  pilot:
     epsilon: 0.0002
 - name: ablation_base
   stage: B2
-  tip:
+  pilot:
     epsilon: 0.0005
 - name: ablation_base
   stage: B2
-  tip:
+  pilot:
     epsilon: 0.002
 - name: ablation_base
   stage: B2
-  tip:
+  pilot:
     epsilon: 0.005
 - name: ablation_base
   stage: B2
-  tip:
+  pilot:
     prediction_probe_batches: 3
 - name: ablation_base
   stage: B2
-  tip:
+  pilot:
     prediction_probe_batches: 5
