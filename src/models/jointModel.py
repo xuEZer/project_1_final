@@ -517,6 +517,22 @@ class JointModel(nn.Module):
             self._restore_training_modes(training_modes)
 
     @staticmethod
+    def _ellipsoid_robust_margin(
+        coordinates: torch.Tensor,
+        mean: torch.Tensor,
+        covariance_mean: torch.Tensor,
+        beta: float,
+    ) -> float:
+        """Robust lower alignment of ``coordinates`` for a given ellipsoid.
+
+        This is the safe-release statistic: the raw coordinate is released only
+        when it is non-negative.
+        """
+        value = coordinates.detach().to(dtype=torch.float64)
+        variance = torch.clamp(value @ covariance_mean @ value, min=0.0)
+        return float(mean @ value - beta * torch.sqrt(variance).item())
+
+    @staticmethod
     def _ellipsoid_radius(
         rank: int,
         sample_count: int,
