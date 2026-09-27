@@ -197,6 +197,7 @@ finite-difference scaling, finite-population coverage), CPU-only and fast.
 The paper's runs were produced on a single-card host with: NVIDIA GeForce
 RTX 4090 (24 GB, driver 595.71.05, CUDA 13.2), Python 3.12.3, PyTorch
 2.12.1+cu130, uv 0.9.26, Linux 5.15 x86_64 (128 cores).  Dependencies are
-locked in `uv.lock` (expman is pinned to a git revision in
-`pyproject.toml`).  A one-epoch B1/B2 smoke on Current Velocity /
+locked in `uv.lock`; the `expman` scheduler is vendored verbatim at
+revision `84a4d47` under `third_party/expman/` and consumed as a local path
+dependency, so no external repository access is needed.  A one-epoch B1/B2 smoke on Current Velocity /
 ModernTCN / Chronos at commit `ffbf0be` finished 1/1 on both branches.

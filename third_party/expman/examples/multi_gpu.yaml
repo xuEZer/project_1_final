@@ -1,0 +1,3 @@
+# Use NVIDIA GPU indices from nvidia-smi.
+device: [0]
+epochs: !choice [2, 3, 4]

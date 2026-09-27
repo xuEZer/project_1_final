@@ -22,11 +22,11 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-# Pinned to a commit rather than a branch: expman's scheduler decides whether a
-# Batch completes at all -- cold-start measurement, host-pressure shedding --
-# so a silent move would change how the experiments run, not just their numbers.
-# Bump the hash when expman's behaviour changes.
-expman = { git = "https://github.com/xuEZer/expman.git", rev = "84a4d4754c50f3e08f772f410795584a5c5b1e35" }
+# Vendored verbatim at revision 84a4d47 (see third_party/expman) and consumed
+# as a local path dependency: reproduction needs no access to any external
+# repository, and the scheduler behaviour is pinned to exactly the revision
+# the paper's runs used.
+expman = { path = "third_party/expman" }
 
 # Domestic PyPI mirror: the experiment host is behind the GFW, where the
 # default PyPI index is slow and flaky. Lockfile records the mirror so the
