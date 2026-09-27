@@ -445,6 +445,7 @@ class Warmup(Stage):
                 patience=cfg.getint("protocol", "patience"),
             )
 
+    @staticmethod
     def _process_patience(
         model, train_loader, val_loader, ctx, logger, *,
         max_epochs: int | None, history_size: int, patience: int,
