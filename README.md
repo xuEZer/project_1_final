@@ -191,3 +191,12 @@ finite-difference scaling, finite-population coverage), CPU-only and fast.
   realization. B1/B2 pairs share both.
 - Forecaster weights are pinned by the locked dependencies (`uv.lock`,
   expman revision) and downloaded once into the HF cache.
+
+## Reference environment
+
+The paper's runs were produced on a single-card host with: NVIDIA GeForce
+RTX 4090 (24 GB, driver 595.71.05, CUDA 13.2), Python 3.12.3, PyTorch
+2.12.1+cu130, uv 0.9.26, Linux 5.15 x86_64 (128 cores).  Dependencies are
+locked in `uv.lock` (expman is pinned to a git revision in
+`pyproject.toml`).  A one-epoch B1/B2 smoke on Current Velocity /
+ModernTCN / Chronos at commit `ffbf0be` finished 1/1 on both branches.
