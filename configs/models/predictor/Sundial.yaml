@@ -1,0 +1,6 @@
+model: Sundial
+name: Sundial
+model_name: thuml/sundial-base-128m
+revision: 3212e42564493f520593e5414af4367fc4b49226
+dtype: float32
+num_samples: 20

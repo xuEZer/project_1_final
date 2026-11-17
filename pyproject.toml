@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "project-1"
+version = "0.1.0"
+description = "Reproducible PILOT imputation and forecasting experiments"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "chronos-forecasting>=2.0",
+    "datasets",
+    "ruff",
+    "pre-commit>=3.8,<4",
+    "h5py",
+    "huggingface-hub>=0.19.3,<1.0",
+    "joblib",
+    "matplotlib>=3.9,<3.11",
+    "numpy>=1.26",
+    "PyYAML>=6.0,<7",
+    "scikit-learn",
+    "scipy",
+    "setuptools",
+    "torch==2.11.0+cu128",
+    "timesfm[torch]>=3.0.1",
+    "toto-models>=1.0.0",
+    "transformers>=4.41,<4.42",
+]
+
+[project.scripts]
+expman = "expman.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src", "src.*", "expman", "expman.*"]
+
+[tool.setuptools.package-data]
+expman = ["py.typed", "webui/static/*"]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+# Package index used for the reproducible environment.
+[[tool.uv.index]]
+url = "https://mirrors.aliyun.com/pypi/simple/"
+default = true
+
+[tool.ruff]
+extend-exclude = ["src/models/extern", "tmp", "paper", "data", "runs"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "B", "I"]
+ignore = ["E741"]

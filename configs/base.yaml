@@ -1,0 +1,27 @@
+device: [0]
+seed: 42
+missing_seed: 42
+
+paths:
+  cache_dir: ./data/cache/huggingface/hub
+
+data:
+  missing_rate: 0.2
+  artificial_missing_rate: 0.2
+  block_size: 8
+  lookback: 256
+  pred_len: 8
+  val_ratio: 0.1
+  test_ratio: 0.2
+
+training:
+  method: pilot
+  lr: 0.001
+  epochs: 50
+  batch_size: 128
+
+pilot:
+  subspace_rank: 3
+  probe_batches: 4
+  epsilon: 0.001
+  delta: 0.3

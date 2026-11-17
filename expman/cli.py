@@ -1,0 +1,440 @@
+"""Command-line interface: run, resume, inspect and stop experiment Batches.
+
+The pipeline is located as ``module:attr`` on the command line and recorded
+in the Batch manifest, so ``expman resume`` can rebuild it without the user
+repeating it. Every batch directory under ``runs/`` gets a small integer ID
+recorded in ``runs/.batches.json``: ``expman status`` without arguments keeps
+redrawing a live overview of all of them until Ctrl+C, and the same ID is a
+shortcut for ``expman stop`` and ``expman resume``. ``expman web`` serves a
+dashboard over the same IDs from its own process, independent of any batch
+it watches. Retry counts and interval coverage are process-wide settings
+configured in code with ``expman.set(...)`` next to the Pipeline, not
+command-line flags.
+"""
+
+import argparse
+import importlib
+import os
+import signal
+import sys
+from contextlib import suppress
+from pathlib import Path
+from time import sleep
+
+import expman.core.settings as settings
+from expman.core.pipeline import Pipeline
+from expman.core.stage import Stage
+from expman.estimation.estimate import TimeEstimate
+from expman.estimation.estimate import _clock as _fmt_elapsed
+from expman.observation.cleanup import clean as clean_intermediates
+from expman.observation.registry import RUNS_DIR, ensure_ids
+from expman.observation.status import last_status, run_counts, run_state
+from expman.process_control import PID_FILE, request_stop
+from expman.scheduling.batch import Batch
+from expman.storage.base import PickleSerializer, StorageError, read_record
+from expman.webui import DEFAULT_PORT, serve
+
+_STATUS_INTERVAL = 2.0
+
+
+def _coerce(attribute: object) -> Pipeline | None:
+    """Turn a module attribute into a Pipeline, or None if it is not one."""
+    if isinstance(attribute, Pipeline):
+        return attribute
+    if (
+        isinstance(attribute, (list, tuple))
+        and bool(attribute)
+        and all(
+            isinstance(item, type) and issubclass(item, Stage) for item in attribute
+        )
+    ):
+        return Pipeline(list(attribute))
+    return None
+
+
+def _resolve_pipeline(spec: str) -> Pipeline:
+    """Import ``module:attr`` and coerce the attribute into a Pipeline."""
+    module_name, separator, attr_name = spec.rpartition(":")
+    if not module_name or not separator or not attr_name:
+        raise SystemExit(f"pipeline must look like 'module:attr', got {spec!r}")
+    if "" not in sys.path:
+        sys.path.insert(0, "")
+    try:
+        module = importlib.import_module(module_name)
+    except ImportError as error:
+        raise SystemExit(
+            f"could not import pipeline module {module_name!r}: {error}"
+        ) from None
+    try:
+        attribute: object = getattr(module, attr_name)
+    except AttributeError:
+        raise SystemExit(
+            f"module {module_name!r} defines no attribute {attr_name!r}"
+        ) from None
+    pipeline = _coerce(attribute)
+    if pipeline is None and callable(attribute) and not isinstance(attribute, type):
+        pipeline = _coerce(attribute())
+    if pipeline is None:
+        raise SystemExit(
+            f"{spec!r} must be a Pipeline, a list of Stage classes, or a "
+            f"zero-argument factory returning one; got "
+            f"{type(attribute).__name__}"
+        )
+    return pipeline
+
+
+def _default_output_dir(spec: str, config: str) -> Path:
+    """runs/<pipeline-attr>_<config-stem>, suffixed _2, _3... on collisions."""
+    attr = spec.rpartition(":")[2] or "batch"
+    stem = Path(config).stem or "cfg"
+    base = f"{attr}_{stem}"
+    candidate = RUNS_DIR / base
+    suffix = 2
+    while candidate.exists():
+        candidate = RUNS_DIR / f"{base}_{suffix}"
+        suffix += 1
+    return candidate
+
+
+def _resolve_directory(token: str) -> Path:
+    """Interpret the argument as a batch ID (``0``, ``1``, ...) or a path."""
+    if token.isdigit():
+        ids = ensure_ids()
+        directory = ids.get(int(token))
+        if directory is None:
+            known = ", ".join(str(i) for i in sorted(ids)) or "none"
+            raise SystemExit(
+                f"unknown batch ID {token} (known: {known}); see expman status"
+            )
+        return directory
+    return Path(token)
+
+
+def _read_manifest(directory: Path) -> dict:
+    """Read and sanity-check the persisted Batch manifest."""
+    try:
+        manifest = read_record(directory / "batch.pkl", PickleSerializer())
+    except (StorageError, OSError) as error:
+        raise SystemExit(f"cannot read batch records in {directory}: {error}") from None
+    if not isinstance(manifest, dict) or not isinstance(
+        manifest.get("experiments"), list
+    ):
+        raise SystemExit(f"{directory} does not hold a Batch manifest")
+    return manifest
+
+
+def _read_timing(directory: Path) -> tuple[str, str]:
+    """The persisted elapsed time and remaining-time estimate, if any."""
+    elapsed = "??:??:??"
+    remaining = "??:??:??"
+    timing_path = directory / "timing.pkl"
+    if timing_path.exists():
+        try:
+            timing = read_record(timing_path, PickleSerializer())
+        except (StorageError, OSError):
+            timing = None
+        if isinstance(timing, dict) and timing.get("version") == 1:
+            elapsed = _fmt_elapsed(timing.get("elapsed_seconds"), upper=False)
+            saved = timing.get("estimate")
+            if isinstance(saved, dict):
+                with suppress(TypeError, ValueError):
+                    remaining = str(TimeEstimate(**saved))
+    return elapsed, remaining
+
+
+def _execute(batch: Batch, *, progress: bool, resume_command: str) -> int:
+    """Run the batch; a stop signal maps to a resume hint and exit 143."""
+    print(f"Batch directory: {batch.output_dir}", flush=True)
+
+    def stopped(signum, frame):
+        raise KeyboardInterrupt()
+
+    # Not the main thread: expman stop then cannot reach this process.
+    with suppress(ValueError):
+        signal.signal(signal.SIGTERM, stopped)
+    try:
+        (batch.output_dir / PID_FILE).write_text(str(os.getpid()))
+        results = batch.run(progress=progress)
+    except KeyboardInterrupt:
+        print(f"Stopped; resume with: {resume_command}", file=sys.stderr)
+        return 143
+    finally:
+        with suppress(FileNotFoundError):
+            (batch.output_dir / PID_FILE).unlink()
+    for result in results:
+        print(f"{result.run_id}: {result.status.value}")
+
+    # 批次正常跑完，结果已经打印出来了，这时才丢掉共享前缀缓存。
+    # 放在 CLI 而不是 Batch.run() 里的原因：AttemptResult.output 是**惰性**的
+    # （每次访问都从权威记录回读，见 experiment.py 的注释），而共享前缀成员的
+    # 记录就在 <batch>/cache/ 下——run() 一返回就删，会让本进程再也读不出结果，
+    # 也会让 Batch.results 直接抛 StorageError。
+    try:
+        report = clean_intermediates(batch.output_dir)
+    except OSError as error:
+        print(f"could not drop the shared cache: {error}", file=sys.stderr)
+    else:
+        if not report.empty:
+            print(f"dropped shared cache: {report.summary()}", flush=True)
+    return 0
+
+
+def _cmd_run(args: argparse.Namespace) -> int:
+    pipeline = _resolve_pipeline(args.pipeline)
+    module_name, _separator, attr_name = args.pipeline.rpartition(":")
+    output_dir = (
+        Path(args.output_dir)
+        if args.output_dir is not None
+        else _default_output_dir(args.pipeline, args.config)
+    )
+    batch = Batch(
+        pipeline,
+        args.config,
+        max_retries=int(settings.get("retries")),
+        estimate_coverage=float(settings.get("coverage")),
+        output_dir=output_dir,
+        _pipeline_spec={"module": module_name, "attr": attr_name},
+    )
+    ids = ensure_ids()
+    batch_id = next(
+        (i for i, directory in ids.items() if directory == batch.output_dir), None
+    )
+    display = str(batch_id) if batch_id is not None else str(batch.output_dir)
+    return _execute(
+        batch,
+        progress=args.progress,
+        resume_command=f"expman resume {display}",
+    )
+
+
+def _cmd_resume(args: argparse.Namespace) -> int:
+    directory = _resolve_directory(args.directory)
+    manifest = _read_manifest(directory)
+    spec = manifest.get("pipeline_spec")
+    if (
+        not isinstance(spec, dict)
+        or not isinstance(spec.get("module"), str)
+        or not (isinstance(spec.get("attr"), str))
+    ):
+        raise SystemExit(
+            f"{directory} records no pipeline location; resume it from Python "
+            "with Batch.resume(pipeline, ...)"
+        )
+    pipeline = _resolve_pipeline(f"{spec['module']}:{spec['attr']}")
+    batch = Batch.resume(pipeline, directory)
+    return _execute(
+        batch,
+        progress=args.progress,
+        resume_command=f"expman resume {args.directory}",
+    )
+
+
+def _cmd_status(args: argparse.Namespace) -> int:
+    if args.directory is None:
+        return _live_overview()
+    directory = _resolve_directory(args.directory)
+    manifest = _read_manifest(directory)
+    total_stages = len(manifest.get("pipeline") or [])
+    queue = manifest.get("queue", [])
+    active = manifest.get("active_gpu", {})
+    progress = manifest.get("stage_progress", {})
+    print(
+        f"Batch {directory} | stages: {total_stages}"
+        f" | runs: {len(manifest['experiments'])}"
+    )
+    for entry in manifest["experiments"]:
+        run_id = entry.get("run_id", "?")
+        attempts = entry.get("attempts", [])
+        state = run_state(run_id, last_status(entry), active, queue)
+        stage = progress.get(run_id)
+        position = (
+            f"stage {stage + 1}/{total_stages}"
+            if isinstance(stage, int) and total_stages
+            else f"stage -/{total_stages}"
+        )
+        history = " ".join(str(item["status"]).lower() for item in attempts)
+        print(f"  {run_id}  {state:<10} {position}  attempts: {history or 'none'}")
+    elapsed, remaining = _read_timing(directory)
+    print(f"elapsed: {elapsed} | remaining: {remaining}")
+    if args.directory.isdigit():
+        print(f"detail page: `expman web`, then /b/{args.directory}")
+    return 0
+
+
+def _overview_line(batch_id: int, directory: Path) -> str:
+    """One summary line of the runs/ overview, tolerating live rewriting."""
+    name = str(RUNS_DIR / directory.name)
+    try:
+        manifest = read_record(directory / "batch.pkl", PickleSerializer())
+    except (StorageError, OSError):
+        manifest = None
+    if not isinstance(manifest, dict):
+        return f"{batch_id:>2}  {name:<30} unreadable records"
+    experiments = manifest.get("experiments") or []
+    queue = manifest.get("queue") or []
+    active = manifest.get("active_gpu") or {}
+    shared = run_counts(
+        ((entry.get("run_id", "?"), last_status(entry)) for entry in experiments),
+        active,
+        queue,
+    )
+    counts = {
+        "run": shared["running"],
+        "pend": shared["pending"],
+        "done": shared["succeeded"],
+        "fail": shared["failed"],
+        "stop": shared["cancelled"],
+    }
+    total_stages = len(manifest.get("pipeline") or [])
+    reached = [
+        value
+        for value in (manifest.get("stage_progress") or {}).values()
+        if isinstance(value, int)
+    ]
+    stage = (
+        f"{max(reached) + 1}/{total_stages}"
+        if reached and total_stages
+        else f"-/{total_stages}"
+    )
+    elapsed, remaining = _read_timing(directory)
+    return (
+        f"{batch_id:>2}  {name:<30} {len(experiments):>4} "
+        f"{counts['run']:>4} {counts['pend']:>4} {counts['done']:>4} "
+        f"{counts['fail']:>4} {counts['stop']:>4}  "
+        f"{stage:<8}{elapsed:<10}{remaining}"
+    )
+
+
+def _print_overview() -> None:
+    ids = ensure_ids()
+    print(
+        f"batches under {RUNS_DIR}/"
+        f" (refreshing every {_STATUS_INTERVAL:g}s; Ctrl+C to exit)"
+    )
+    if not ids:
+        print("  no batches yet")
+        return
+    print(
+        f"{'ID':>2}  {'BATCH':<30} {'RUNS':>4} {'RUN':>4} {'PEND':>4}"
+        f" {'DONE':>4} {'FAIL':>4} {'STOP':>4}  {'STAGE':<8}{'ELAPSED':<10}REMAINING"
+    )
+    for batch_id, directory in sorted(ids.items()):
+        print(_overview_line(batch_id, directory))
+
+
+def _live_overview() -> int:
+    """Keep redrawing the runs/ overview until the user presses Ctrl+C."""
+    try:
+        while True:
+            print("\033[2J\033[H", end="", flush=True)
+            _print_overview()
+            sleep(_STATUS_INTERVAL)
+    except KeyboardInterrupt:
+        pass
+    return 0
+
+
+def _cmd_stop(args: argparse.Namespace) -> int:
+    directory = _resolve_directory(args.directory)
+    success, message = request_stop(directory)
+    print(message, file=sys.stderr if not success else None)
+    return 0 if success else 1
+
+
+def _cmd_web(args: argparse.Namespace) -> int:
+    """Serve the run dashboard until Ctrl+C; it never runs an experiment.
+
+    The dashboard is its own process on purpose: it outlives every batch it
+    watches, and batches started later show up without restarting it.
+    """
+    root = None if args.root is None else Path(args.root)
+    try:
+        dashboard = serve(
+            root, host=args.host, port=args.port, allow_stop=not args.read_only
+        )
+    except (OSError, ValueError) as error:
+        raise SystemExit(f"could not start the dashboard: {error}") from None
+    print(f"Dashboard: {dashboard.url}", flush=True)
+    print("Watching the batches under the runs directory; Ctrl+C to stop.", flush=True)
+    try:
+        dashboard.wait()
+    finally:
+        dashboard.close()
+    return 0
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="expman", description="Run and manage expman experiment Batches."
+    )
+    commands = parser.add_subparsers(dest="command", required=True)
+
+    run = commands.add_parser("run", help="create and run a new Batch")
+    run.add_argument("pipeline", help="pipeline location as 'module:attr'")
+    run.add_argument("config", help="experiment YAML path")
+    run.add_argument(
+        "-o",
+        "--output-dir",
+        default=None,
+        help="batch directory (default: runs/<pipeline>_<config>)",
+    )
+    resume = commands.add_parser("resume", help="continue a stopped Batch")
+    resume.add_argument("directory", help="batch ID from expman status, or a path")
+    for command in (run, resume):
+        command.add_argument(
+            "--progress",
+            action="store_true",
+            help="show live progress while running (off by default)",
+        )
+    run.set_defaults(handler=_cmd_run)
+    resume.set_defaults(handler=_cmd_resume)
+
+    web = commands.add_parser(
+        "web",
+        help="serve a read-only dashboard for every batch under runs/",
+    )
+    web.add_argument(
+        "--port",
+        type=int,
+        default=DEFAULT_PORT,
+        help="dashboard port (default: 8765; 0 picks a free one)",
+    )
+    web.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="dashboard bind address (default: loopback only)",
+    )
+    web.add_argument(
+        "--root",
+        default=None,
+        help="directory holding the batches (default: runs/)",
+    )
+    web.add_argument(
+        "--read-only",
+        action="store_true",
+        help="refuse stop requests and hide the stop button",
+    )
+    web.set_defaults(handler=_cmd_web)
+
+    status = commands.add_parser(
+        "status",
+        help="show progress; without an ID, watch every batch under runs/",
+    )
+    status.add_argument(
+        "directory",
+        nargs="?",
+        default=None,
+        help="batch ID or path; omit to watch runs/ until Ctrl+C",
+    )
+    status.set_defaults(handler=_cmd_status)
+
+    stop = commands.add_parser("stop", help="gracefully stop a running Batch")
+    stop.add_argument("directory", help="batch ID from expman status, or a path")
+    stop.set_defaults(handler=_cmd_stop)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Console entry point; the return value is the process exit status."""
+    args = _parser().parse_args(argv)
+    return args.handler(args)

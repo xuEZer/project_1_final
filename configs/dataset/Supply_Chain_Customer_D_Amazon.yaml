@@ -1,0 +1,7 @@
+source: huggingface
+repo_name: Real-TSF/TIME
+dataset_name: Supply_Chain_Customer
+frequency: D
+item_id: 'item0'
+column_index: 0
+name: Supply_Chain_Customer_D_Amazon

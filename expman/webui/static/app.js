@@ -1,0 +1,660 @@
+"use strict";
+
+const PAGE = document.body.dataset.page === "batch" ? "batch" : "list";
+const BATCH_ID = (() => {
+  const match = location.pathname.match(/^\/b\/(\d+)\/?$/);
+  return match ? Number(match[1]) : null;
+})();
+
+const state = {
+  snapshot: null,
+  paused: false,
+  tab: "status",
+  analysis: null,
+  analysisState: "idle",
+  analysisCounts: null,
+  analysisError: null,
+  throttle: 1,
+  lastPaint: 0,
+  stopAllowed: false,
+  connected: false,
+};
+
+const KIND = { launch: "启动", finish: "结束", reuse: "复用", shed: "撤销", probe: "探测" };
+const STATUS_TEXT = { running: "运行中", stopped: "已停止", finished: "已完成", failed: "有失败" };
+const STATUS_CLASS = { running: "ok", stopped: "warn", finished: "", failed: "bad" };
+// Attempt statuses are a different vocabulary from batch statuses: a gantt
+// bar is coloured by how its own attempt ended.
+const BAR_CLASS = { succeeded: "ok", failed: "bad", cancelled: "warn" };
+const SOURCE_TEXT = {
+  live: "实时",
+  last: "停止前最后一次采样",
+  archive: "持久化记录",
+  missing: "记录不可读",
+};
+
+const app = document.getElementById("app");
+
+function esc(value) {
+  return String(value == null ? "" : value).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function p2(n) { return String(n).padStart(2, "0"); }
+function ok(value) { return value != null && typeof value === "number" && Number.isFinite(value); }
+function gib(kb) { return ok(kb) ? (kb / 1048576).toFixed(1) : "–"; }
+function pctOf(value, total) { return ok(value) && ok(total) && total > 0 ? (100 * value) / total : 0; }
+function clamp(value) { return Math.max(0, Math.min(100, ok(value) ? value : 0)); }
+function secs(seconds) {
+  if (!ok(seconds)) return "??:??:??";
+  const m = Math.floor(Math.max(0, seconds) / 60);
+  return p2(Math.floor(m / 1440)) + ":" + p2(Math.floor((m % 1440) / 60)) + ":" + p2(m % 60);
+}
+function compact(seconds) {
+  if (!ok(seconds)) return "–";
+  const s = Math.max(0, seconds);
+  if (s < 60) return Math.round(s) + "s";
+  if (s < 3600) return Math.floor(s / 60) + "m" + p2(Math.round(s % 60)) + "s";
+  if (s < 86400) return Math.floor(s / 3600) + "h" + p2(Math.floor((s % 3600) / 60)) + "m";
+  return Math.floor(s / 86400) + "d" + p2(Math.floor((s % 86400) / 3600)) + "h";
+}
+function span(lower, upper) { return ok(lower) && ok(upper) ? secs(lower) + "～" + secs(upper) : "–"; }
+function bar(segments, envelope, cap, cls, marks) {
+  const fills = segments.filter((s) => ok(s.size) && s.size > 0)
+    .map((s) => '<span class="seg" style="left:' + clamp(s.from) + "%;width:" + clamp(s.size) + "%;background:" + s.color + '"></span>').join("");
+  const box = ok(envelope) && envelope.size > 0 ? '<span class="env" style="left:' + clamp(envelope.from) + "%;width:" + clamp(envelope.size) + '%"></span>' : "";
+  const mark = ok(cap) ? '<span class="cap" style="left:' + clamp(cap) + '%"></span>' : "";
+  const track = '<div class="track ' + (cls || "") + '">' + fills + box + mark + "</div>";
+  const labels = (marks || []).filter((item) => ok(item.at)).map((item) =>
+    '<span class="bmark" style="left:' + clamp(item.at) + '%">' + esc(item.text) + "</span>").join("");
+  return labels ? '<div class="barbox">' + track + '<div class="marks">' + labels + "</div></div>" : track;
+}
+function pill(status) {
+  return '<span class="pill ' + (STATUS_CLASS[status] || "") + '">' + esc(STATUS_TEXT[status] || status || "") + "</span>";
+}
+function section(title, hint, body) {
+  return '<h2 class="section">' + esc(title) +
+    (hint ? '<span class="hint">' + esc(hint) + "</span>" : "") + "</h2>" + body;
+}
+function unavailable(title, message) {
+  return section(title, "", '<div class="card empty">' + esc(message) + "</div>");
+}
+
+function notices(s) {
+  const parts = [];
+  if (s.degraded) parts.push('<div class="notice">看板降级：' + esc(s.degraded) + "</div>");
+  if (!state.connected) parts.push('<div class="notice warn">与看板的连接已断开，正在重连…</div>');
+  const age = Date.now() / 1000 - (s.generated_at || 0);
+  if (state.connected && age > 5) parts.push('<div class="notice warn">看板数据已 ' + Math.round(age) + " 秒未刷新</div>");
+  return parts.join("");
+}
+
+function connectionPill() {
+  return state.connected
+    ? '<span class="pill ok"><span class="dot pulse"></span>实时</span>'
+    : '<span class="pill bad"><span class="dot" style="background:var(--danger)"></span>已断开</span>';
+}
+
+function controls() {
+  const buttons = [
+    '<button data-act="pause">' + (state.paused ? "继续" : "暂停") + "</button>",
+    '<select data-act="throttle">' +
+      [1, 2, 5].map((v) => '<option value="' + v + '"' + (state.throttle === v ? " selected" : "") + ">" + (state.paused ? "—" : v + "s") + "</option>").join("") +
+    "</select>",
+    '<button data-act="theme">' + (document.documentElement.dataset.theme === "dark" ? "亮色" : "暗色") + "</button>",
+  ];
+  return buttons.join("");
+}
+
+function sourceNote(s) {
+  if (!s || s.source === "live") return "";
+  const when = ok(s.age_seconds) ? "（" + compact(s.age_seconds) + " 前）" : "";
+  return '<div class="notice warn">该批次未在运行 —— 以下为' +
+    esc(SOURCE_TEXT[s.source] || "持久化记录") + when + "；内存、显存等实时面板不可用。</div>";
+}
+
+/* ---------------------------------------------------------------- list page */
+
+function batchRow(b) {
+  const counts = b.counts || {};
+  const total = b.experiments || 0;
+  const done = counts.succeeded || 0;
+  const failed = counts.failed || 0;
+  const running = counts.running || 0;
+  const segments = [
+    { from: 0, size: pctOf(done, total), color: "var(--done)" },
+    { from: pctOf(done, total), size: pctOf(failed, total), color: "var(--danger)" },
+    { from: pctOf(done + failed, total), size: pctOf(running, total), color: "var(--running)" },
+  ];
+  const remaining = b.remaining || {};
+  const remainingText = ok(remaining.lower_seconds) && ok(remaining.upper_seconds)
+    ? compact(remaining.lower_seconds) + "～" + compact(remaining.upper_seconds)
+    : "–";
+  return '<div class="row batch-row">' +
+    '<span class="mono muted">' + esc(b.id) + "</span>" +
+    '<a class="name" href="/b/' + esc(b.id) + '/">' + esc(b.name || "batch") + "</a>" +
+    pill(b.status) +
+    "<div>" + bar(segments, null, null, "thin") + "</div>" +
+    '<span class="mono" style="text-align:right">' + running + " / " + (counts.pending || 0) + "</span>" +
+    '<span class="mono" style="text-align:right">' + secs(b.elapsed_seconds) + "</span>" +
+    '<span class="mono" style="text-align:right">' + remainingText + "</span>" +
+    "</div>";
+}
+
+function renderList(s) {
+  const batches = s.batches || [];
+  const head = '<div class="row batch-row head-row">' +
+    ["ID", "批次", "状态", "进度", "运行/排队", "已运行", "预计剩余"]
+      .map((t) => "<span>" + t + "</span>").join("") + "</div>";
+  let html = notices(s);
+  html += '<div class="top"><span class="title">expman 运行看板</span>' +
+    '<span class="pill mono">runs/ · ' + batches.length + " 个批次</span>" +
+    '<span class="spacer"></span>' + controls() + connectionPill() + "</div>";
+  if (!batches.length) {
+    html += '<div class="card empty">runs/ 下还没有批次。用 expman run 启动一个再回来看。</div>';
+  } else {
+    html += '<div class="card rows scroll-x">' + head + batches.map(batchRow).join("") + "</div>";
+  }
+  app.innerHTML = html;
+  wire();
+}
+
+/* -------------------------------------------------------------- detail page */
+
+function topBar(s, detail) {
+  const name = detail ? (detail.batch || {}).name || "batch" : "批次 " + BATCH_ID;
+  const buttons = controls();
+  const stopButton = detail && detail.running && state.stopAllowed
+    ? '<button class="danger" data-act="stop">停止实验</button>' : "";
+  return '<div class="top">' +
+    '<a class="pill" href="/">← 全部批次</a>' +
+    '<span class="title">' + esc(name) + "</span>" +
+    (detail ? pill(detail.status) : "") +
+    (detail ? '<span class="pill mono">' + esc(SOURCE_TEXT[detail.source] || "") + "</span>" : "") +
+    '<span class="spacer"></span>' + buttons + stopButton + connectionPill() + "</div>";
+}
+
+function admissionTile(s) {
+  if (s.source !== "live") return tile("调度门闸", "–", "批次未在运行，无实时准入数据");
+  const schedule = s.schedule || {};
+  const host = (s.resources || {}).host || {};
+  const plan = schedule.plan;
+  const knownHost = ok(host.available_kb);
+  const hostText = host.tight || plan?.host_fits === false ? "主机内存不足"
+    : plan?.host_fits === true ? "主机内存可容纳候选"
+    : knownHost ? "主机内存有余量" : "主机内存待采样";
+  const gpuText = plan?.gpu_fits === false ? "GPU 余量不足"
+    : plan?.gpu_fits === true ? "GPU 可容纳候选" : "GPU 准入待评估";
+  const placed = plan?.placements?.length || 0;
+  let outcome = "等待调度";
+  if (plan && placed) outcome = "有可行派发";
+  else if (!schedule.pending_runs) outcome = "无排队任务";
+  else if (plan?.ready === 0) outcome = "等待就绪候选";
+  else if (plan || host.tight) outcome = "本轮未派发";
+  const count = plan ? " · 已派发 " + (plan.launched || []).length + " 个" : "";
+  return tile("调度门闸", outcome, hostText + " · " + gpuText + count);
+}
+
+function tiles(s) {
+  const b = s.batch || {};
+  const counts = b.counts || {};
+  const remaining = b.remaining || {};
+  const coverage = ok(remaining.coverage) ? Math.round(remaining.coverage * 100) + "%" : "–";
+  const spanText = ok(remaining.lower_seconds) && ok(remaining.upper_seconds)
+    ? secs(remaining.lower_seconds) + "～" + secs(remaining.upper_seconds) : "??:??:??";
+  return '<div class="grid tiles">' + [
+    tile("已运行", secs(b.elapsed_seconds), "共 " + esc(b.experiments) + " 个配置 · " + esc(b.stages) + " 个阶段"),
+    tile("预计剩余", spanText, "覆盖 " + coverage + " · 样本 " + esc(remaining.samples)),
+    tile("运行 / 排队", (counts.running || 0) + " / " + (counts.pending || 0),
+      "成功 " + (counts.succeeded || 0) + " · 失败 " + (counts.failed || 0) + " · 停止 " + (counts.cancelled || 0)),
+    admissionTile(s),
+  ].join("") + "</div>";
+}
+
+function tile(label, value, hint) {
+  return '<div class="tile"><div class="label">' + esc(label) + '</div><div class="value mono">' + esc(value) +
+    '</div><div class="label mono">' + (hint || "") + "</div></div>";
+}
+
+function stages(s) {
+  const list = s.stages || [];
+  if (!list.length) return "";
+  const live = s.source === "live";
+  const running = (s.schedule || {}).running_by_stage || {};
+  const approximate = !live;
+  const cards = list.map((stage) => {
+    const known = stage.known !== false;
+    const total = stage.groups_total || 0;
+    const done = stage.groups_done || 0;
+    const remaining = known ? Math.max(0, total - done) : null;
+    const liveCount = known && live ? Math.min(remaining, running[stage.index] || running[String(stage.index)] || 0) : 0;
+    const samples = stage.samples || {};
+    const width = (value) => pctOf(value, total);
+    const segments = [
+      { from: 0, size: width(done), color: "var(--done)" },
+      { from: width(done), size: width(liveCount), color: "var(--running)" },
+    ];
+    const unit = ok(stage.unit_lower_seconds) && ok(stage.unit_upper_seconds)
+      ? compact(stage.unit_lower_seconds) + "～" + compact(stage.unit_upper_seconds)
+      : live ? "估计中" : "需要实时样本";
+    const serial = ok(stage.unit_lower_seconds) && ok(stage.unit_upper_seconds) && remaining
+      ? compact(remaining * stage.unit_lower_seconds) + "～" + compact(remaining * stage.unit_upper_seconds)
+      : "–";
+    const count = remaining === null ? "–" : remaining;
+    const subtitle = known ? (approximate ? "剩余 run　共 " + total + " 个 run" : "剩余组　共 " + total + " 组") : "等待调度器启动";
+    return '<div class="card">' +
+      '<div class="stage-head"><span class="stage-name">' + esc(stage.name || "Stage") + '</span><span class="faint mono">S' + esc(stage.index) + "</span></div>" +
+      '<div style="margin-top:8px">' + bar(segments, null, null) + "</div>" +
+      '<div class="stage-count"><b class="mono">' + count + '</b><span class="faint">' + subtitle + "</span></div>" +
+      '<div class="stage-meta mono">单组中位 ' + esc(unit) + '</div>' +
+      '<div class="stage-meta mono">串行合计 ' + esc(serial) + "</div>" +
+      '<div class="stage-meta mono">样本 ' + (samples.measured || 0) + " 实测 · " + (samples.reused || 0) + " 复用 · " + (samples.censored || 0) + " 截断</div>" +
+      "</div>";
+  });
+  const hint = live
+    ? "实心 = 已完成 · 琥珀 = 运行中 · 底轨 = 待执行"
+    : "来自持久化记录 · 组数按已到达该阶段的 run 统计 · 单组耗时需要实时样本";
+  return section("各阶段剩余", hint, '<div class="grid stages">' + cards.join("") + "</div>");
+}
+
+function workers(s) {
+  const list = s.workers || [];
+  const head = '<div class="row worker-row head-row">' +
+    ["RUN", "STAGE", "#", "GPU", "已运行", "内存 / 显存"].map((t) => "<span>" + t + "</span>").join("") + "</div>";
+  if (!list.length) return '<div class="card empty">当前没有运行中的尝试</div>';
+  return '<div class="card">' + head + list.map(workerRow).join("") + "</div>";
+}
+
+function workerRow(w) {
+  const host = w.host || {};
+  const gpu = w.gpu || {};
+  // The track is the scheduler's reservation for this attempt (memory =
+  // host_reserve_kb, VRAM = gpu_reserve_kb); the blue fill is actual usage
+  // over that reservation, so its length is how much of the budget is used.
+  const hostAlloc = host.reserved_kb || 0;
+  const driverUsage = "used_kb" in gpu;
+  const gpuUsed = driverUsage ? gpu.used_kb : gpu.reserved_kb;
+  const mps = "requested_cap_kb" in gpu;
+  const gpuThreshold = mps ? gpu.cap_kb : driverUsage ? gpu.threshold_kb : gpu.cap_kb;
+  const gpuLimit = mps
+    ? (ok(gpu.cap_kb) ? " · MPS 上限 " + gib(gpu.cap_kb) : " · MPS 待核验 " + gib(gpu.requested_cap_kb)) + " GiB"
+    : driverUsage ? " · 采样阈值 " + gib(gpuThreshold) + " GiB" : "";
+  const gpuAlloc = gpu.budget_kb || 0;
+  // A hard cap only has a place on this scale while it sits at or below the
+  // reservation; anything larger would clamp to the right edge and mislead.
+  const hostCap = ok(host.cap_kb) && hostAlloc > 0 && host.cap_kb <= hostAlloc
+    ? pctOf(host.cap_kb, hostAlloc) : null;
+  const gpuCap = ok(gpuThreshold) && gpuAlloc > 0 && gpuThreshold <= gpuAlloc
+    ? pctOf(gpuThreshold, gpuAlloc) : null;
+  const expected = w.expected ? span(w.expected.lower_seconds, w.expected.upper_seconds) : "–";
+  const progress = w.progress && ok(w.progress.completed)
+    ? '<div class="mono faint">进度 ' + w.progress.completed + (ok(w.progress.total) ? "/" + w.progress.total : "") + " " + esc(w.progress.unit || "") + "</div>"
+    : "";
+  const sourceText = { proc: "进程观测", unavailable: "观测不可用", cgroup: "cgroup 观测" };
+  const hostObservation = host.usage_source || host.usage_error
+    ? '<div class="mono faint">内存采样 ' + esc(sourceText[host.usage_source] || host.usage_source || "观测不可用") +
+      (host.usage_error ? " · " + esc(host.usage_error) : "") + "</div>"
+    : "";
+  const hostLimit = ok(host.requested_cap_kb) && host.requested_cap_kb > 0 && !host.capped
+    ? '<div class="mono faint">内存上限未核验</div>' : "";
+  return '<div class="row worker-row" style="margin-top:10px">' +
+    '<span class="mono">' + esc(w.run) + "</span>" +
+    "<span>" + esc(w.stage || "S" + w.stage_index) + "</span>" +
+    '<span class="mono">a' + esc(w.attempt) + "</span>" +
+    '<span class="mono">' + esc(w.device) + "</span>" +
+    '<span class="mono">' + secs(w.elapsed_seconds) + "</span>" +
+    "<div>" +
+      '<div class="mono faint">内存 实际占用 ' + gib(host.resident_kb) + " / 分配 " + gib(host.reserved_kb) + " GiB" +
+        (host.reached_cap ? ' <span class="k-fail">触顶</span>' : "") + "</div>" +
+      bar([{ from: 0, size: pctOf(host.resident_kb, hostAlloc), color: "var(--actual)" }],
+        null, hostCap, "thin") + hostObservation + hostLimit +
+      '<div class="mono faint" style="margin-top:6px">显存 ' + (mps ? "NVIDIA 客户端 " : driverUsage ? "NVIDIA 进程组 " : "PyTorch 保留 ") + (ok(gpuUsed) ? gib(gpuUsed) : "观测不可用") + " / 分配 " + gib(gpu.budget_kb) + " GiB" + gpuLimit + "</div>" +
+      bar([{ from: 0, size: pctOf(gpuUsed, gpuAlloc), color: "var(--actual)" }],
+        null, gpuCap, "thin") +
+      '<div class="mono faint" style="margin-top:6px">预计 ' + expected + "</div>" +
+      progress +
+    "</div></div>";
+}
+
+function timeline(s) {
+  const rows = s.gantt || [];
+  const attempts = rows.filter((r) => !r.reused);
+  const reuses = rows.filter((r) => r.reused);
+  const marks = (s.batch && s.batch.session_marks) || [];
+  if (!rows.length)
+    return '<div class="card empty">这批记录没有可绘制的尝试跨度（旧批次不含起止时刻，用了才会开始累积）</div>';
+  // The axis runs from the batch's start to the furthest end anyone reported,
+  // so a bar can never spill past the edge.  It is the "effective" clock: the
+  // gaps between run invocations are already excluded, which is exactly what
+  // the folds below mark.
+  const span = Math.max(
+    ...[rows.map((r) => r.end_seconds), (s.batch || {}).elapsed_seconds || 0]
+      .flat().filter(ok), 0,
+  );
+  if (!ok(span) || span <= 0)
+    return '<div class="card empty">批次才开始，还没有可画的时间线</div>';
+  // First-fit packing: each lane remembers the clock time its last bar ended,
+  // so a new run drops into the earliest lane that is already free, and only
+  // a genuinely concurrent run opens a new lane.  Lane count == peak concurrency.
+  const lanes = [];
+  attempts.forEach((r) => {
+    const start = Math.max(0, r.start_seconds);
+    let lane = lanes.findIndex((free) => free <= start + 1e-9);
+    if (lane === -1) { lane = lanes.length; lanes.push(0); }
+    lanes[lane] = r.end_seconds;
+    r._lane = lane;
+  });
+  const bars = attempts.map((r) => {
+    const left = pctOf(r.start_seconds, span);
+    const raw = pctOf(r.end_seconds - r.start_seconds, span);
+    // Very short attempts remain visible. Cache reuses are separate axis
+    // markers: they do not occupy a worker or add a concurrency lane.
+    const width = Math.max(raw, 0.4);
+    const cls = "gantt-bar " + (BAR_CLASS[r.status] || "");
+    const label = esc(r.run);
+    return '<span class="' + cls + '" style="left:' + left + "%;width:" + width + '%" title="' +
+      esc(r.run) + " · " + esc(r.stage || "S" + r.stage_index) + " a" + esc(r.attempt) +
+      " · " + secs(r.start_seconds) + "～" + secs(r.end_seconds) + '">' + label + "</span>";
+  });
+  const body = lanes.map((_, lane) => {
+    const here = bars.filter((_, i) => attempts[i]._lane === lane).join("");
+    return '<div class="gantt-lane">' + here + "</div>";
+  }).join("");
+  const reuseMarks = reuses.map((r) =>
+    '<span class="gantt-reuse" style="position:absolute;left:' + pctOf(r.start_seconds, span) +
+    '%;top:-8px;transform:translateX(-50%);font-size:9px;color:var(--done)" title="' +
+    esc(r.run) + " · " + esc(r.stage || "S" + r.stage_index) + " · 缓存复用 · " +
+    secs(r.start_seconds) + '">◆</span>'
+  ).join("");
+  const folds = marks.filter((m) => m > 0 && m < span).map((m) =>
+    '<span class="gantt-fold" style="left:' + pctOf(m, span) + '%" title="此处中断过，之后恢复"></span>'
+  ).join("");
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((fraction) => {
+    const text = fraction === 0 ? "0" : compact(span * fraction);
+    const place = fraction === 0
+      ? ""
+      : fraction === 1 ? ";transform:translateX(-100%)" : ";transform:translateX(-50%)";
+    return '<span class="tl-tick" style="left:' + fraction * 100 + "%" + place + '">' + esc(text) + "</span>";
+  }).join("");
+  return '<div class="card"><div class="gantt">' + body +
+    '<div class="gantt-axis">' + ticks + folds + reuseMarks + "</div></div>" +
+    (reuses.length ? '<div class="legend">◆ 缓存复用（不占并发槽）</div>' : "") + "</div>";
+}
+
+
+function resources(s) {
+  const r = s.resources || {};
+  const rows = (r.devices || []).map(deviceRow);
+  rows.push(hostRow(r.host || {}));
+  return section("资源分配", "", '<div class="card">' + rows.join("") + "</div>");
+}
+
+function deviceRow(card) {
+  const total = card.total_kb;
+  const other = card.other_kb || 0;
+  const actual = card.expman_actual_kb || 0;
+  const budget = card.expman_budget_kb || 0;
+  const start = pctOf(other, total);
+  const stale = ok(card.age_seconds) && card.age_seconds > 2.5 ? " stale" : "";
+  const marks = [
+    { at: start, text: gib(other) + "G" },
+    { at: start + pctOf(actual, total), text: gib(other + actual) + "G" },
+    { at: start + pctOf(budget, total), text: gib(other + budget) + "G" },
+  ];
+  const known = ok(card.expman_actual_kb) && ok(card.other_kb);
+  const usageBar = known ? bar(
+    [{ from: 0, size: start, color: "var(--other)" }, { from: start, size: pctOf(actual, total), color: "var(--actual)" }],
+    { from: start, size: pctOf(budget, total) }, null, "wide", marks)
+    : '<div class="mono faint">显存观测不可用</div>';
+  return '<div class="row" style="grid-template-columns:76px minmax(0,1fr) 92px">' +
+      '<span class="muted mono">GPU ' + esc(card.index) + "</span>" +
+      '<div class="' + stale.trim() + '">' + usageBar + "</div>" +
+      '<span class="mono" style="text-align:right">' + gib(card.launchable_kb) + " GiB</span>" +
+    "</div>" +
+    '<div class="detail mono">实际 ' + (known ? gib(actual) : "观测不可用") + " · 分配 " + gib(budget) +
+      (ok(card.launchable_kb) ? "" : " · 待首次采样") + "</div>";
+}
+
+function hostRow(host) {
+  const total = host.total_kb;
+  const other = host.other_kb || 0;
+  const actual = host.expman_actual_kb || 0;
+  const budget = host.expman_budget_kb || 0;
+  const start = pctOf(other, total);
+  const stale = ok(host.age_seconds) && host.age_seconds > 2.5 ? " stale" : "";
+  const marks = [
+    { at: start, text: gib(other) + "G" },
+    { at: start + pctOf(actual, total), text: gib(other + actual) + "G" },
+    { at: start + pctOf(budget, total), text: gib(other + budget) + "G" },
+  ];
+  const usageKnown = ok(host.expman_actual_kb);
+  const usageBar = usageKnown ? bar(
+    [{ from: 0, size: start, color: "var(--other)" }, { from: start, size: pctOf(actual, total), color: "var(--actual)" }],
+    { from: start, size: pctOf(budget, total) }, null, "wide", marks)
+    : '<div class="mono faint">内存观测不可用</div>';
+  return '<div class="row" style="grid-template-columns:76px minmax(0,1fr) 92px;margin-top:12px">' +
+      '<span class="muted mono">主机</span>' +
+      '<div class="' + stale.trim() + '">' + usageBar + "</div>" +
+      '<span class="mono" style="text-align:right">' + gib(host.launchable_kb) + " GiB</span>" +
+    "</div>" +
+    '<div class="detail mono">实际驻留 ' + (usageKnown ? gib(actual) : "观测不可用") + " · 分配 " + gib(budget) +
+      " · MemAvailable " + gib(host.available_kb) + " · 交换 " + gib(host.swap_free_kb) + "/" + gib(host.swap_total_kb) + "</div>";
+}
+
+
+function events(s) {
+  const items = (s.events || []).slice().reverse();
+  const header = section("调度事件", "最近 " + items.length + " 条", "");
+  if (!items.length) return header + '<div class="card empty">暂无事件</div>';
+  return header + '<div class="card events">' + items.map((e) => {
+    const time = ok(e.at) ? new Date(e.at * 1000).toLocaleTimeString("zh-CN", { hour12: false }) : "??:??:??";
+    const status = e.status ? ' <span class="' + (e.status === "succeeded" ? "k-done" : e.status === "failed" ? "k-fail" : "k-stop") + '">' + esc(e.status) + "</span>" : "";
+    const where = [e.run, e.stage_index != null ? "S" + e.stage_index : null, e.attempt != null ? "a" + e.attempt : null, e.device != null ? "GPU" + e.device : null].filter(Boolean).join(" ");
+    return '<div><span class="t mono">' + time + '</span> <span class="k">' + esc(KIND[e.kind] || e.kind) +
+      '</span> <span class="mono">' + esc(where) + "</span>" + status +
+      (e.detail ? ' <span class="faint">' + esc(e.detail) + "</span>" : "") + "</div>";
+  }).join("") + "</div>";
+}
+
+/* ------------------------------------------------------- analysis tab */
+
+function loadAnalysis(force) {
+  if (state.analysisState === "loading") return;
+  const counts = JSON.stringify(state.snapshot?.batch?.counts || {});
+  if (state.analysisState === "ready" && !force && counts === state.analysisCounts) return;
+  state.analysisState = "loading";
+  render(true);
+  fetch("/api/analysis/" + BATCH_ID)
+    .then((response) => response.json().then((body) => ({ good: response.ok, body })))
+    .then(({ good, body }) => {
+      if (good && body && Array.isArray(body.metrics)) {
+        state.analysis = body;
+        state.analysisCounts = counts;
+        state.analysisState = "ready";
+      } else {
+        state.analysisState = "error";
+        state.analysisError = (body && body.error) || "分析载荷不完整";
+      }
+      render(true);
+    })
+    .catch((error) => {
+      state.analysisState = "error";
+      state.analysisError = String(error);
+      render(true);
+    });
+}
+
+function fmtValue(value) {
+  if (value === null || value === undefined) return "null";
+  if (Array.isArray(value)) return "[" + value.map((item) => String(item)).join(", ") + "]";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function fmtNum(value) {
+  if (!ok(value)) return "–";
+  if (Math.abs(value) >= 1000) return Math.round(value).toString();
+  return Number(value.toPrecision(3)).toString();
+}
+
+function tabs() {
+  const item = (key, label) =>
+    '<button class="tab' + (state.tab === key ? " active" : "") + '" data-tab="' + key + '">' + label + "</button>";
+  return '<div class="tabs">' + item("status", "运行状态") + item("analysis", "结果分析") + "</div>";
+}
+
+function pairRow(p) {
+  const effect = p.kind === "numeric"
+    ? "ρ " + (ok(p.rho) ? (p.rho > 0 ? "+" : "") + p.rho.toFixed(2) : "–")
+    : "η² " + (ok(p.influence) ? p.influence.toFixed(2) : "–");
+  const width = ok(p.influence) ? clamp(p.influence * 100) : 0;
+  const fill = ok(p.influence) ? bar([{ from: 0, size: width, color: "var(--done)" }], null, null, "thin") : "";
+  const line = '<div class="row pair-row">' +
+    '<span class="mono">' + esc(p.field) + "</span>" +
+    '<span class="pill mono">' + (p.kind === "numeric" ? "数值" : "类别") + "</span>" +
+    "<div>" + fill + "</div>" +
+    '<span class="mono" style="text-align:right">' + effect + "</span>" +
+    '<span class="mono faint" style="text-align:right">n=' + p.n + "</span>" +
+    "</div>";
+  const groups = p.kind === "categorical" && Array.isArray(p.groups) && p.groups.length
+    ? '<div class="detail mono">' + p.groups.map((g) =>
+        esc(fmtValue(g.value)) + " → " + fmtNum(g.mean) + " ×" + g.n).join(" · ") +
+        (p.best !== null && p.best !== undefined ? " · 最佳 " + esc(fmtValue(p.best)) : "") + "</div>"
+    : "";
+  const note = p.note ? '<div class="detail">' + esc(p.note) + "</div>" : "";
+  return line + groups + note;
+}
+
+function metricCard(m) {
+  const head = '<div class="stage-head"><span class="stage-name mono">' + esc(m.name) + "</span>" +
+    '<span class="faint mono">' + (ok(m.influence_max) ? "最大影响力 " + m.influence_max.toFixed(2) : "无可比较配置项") + "</span></div>";
+  const stats = '<div class="stage-meta mono">n=' + m.n +
+    (m.missing ? " · 缺失 " + m.missing : "") +
+    (ok(m.mean) ? " · 均值 " + fmtNum(m.mean) : "") +
+    (ok(m.sd) ? " · σ " + fmtNum(m.sd) : "") +
+    (ok(m.min) && ok(m.max) ? " · 范围 " + fmtNum(m.min) + "～" + fmtNum(m.max) : "") + "</div>";
+  const body = m.pairs.length
+    ? m.pairs.map(pairRow).join("")
+    : '<div class="empty" style="margin-top:8px">没有可比较的配置项（可能全部为常量或样本不足）</div>';
+  const skipped = m.skipped_fields
+    ? '<div class="legend">另有 ' + m.skipped_fields + " 个配置项因有效样本不足未参与比较</div>"
+    : "";
+  return '<div class="card metric-card">' + head + stats +
+    '<div style="margin-top:8px">' + body + "</div>" + skipped + "</div>";
+}
+
+function analysisBody() {
+  if (state.analysisState === "loading") return '<p class="muted pad">正在分析…</p>';
+  if (state.analysisState === "error") return unavailable("结果分析", state.analysisError || "分析失败");
+  if (state.analysisState !== "ready" || !state.analysis) return '<p class="muted pad">尚未加载分析。</p>';
+  const a = state.analysis;
+  const c = a.coverage || {};
+  const excluded = Object.entries(c.excluded || {}).map(([status, count]) => status + " " + count).join(" · ");
+  let html = '<div class="top" style="padding-bottom:0">' +
+    '<span class="pill mono">Run ' + c.runs_analyzed + " / " + c.runs_total + "</span>" +
+    '<span class="pill mono">指标 ' + c.metrics_total + "</span>" +
+    (excluded ? '<span class="pill warn">排除：' + esc(excluded) + "</span>" : "") +
+    '<span class="spacer"></span><button data-act="reload-analysis">重新分析</button></div>';
+  if ((c.skipped || []).length)
+    html += '<div class="notice warn">' + c.skipped.length + " 个 Run 的配置不可读，已跳过：" +
+      c.skipped.map((item) => esc(item.run_id)).join("、") + "</div>";
+  if ((c.constant_fields || []).length)
+    html += '<div class="legend">常量配置项（所有 Run 相同，不参与比较）：' +
+      c.constant_fields.map((name) => '<span class="mono">' + esc(name) + "</span>").join("、") + "</div>";
+  html += (a.metrics || []).map(metricCard).join("") ||
+    '<div class="card empty">没有可分析的指标。</div>';
+  html += '<div class="legend">ρ = Spearman 秩相关（绝对值即影响力度量） · η² = 组间变异占指标总变异的比例 · 都只描述观测到的关系，不是因果结论</div>';
+  return html;
+}
+
+function statusBody(detail) {
+  const live = detail.source === "live";
+  let html = tiles(detail) + stages(detail);
+  html += section("运行中的尝试", (detail.workers || []).length + " 个 worker",
+    live ? workers(detail) : '<div class="card empty">没有实时 worker 数据</div>');
+  html += section(
+    "并发时间线",
+    "每行一个并发槽 · 横轴为批次有效时长（中断已折叠）",
+    timeline(detail),
+  );
+  html += live ? resources(detail) : unavailable("资源分配", "没有实时采样");
+  html += live ? events(detail) : unavailable("调度事件", "没有实时事件");
+  return html;
+}
+
+function renderBatch(s) {
+  const detail = s.batch;
+  let html = notices(s) + topBar(s, detail);
+  if (!detail) {
+    // A frame without a batch is a page that has not been served one yet
+    // (the list frame, a degraded build or the first tick), not a batch that
+    // is missing: only say so when there is nothing to wait for.
+    const pending = s.starting || s.degraded || Array.isArray(s.batches);
+    html += '<div class="card empty">' + (pending
+      ? "正在读取批次 " + esc(BATCH_ID) + " 的快照，稍后自动刷新…"
+      : "批次 " + esc(BATCH_ID) + " 不存在，或已被移出 runs/。") + "</div>";
+    app.innerHTML = html;
+    wire();
+    return;
+  }
+  html += sourceNote(detail);
+  html += tabs();
+  html += state.tab === "analysis" ? analysisBody() : statusBody(detail);
+  app.innerHTML = html;
+  wire();
+}
+
+function render(force) {
+  if (state.paused && !force) return;
+  const now = Date.now();
+  if (!force && now - state.lastPaint < state.throttle * 1000 - 50) return;
+  state.lastPaint = now;
+  const s = state.snapshot;
+  if (!s) { app.innerHTML = '<p class="muted pad">等待第一个快照…</p>'; return; }
+  if (PAGE === "list") renderList(s); else renderBatch(s);
+}
+
+function wire() {
+  document.querySelectorAll("[data-tab]").forEach((node) => {
+    node.onclick = () => {
+      state.tab = node.dataset.tab;
+      if (state.tab === "analysis") loadAnalysis(false);
+      render(true);
+    };
+  });
+  document.querySelectorAll("[data-act]").forEach((node) => {
+    const act = node.dataset.act;
+    if (act === "pause") node.onclick = () => { state.paused = !state.paused; render(true); };
+    if (act === "throttle") node.onchange = () => { state.throttle = Number(node.value); render(true); };
+    if (act === "theme") node.onclick = () => {
+      const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+      document.documentElement.dataset.theme = next;
+      render(true);
+    };
+    if (act === "reload-analysis") node.onclick = () => loadAnalysis(true);
+    if (act === "stop") node.onclick = () => {
+      if (!window.confirm("停止批次 " + BATCH_ID + " 正在运行的实验？已完成的阶段会保留，可以之后 resume。")) return;
+      fetch("/api/stop/" + BATCH_ID, { method: "POST" }).then(() => setTimeout(() => location.reload(), 1500));
+    };
+  });
+}
+
+function connect() {
+  const url = PAGE === "batch" && BATCH_ID !== null ? "/api/stream?batch=" + BATCH_ID : "/api/stream";
+  const source = new EventSource(url);
+  source.onopen = () => { state.connected = true; render(); };
+  source.onerror = () => { state.connected = false; render(); };
+  source.onmessage = (message) => {
+    state.connected = true;
+    try { state.snapshot = JSON.parse(message.data); } catch (error) { return; }
+    if (state.tab === "analysis" && state.analysisState === "ready" && !state.paused) loadAnalysis(false);
+    render();
+  };
+}
+
+document.title = PAGE === "batch" ? "expman 看板 · 批次 " + BATCH_ID : "expman 运行看板";
+
+fetch("/api/health").then((response) => response.json()).then((health) => {
+  state.stopAllowed = Boolean(health.stop);
+  render(true);
+}).catch(() => {});
+
+connect();

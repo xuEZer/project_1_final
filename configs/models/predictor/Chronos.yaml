@@ -1,0 +1,5 @@
+model: Chronos
+name: Chronos-2
+model_name: amazon/chronos-2
+revision: 29ec3766d36d6f73f0696f85560a422f50e8498c
+dtype: float32

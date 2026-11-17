@@ -1,0 +1,55 @@
+"""Remaining-time interval values used by Batch estimates."""
+
+import math
+from dataclasses import dataclass
+from numbers import Real
+
+UNKNOWN_CLOCK = "??:??:??～??:??:??"
+
+
+def validate_coverage(value: object) -> float:
+    """A coverage setting is a finite number strictly between 0 and 1."""
+    if isinstance(value, bool) or not isinstance(value, Real):
+        raise ValueError("estimate coverage must be a finite number between 0 and 1")
+    coverage = float(value)
+    if not 0 < coverage < 1:
+        raise ValueError("estimate coverage must be a finite number between 0 and 1")
+    return coverage
+
+
+def _clock(seconds: object, *, upper: bool) -> str:
+    if (
+        isinstance(seconds, bool)
+        or not isinstance(seconds, (int, float))
+        or not math.isfinite(seconds)
+    ):
+        return "??:??:??"
+    minutes = math.ceil(seconds / 60) if upper else math.floor(seconds / 60)
+    days, remainder = divmod(max(0, minutes), 24 * 60)
+    hours, minutes = divmod(remainder, 60)
+    return f"{days:02d}:{hours:02d}:{minutes:02d}"
+
+
+@dataclass(frozen=True)
+class TimeEstimate:
+    """A remaining-time interval, rendered as ``DD:HH:MM～DD:HH:MM``.
+
+    Both endpoints are required for a displayable estimate; ``coverage`` is the
+    side mass the residuals were calibrated to, so each side carries half of the
+    missing mass. It stays nominal rather than guaranteed: Stage samples are not
+    exchangeable across a growing schedule, a censored sample only bounds one
+    side, and the concurrency packing that combines Stages treats their
+    durations as independent.
+    """
+
+    lower_seconds: float | None
+    upper_seconds: float | None
+    coverage: float
+    completed_samples: int
+    remaining_experiments: int
+
+    def __str__(self) -> str:
+        return (
+            f"{_clock(self.lower_seconds, upper=False)}"
+            f"～{_clock(self.upper_seconds, upper=True)}"
+        )

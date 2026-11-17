@@ -1,0 +1,14 @@
+/runs/
+/data/
+/cache
+/tmp/
+/paper/
+
+__pycache__/
+*.py[cod]
+.venv/
+.ruff_cache/
+.pytest_cache/
+*.egg-info/
+/build/
+/dist/

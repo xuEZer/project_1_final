@@ -1,0 +1,6 @@
+model: Toto2
+model_name: Datadog/Toto-2.0-22m
+name: Toto2
+revision: 685e4ae3e2be8d8998025e53dd98e7fdcb296a89
+dtype: float32
+decode_block_size: 768

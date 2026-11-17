@@ -1,0 +1,237 @@
+defaults: base
+device: [0]
+seed: 42
+dataset: {defaults: current_velocity_10T}
+models:
+  imputer: {defaults: ModernTCN}
+  predictor: {defaults: Chronos}
+
+combines:
+  # Main experiment: all 100 imputer-forecaster pairs, with and without PILOT.
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: SAITS}, predictor: {defaults: Toto2}}, training: {method: raw}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: SAITS}, predictor: {defaults: Toto2}}, training: {method: pilot}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: SAITS}, predictor: {defaults: Chronos}}, training: {method: raw}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: SAITS}, predictor: {defaults: Chronos}}, training: {method: pilot}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: SAITS}, predictor: {defaults: Sundial}}, training: {method: raw}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: SAITS}, predictor: {defaults: Sundial}}, training: {method: pilot}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: SAITS}, predictor: {defaults: TimesFM3}}, training: {method: raw}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: SAITS}, predictor: {defaults: TimesFM3}}, training: {method: pilot}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: Toto2}}, training: {method: raw}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: Toto2}}, training: {method: pilot}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: Chronos}}, training: {method: raw}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: Chronos}}, training: {method: pilot}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: Sundial}}, training: {method: raw}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: Sundial}}, training: {method: pilot}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: TimesFM3}}, training: {method: raw}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: TimesFM3}}, training: {method: pilot}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: Toto2}}, training: {method: raw}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: Toto2}}, training: {method: pilot}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: Chronos}}, training: {method: raw}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: Chronos}}, training: {method: pilot}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: Sundial}}, training: {method: raw}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: Sundial}}, training: {method: pilot}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: TimesFM3}}, training: {method: raw}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: TimesFM3}}, training: {method: pilot}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: Toto2}}, training: {method: raw}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: Toto2}}, training: {method: pilot}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: Chronos}}, training: {method: raw}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: Chronos}}, training: {method: pilot}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: Sundial}}, training: {method: raw}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: Sundial}}, training: {method: pilot}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: TimesFM3}}, training: {method: raw}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: TimesFM3}}, training: {method: pilot}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: Toto2}}, training: {method: raw}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: Toto2}}, training: {method: pilot}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: Chronos}}, training: {method: raw}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: Chronos}}, training: {method: pilot}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: Sundial}}, training: {method: raw}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: Sundial}}, training: {method: pilot}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: TimesFM3}}, training: {method: raw}}
+  - {dataset: {defaults: EWELD_Load_15T}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: TimesFM3}}, training: {method: pilot}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: SAITS}, predictor: {defaults: Toto2}}, training: {method: raw}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: SAITS}, predictor: {defaults: Toto2}}, training: {method: pilot}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: SAITS}, predictor: {defaults: Chronos}}, training: {method: raw}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: SAITS}, predictor: {defaults: Chronos}}, training: {method: pilot}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: SAITS}, predictor: {defaults: Sundial}}, training: {method: raw}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: SAITS}, predictor: {defaults: Sundial}}, training: {method: pilot}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: SAITS}, predictor: {defaults: TimesFM3}}, training: {method: raw}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: SAITS}, predictor: {defaults: TimesFM3}}, training: {method: pilot}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: Toto2}}, training: {method: raw}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: Toto2}}, training: {method: pilot}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: Chronos}}, training: {method: raw}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: Chronos}}, training: {method: pilot}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: Sundial}}, training: {method: raw}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: Sundial}}, training: {method: pilot}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: TimesFM3}}, training: {method: raw}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: TimesFM3}}, training: {method: pilot}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: Toto2}}, training: {method: raw}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: Toto2}}, training: {method: pilot}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: Chronos}}, training: {method: raw}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: Chronos}}, training: {method: pilot}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: Sundial}}, training: {method: raw}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: Sundial}}, training: {method: pilot}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: TimesFM3}}, training: {method: raw}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: TimesFM3}}, training: {method: pilot}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: Toto2}}, training: {method: raw}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: Toto2}}, training: {method: pilot}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: Chronos}}, training: {method: raw}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: Chronos}}, training: {method: pilot}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: Sundial}}, training: {method: raw}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: Sundial}}, training: {method: pilot}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: TimesFM3}}, training: {method: raw}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: TimesFM3}}, training: {method: pilot}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: Toto2}}, training: {method: raw}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: Toto2}}, training: {method: pilot}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: Chronos}}, training: {method: raw}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: Chronos}}, training: {method: pilot}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: Sundial}}, training: {method: raw}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: Sundial}}, training: {method: pilot}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: TimesFM3}}, training: {method: raw}}
+  - {dataset: {defaults: Coastal_T_S_15T}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: TimesFM3}}, training: {method: pilot}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: SAITS}, predictor: {defaults: Toto2}}, training: {method: raw}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: SAITS}, predictor: {defaults: Toto2}}, training: {method: pilot}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: SAITS}, predictor: {defaults: Chronos}}, training: {method: raw}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: SAITS}, predictor: {defaults: Chronos}}, training: {method: pilot}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: SAITS}, predictor: {defaults: Sundial}}, training: {method: raw}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: SAITS}, predictor: {defaults: Sundial}}, training: {method: pilot}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: SAITS}, predictor: {defaults: TimesFM3}}, training: {method: raw}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: SAITS}, predictor: {defaults: TimesFM3}}, training: {method: pilot}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: Toto2}}, training: {method: raw}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: Toto2}}, training: {method: pilot}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: Chronos}}, training: {method: raw}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: Chronos}}, training: {method: pilot}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: Sundial}}, training: {method: raw}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: Sundial}}, training: {method: pilot}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: TimesFM3}}, training: {method: raw}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: TimesFM3}}, training: {method: pilot}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: Toto2}}, training: {method: raw}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: Toto2}}, training: {method: pilot}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: Chronos}}, training: {method: raw}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: Chronos}}, training: {method: pilot}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: Sundial}}, training: {method: raw}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: Sundial}}, training: {method: pilot}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: TimesFM3}}, training: {method: raw}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: TimesFM3}}, training: {method: pilot}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: Toto2}}, training: {method: raw}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: Toto2}}, training: {method: pilot}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: Chronos}}, training: {method: raw}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: Chronos}}, training: {method: pilot}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: Sundial}}, training: {method: raw}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: Sundial}}, training: {method: pilot}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: TimesFM3}}, training: {method: raw}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: TimesFM3}}, training: {method: pilot}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: Toto2}}, training: {method: raw}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: Toto2}}, training: {method: pilot}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: Chronos}}, training: {method: raw}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: Chronos}}, training: {method: pilot}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: Sundial}}, training: {method: raw}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: Sundial}}, training: {method: pilot}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: TimesFM3}}, training: {method: raw}}
+  - {dataset: {defaults: Port_Activity_D}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: TimesFM3}}, training: {method: pilot}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: SAITS}, predictor: {defaults: Toto2}}, training: {method: raw}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: SAITS}, predictor: {defaults: Toto2}}, training: {method: pilot}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: SAITS}, predictor: {defaults: Chronos}}, training: {method: raw}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: SAITS}, predictor: {defaults: Chronos}}, training: {method: pilot}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: SAITS}, predictor: {defaults: Sundial}}, training: {method: raw}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: SAITS}, predictor: {defaults: Sundial}}, training: {method: pilot}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: SAITS}, predictor: {defaults: TimesFM3}}, training: {method: raw}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: SAITS}, predictor: {defaults: TimesFM3}}, training: {method: pilot}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: Toto2}}, training: {method: raw}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: Toto2}}, training: {method: pilot}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: Chronos}}, training: {method: raw}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: Chronos}}, training: {method: pilot}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: Sundial}}, training: {method: raw}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: Sundial}}, training: {method: pilot}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: TimesFM3}}, training: {method: raw}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: TimesFM3}}, training: {method: pilot}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: Toto2}}, training: {method: raw}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: Toto2}}, training: {method: pilot}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: Chronos}}, training: {method: raw}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: Chronos}}, training: {method: pilot}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: Sundial}}, training: {method: raw}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: Sundial}}, training: {method: pilot}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: TimesFM3}}, training: {method: raw}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: TimesFM3}}, training: {method: pilot}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: Toto2}}, training: {method: raw}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: Toto2}}, training: {method: pilot}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: Chronos}}, training: {method: raw}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: Chronos}}, training: {method: pilot}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: Sundial}}, training: {method: raw}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: Sundial}}, training: {method: pilot}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: TimesFM3}}, training: {method: raw}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: TimesFM3}}, training: {method: pilot}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: Toto2}}, training: {method: raw}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: Toto2}}, training: {method: pilot}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: Chronos}}, training: {method: raw}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: Chronos}}, training: {method: pilot}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: Sundial}}, training: {method: raw}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: Sundial}}, training: {method: pilot}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: TimesFM3}}, training: {method: raw}}
+  - {dataset: {defaults: Supply_Chain_Customer_D_Amazon}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: TimesFM3}}, training: {method: pilot}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: SAITS}, predictor: {defaults: Toto2}}, training: {method: raw}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: SAITS}, predictor: {defaults: Toto2}}, training: {method: pilot}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: SAITS}, predictor: {defaults: Chronos}}, training: {method: raw}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: SAITS}, predictor: {defaults: Chronos}}, training: {method: pilot}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: SAITS}, predictor: {defaults: Sundial}}, training: {method: raw}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: SAITS}, predictor: {defaults: Sundial}}, training: {method: pilot}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: SAITS}, predictor: {defaults: TimesFM3}}, training: {method: raw}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: SAITS}, predictor: {defaults: TimesFM3}}, training: {method: pilot}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: Toto2}}, training: {method: raw}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: Toto2}}, training: {method: pilot}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: Chronos}}, training: {method: raw}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: Chronos}}, training: {method: pilot}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: Sundial}}, training: {method: raw}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: Sundial}}, training: {method: pilot}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: TimesFM3}}, training: {method: raw}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: DeepMVI}, predictor: {defaults: TimesFM3}}, training: {method: pilot}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: Toto2}}, training: {method: raw}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: Toto2}}, training: {method: pilot}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: Chronos}}, training: {method: raw}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: Chronos}}, training: {method: pilot}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: Sundial}}, training: {method: raw}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: Sundial}}, training: {method: pilot}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: TimesFM3}}, training: {method: raw}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: ModernTCN}, predictor: {defaults: TimesFM3}}, training: {method: pilot}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: Toto2}}, training: {method: raw}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: Toto2}}, training: {method: pilot}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: Chronos}}, training: {method: raw}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: Chronos}}, training: {method: pilot}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: Sundial}}, training: {method: raw}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: Sundial}}, training: {method: pilot}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: TimesFM3}}, training: {method: raw}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: TimesNet}, predictor: {defaults: TimesFM3}}, training: {method: pilot}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: Toto2}}, training: {method: raw}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: Toto2}}, training: {method: pilot}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: Chronos}}, training: {method: raw}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: Chronos}}, training: {method: pilot}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: Sundial}}, training: {method: raw}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: Sundial}}, training: {method: pilot}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: TimesFM3}}, training: {method: raw}}
+  - {dataset: {defaults: current_velocity_10T}, models: {imputer: {defaults: TSLANet}, predictor: {defaults: TimesFM3}}, training: {method: pilot}}
+
+  # Component ablations; the main experiment supplies B1 and B2.
+  - {training: {method: random}}
+  - {training: {method: point}}
+  - {training: {method: mean_gate}}
+  - {training: {method: forecast_direction}}
+
+  # One-factor sensitivity; all unlisted parameters retain the B2 defaults.
+  - {pilot: {subspace_rank: 2}}
+  - {pilot: {subspace_rank: 4}}
+  - {pilot: {subspace_rank: 5}}
+  - {pilot: {subspace_rank: 6}}
+  - {pilot: {epsilon: 0.0001}}
+  - {pilot: {epsilon: 0.0002}}
+  - {pilot: {epsilon: 0.0005}}
+  - {pilot: {epsilon: 0.002}}
+  - {pilot: {epsilon: 0.005}}
+  - {pilot: {epsilon: 0.01}}
+  - {pilot: {delta: 0.05}}
+  - {pilot: {delta: 0.1}}
+  - {pilot: {delta: 0.2}}
+  - {pilot: {delta: 0.4}}
+  - {pilot: {delta: 0.5}}
+  - {pilot: {probe_batches: 2}}
+  - {pilot: {probe_batches: 3}}
+  - {pilot: {probe_batches: 5}}
+  - {pilot: {probe_batches: 6}}
